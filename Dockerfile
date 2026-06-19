@@ -1,4 +1,12 @@
-# Stage 1: Build the Go binary
+# Stage 1: Build the React frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm install
+COPY web/ ./
+RUN npm run build
+
+# Stage 2: Build the Go binary
 FROM golang:alpine AS builder
 
 # Install build dependencies for cgo (sqlite3 requires cgo)
@@ -16,7 +24,7 @@ COPY . .
 # Build the main server binary with cgo enabled
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o magicbox cmd/server/main.go
 
-# Stage 2: Create the runner image
+# Stage 3: Create the runner image
 FROM alpine:3.19
 
 # Install runtime dependencies (like ca-certificates)
@@ -31,8 +39,8 @@ RUN mkdir -p /opt/magicbox/core/web \
 # Copy the compiled binary
 COPY --from=builder /app/magicbox /usr/local/bin/magicbox
 
-# Copy the static web frontend assets to staging
-COPY web/ /app/web/
+# Copy the static web frontend assets from the frontend builder stage
+COPY --from=frontend-builder /app/web/dist/ /app/web/
 
 # Set defaults
 ENV MAGICBOX_ROOT=/opt/magicbox

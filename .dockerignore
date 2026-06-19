@@ -1,0 +1,16 @@
+# Ignore node packages and React build output directories
+web/node_modules/
+web/dist/
+
+# Ignore local database volume and backups
+data/
+
+# Ignore test cookies
+cookies.txt
+
+# Ignore local compiled binary
+magicbox
+
+# Git files
+.git/
+.gitignore
