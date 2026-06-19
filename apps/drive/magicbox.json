@@ -1,0 +1,30 @@
+{
+  "app_id": "com.magicbox.drive",
+  "name": "Magic Drive",
+  "version": "1.0.0",
+  "image": "docker.io/magicbox/drive:latest",
+  "entry_port": 8080,
+  "route_slug": "drive",
+  "webhook_path": "/internal/magicbox-webhook",
+  "required_scopes": [
+    "profile:read",
+    "shared:photos:rw",
+    "shared:documents:rw"
+  ],
+  "volume_mounts": [
+    {
+      "type": "shared",
+      "name": "photos",
+      "access": "read-write"
+    },
+    {
+      "type": "shared",
+      "name": "documents",
+      "access": "read-write"
+    }
+  ],
+  "resource_limits": {
+    "memory_mb": 256,
+    "cpu_cores": 0.5
+  }
+}

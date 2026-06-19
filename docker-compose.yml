@@ -1,0 +1,21 @@
+services:
+  magicbox-core:
+    build: .
+    image: magicbox/core:latest
+    container_name: magicbox_core
+    restart: unless-stopped
+    networks:
+      - magicbox_net
+    ports:
+      - "8081:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/magicbox:/opt/magicbox
+    environment:
+      - MAGICBOX_ROOT=/opt/magicbox
+      - MAGICBOX_PORT=80
+
+networks:
+  magicbox_net:
+    name: magicbox_net
+    external: true
