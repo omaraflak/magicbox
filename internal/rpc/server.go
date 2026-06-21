@@ -95,8 +95,28 @@ func (s *RPCServer) authInterceptor(ctx context.Context, req interface{}, info *
 	// Strip "Bearer " prefix if present.
 	tokenStr = strings.TrimSpace(strings.TrimPrefix(tokenStr, "Bearer "))
 
-	claims, err := rest.ValidateAppToken(s.jwtSecret, tokenStr)
+	// 1. Parse unverified token to extract app_id and user_id claims.
+	unverifiedClaims, err := rest.ParseAppTokenUnverified(tokenStr)
 	if err != nil {
+		s.logger.Error("gRPC Auth Fail (Unverified Parse)", logging.F("error", err.Error()))
+		return nil, status.Errorf(codes.Unauthenticated, "invalid token format: %v", err)
+	}
+
+	// 2. Fetch the app token secret from the database.
+	appToken, err := s.db.GetAppToken(unverifiedClaims.AppID, unverifiedClaims.UserID)
+	if err != nil {
+		s.logger.Error("gRPC Auth Fail (DB Query)", logging.F("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "failed to query token secret: %v", err)
+	}
+	if appToken == nil {
+		s.logger.Error("gRPC Auth Fail (Token Missing)", logging.F("app", unverifiedClaims.AppID), logging.F("user", unverifiedClaims.UserID))
+		return nil, status.Error(codes.Unauthenticated, "app token not found in database")
+	}
+
+	// 3. Verify the token signature with the app-specific TokenSecret.
+	claims, err := rest.ValidateAppToken([]byte(appToken.TokenSecret), tokenStr)
+	if err != nil {
+		s.logger.Error("gRPC Auth Fail (Signature)", logging.F("error", err.Error()))
 		return nil, status.Errorf(codes.Unauthenticated, "invalid token: %v", err)
 	}
 

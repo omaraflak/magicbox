@@ -114,6 +114,17 @@ func ValidateAppToken(secret []byte, tokenStr string) (*AppTokenClaims, error) {
 	return claims, nil
 }
 
+// ParseAppTokenUnverified parses an app JWT without validating its signature.
+func ParseAppTokenUnverified(tokenStr string) (*AppTokenClaims, error) {
+	claims := &AppTokenClaims{}
+	parser := jwt.NewParser()
+	_, _, err := parser.ParseUnverified(tokenStr, claims)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse unverified token: %w", err)
+	}
+	return claims, nil
+}
+
 // SetSessionCookie writes a secure session cookie to the response.
 func SetSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
