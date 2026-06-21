@@ -170,17 +170,21 @@ func (c *Client) InspectContainer(ctx context.Context, containerID string) (*Con
 }
 
 // PullImage pulls a Docker image and returns its digest.
-// It implements an "IfNotPresent" strategy: if the image exists locally,
+// If force is false, it implements an "IfNotPresent" strategy: if the image exists locally,
 // it skips pulling and returns the local image ID.
-func (c *Client) PullImage(ctx context.Context, img string) (string, error) {
-	// Check if the image exists locally.
-	inspect, _, err := c.cli.ImageInspectWithRaw(ctx, img)
-	if err == nil {
-		return inspect.ID, nil
+func (c *Client) PullImage(ctx context.Context, img string, force bool) (string, error) {
+	if !force {
+		if id, err := c.getLocalImageID(ctx, img); err == nil {
+			return id, nil
+		}
 	}
 
 	reader, err := c.cli.ImagePull(ctx, img, image.PullOptions{})
 	if err != nil {
+		// Fallback to local image if remote pull fails (e.g. for local-only developer images)
+		if id, localErr := c.getLocalImageID(ctx, img); localErr == nil {
+			return id, nil
+		}
 		return "", fmt.Errorf("docker: failed to pull image %s: %w", img, err)
 	}
 	defer reader.Close()
@@ -195,6 +199,14 @@ func (c *Client) PullImage(ctx context.Context, img string) (string, error) {
 	// The Docker daemon includes "Digest: sha256:..." in the output.
 	digest := extractDigest(string(output))
 	return digest, nil
+}
+
+func (c *Client) getLocalImageID(ctx context.Context, img string) (string, error) {
+	inspect, _, err := c.cli.ImageInspectWithRaw(ctx, img)
+	if err != nil {
+		return "", err
+	}
+	return inspect.ID, nil
 }
 
 // extractDigest parses a "Digest: sha256:..." string from Docker pull output.

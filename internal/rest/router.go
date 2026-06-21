@@ -54,6 +54,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/apps/{id}/start", auth(http.HandlerFunc(s.handleStartApp)))
 	mux.Handle("POST /api/v1/apps/{id}/stop", auth(http.HandlerFunc(s.handleStopApp)))
 	mux.Handle("POST /api/v1/apps/{id}/update", auth(http.HandlerFunc(s.handleUpdateApp)))
+	mux.Handle("POST /api/v1/apps/{id}/rebuild", auth(http.HandlerFunc(s.handleRebuildApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rotate-token", auth(http.HandlerFunc(s.handleRotateToken)))
 
 	// Admin-only routes — require both AuthMiddleware and AdminMiddleware.

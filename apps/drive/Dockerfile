@@ -1,17 +1,31 @@
-# Stage 1: Build binary
-FROM golang:1.21-alpine AS builder
-WORKDIR /app
-COPY main.go .
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/web
+COPY apps/drive/web/package*.json ./
+RUN npm install
+COPY apps/drive/web/ ./
+RUN npm run build
+
+# Stage 2: Build Go binary
+FROM golang:1.23-alpine AS builder
+WORKDIR /magicbox/apps/drive
+# Create a stub go.mod for the replaced core module to avoid downloading unused core dependencies
+RUN mkdir -p /magicbox && echo -e "module github.com/magicbox/core\n\ngo 1.23.0" > /magicbox/go.mod
+# Copy shared proto package to /magicbox/api/proto/v1
+COPY api/proto/v1/ /magicbox/api/proto/v1/
+# Copy module configuration
+COPY apps/drive/go.mod apps/drive/go.sum ./
+RUN go mod download
+# Copy local source file
+COPY apps/drive/main.go .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o drive main.go
 
-# Stage 2: Create execution container
-FROM alpine:latest
+# Stage 3: Runtime
+FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 WORKDIR /
-COPY --from=builder /app/drive /drive
-
-# Create data directories internally to ensure target paths exist
+COPY --from=builder /magicbox/apps/drive/drive /drive
+COPY --from=frontend-builder /app/web/dist/ /web/
 RUN mkdir -p /data/app_state /data/transit /data/shared/photos /data/shared/documents
-
 EXPOSE 8080
 ENTRYPOINT ["/drive"]

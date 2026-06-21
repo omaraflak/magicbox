@@ -39,7 +39,7 @@ func (c *Client) EnsureTraefik(ctx context.Context) error {
 	// Pull image if not present locally.
 	_, _, err = c.cli.ImageInspectWithRaw(ctx, TraefikImage)
 	if err != nil {
-		if _, err := c.PullImage(ctx, TraefikImage); err != nil {
+		if _, err := c.PullImage(ctx, TraefikImage, false); err != nil {
 			return fmt.Errorf("docker: failed to pull traefik image: %w", err)
 		}
 	}

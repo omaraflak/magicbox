@@ -93,7 +93,7 @@ func (s *RPCServer) authInterceptor(ctx context.Context, req interface{}, info *
 
 	tokenStr := authValues[0]
 	// Strip "Bearer " prefix if present.
-	tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
+	tokenStr = strings.TrimSpace(strings.TrimPrefix(tokenStr, "Bearer "))
 
 	claims, err := rest.ValidateAppToken(s.jwtSecret, tokenStr)
 	if err != nil {

@@ -433,6 +433,29 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app updated"})
 }
 
+func (s *Server) handleRebuildApp(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	appDBID := r.PathValue("id")
+
+	app, err := s.db.GetAppByID(appDBID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if app == nil || app.UserID != claims.UserID {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+
+	if err := s.orch.Rebuild(r.Context(), appDBID); err != nil {
+		s.logger.Error("rebuild app: orchestrator error", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "app rebuilt"})
+}
+
 func (s *Server) handleRotateToken(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r)
 	appDBID := r.PathValue("id")

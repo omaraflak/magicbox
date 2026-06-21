@@ -8,18 +8,12 @@
   "webhook_path": "/internal/magicbox-webhook",
   "required_scopes": [
     "profile:read",
-    "shared:photos:rw",
-    "shared:documents:rw"
+    "shared:storage:rw"
   ],
   "volume_mounts": [
     {
       "type": "shared",
-      "name": "photos",
-      "access": "read-write"
-    },
-    {
-      "type": "shared",
-      "name": "documents",
+      "name": "storage",
       "access": "read-write"
     }
   ],

@@ -9,6 +9,7 @@ import AdminConsoleView from './components/AdminConsoleView';
 import InstallAppModal from './components/InstallAppModal';
 import CreateUserModal from './components/CreateUserModal';
 import AddRegistryModal from './components/AddRegistryModal';
+import Modal from './components/Modal';
 
 import { 
     apiRequest, 
@@ -36,11 +37,47 @@ export default function App() {
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState('');
+    const [rebuildingAppId, setRebuildingAppId] = useState(null);
 
     // Modal Visibilities
     const [installModalOpen, setInstallModalOpen] = useState(false);
     const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
     const [addRegistryModalOpen, setAddRegistryModalOpen] = useState(false);
+
+    // Dynamic Confirmation & Alert Modal State
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: 'Confirm Action',
+        message: '',
+        onConfirm: null,
+        onCancel: null,
+        isAlert: false,
+    });
+
+    const showConfirm = (message, onConfirm, title = 'Confirm Action') => {
+        setConfirmModal({
+            isOpen: true,
+            title,
+            message,
+            onConfirm: () => {
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                onConfirm();
+            },
+            onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+            isAlert: false,
+        });
+    };
+
+    const showAlert = (message, title = 'Notification') => {
+        setConfirmModal({
+            isOpen: true,
+            title,
+            message,
+            onConfirm: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+            onCancel: null,
+            isAlert: true,
+        });
+    };
 
     // Navigation: sync view state with URL path.
     const navigate = (newView, tab = null) => {
@@ -215,7 +252,7 @@ export default function App() {
         if (status === 200) {
             loadApps();
         } else {
-            alert(data?.error || "Failed to start application");
+            showAlert(data?.error || "Failed to start application", "Error");
         }
     };
 
@@ -225,35 +262,48 @@ export default function App() {
         if (status === 200) {
             loadApps();
         } else {
-            alert(data?.error || "Failed to stop application");
+            showAlert(data?.error || "Failed to stop application", "Error");
         }
     };
 
     // App Control: Rotate Token
     const handleRotateToken = async (id) => {
-        if (!confirm("Are you sure you want to rotate this application's API secret token? The app container will need to be restarted to use the new token.")) {
-            return;
-        }
-        const { status, data } = await callAPI('POST', `/apps/${id}/rotate-token`);
-        if (status === 200) {
-            alert("API Token successfully rotated. Restart the container to apply changes.");
-            loadApps();
-        } else {
-            alert(data?.error || "Failed to rotate token");
-        }
+        showConfirm("Are you sure you want to rotate this application's API secret token? The app container will need to be restarted to use the new token.", async () => {
+            const { status, data } = await callAPI('POST', `/apps/${id}/rotate-token`);
+            if (status === 200) {
+                showAlert("API Token successfully rotated. Restart the container to apply changes.", "Success");
+                loadApps();
+            } else {
+                showAlert(data?.error || "Failed to rotate token", "Error");
+            }
+        }, "Rotate API Token");
+    };
+
+    // App Control: Refresh / Rebuild
+    const handleRebuildApp = async (id) => {
+        showConfirm("Are you sure you want to refresh this application? The container will stop, its latest image will be pulled from the registry, and a new container will start.", async () => {
+            setRebuildingAppId(id);
+            const { status, data } = await callAPI('POST', `/apps/${id}/rebuild`);
+            setRebuildingAppId(null);
+            if (status === 200) {
+                showAlert("Application refreshed successfully.", "Success");
+                loadApps();
+            } else {
+                showAlert(data?.error || "Failed to refresh application", "Error");
+            }
+        }, "Refresh Application");
     };
 
     // App Control: Uninstall
     const handleUninstallApp = async (id) => {
-        if (!confirm("Uninstalling will completely destroy this app container and erase its private configuration. Shared user data folder will remain untouched on the host filesystem. Proceed?")) {
-            return;
-        }
-        const { status, data } = await callAPI('DELETE', `/apps/${id}`);
-        if (status === 200) {
-            loadApps();
-        } else {
-            alert(data?.error || "Uninstall failed");
-        }
+        showConfirm("Uninstalling will completely destroy this app container and erase its private configuration. Shared user data folder will remain untouched on the host filesystem. Proceed?", async () => {
+            const { status, data } = await callAPI('DELETE', `/apps/${id}`);
+            if (status === 200) {
+                loadApps();
+            } else {
+                showAlert(data?.error || "Uninstall failed", "Error");
+            }
+        }, "Uninstall Application");
     };
 
     // App Control: Install
@@ -286,15 +336,14 @@ export default function App() {
 
     // User Control: Delete
     const handleDeleteUser = async (id) => {
-        if (!confirm("Are you sure you want to delete this user? This will uninstall all their apps and erase all their directories permanently. Proceed?")) {
-            return;
-        }
-        const { status, data } = await callAPI('DELETE', `/admin/users/${id}`);
-        if (status === 200) {
-            loadUsers();
-        } else {
-            alert(data?.error || "Failed to delete user");
-        }
+        showConfirm("Are you sure you want to delete this user? This will uninstall all their apps and erase all their directories permanently. Proceed?", async () => {
+            const { status, data } = await callAPI('DELETE', `/admin/users/${id}`);
+            if (status === 200) {
+                loadUsers();
+            } else {
+                showAlert(data?.error || "Failed to delete user", "Error");
+            }
+        }, "Delete User");
     };
 
     // Registry Control: Add
@@ -313,15 +362,14 @@ export default function App() {
 
     // Registry Control: Delete
     const handleDeleteRegistry = async (id) => {
-        if (!confirm("Are you sure you want to remove this registry prefix? Apps using images from this registry will no longer be installable.")) {
-            return;
-        }
-        const { status, data } = await callAPI('DELETE', `/admin/registries/${id}`);
-        if (status === 200) {
-            loadRegistries();
-        } else {
-            alert(data?.error || "Failed to remove registry");
-        }
+        showConfirm("Are you sure you want to remove this registry prefix? Apps using images from this registry will no longer be installable.", async () => {
+            const { status, data } = await callAPI('DELETE', `/admin/registries/${id}`);
+            if (status === 200) {
+                loadRegistries();
+            } else {
+                showAlert(data?.error || "Failed to remove registry", "Error");
+            }
+        }, "Remove Registry");
     };
 
     // Filter Logs
@@ -371,6 +419,8 @@ export default function App() {
                         onStopApp={handleStopApp}
                         onUninstallApp={handleUninstallApp}
                         onRotateToken={handleRotateToken}
+                        onRebuildApp={handleRebuildApp}
+                        rebuildingAppId={rebuildingAppId}
                         onOpenInstallModal={() => {
                             setActionError('');
                             setInstallModalOpen(true);
@@ -427,6 +477,20 @@ export default function App() {
                 error={actionError}
                 loading={actionLoading}
             />
+
+            <Modal 
+                isOpen={confirmModal.isOpen} 
+                onClose={confirmModal.onCancel || confirmModal.onConfirm} 
+                title={confirmModal.title}
+            >
+                <div className="modal-desc">{confirmModal.message}</div>
+                <div className="modal-actions">
+                    {!confirmModal.isAlert && (
+                        <button className="btn btn-secondary" onClick={confirmModal.onCancel}>Cancel</button>
+                    )}
+                    <button className="btn btn-primary" onClick={confirmModal.onConfirm}>OK</button>
+                </div>
+            </Modal>
         </div>
     );
 }

@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/base64"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -9,9 +10,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+
+	pb "github.com/magicbox/core/api/proto/v1"
 )
 
-// Injected OS variables
+// Volume mapping: logical name → filesystem path
+var volumes = map[string]string{
+	"storage": "/data/shared/storage",
+}
+
+// Environment variables injected by MagicBox
 var (
 	apiToken = os.Getenv("MAGICBOX_API_TOKEN")
 	coreURL  = os.Getenv("MAGICBOX_CORE_URL")
@@ -19,343 +32,317 @@ var (
 	appID    = os.Getenv("MAGICBOX_APP_ID")
 )
 
-func main() {
-	log.Println("Starting Magic Drive app on port 8080...")
+const maxUploadSize = 50 << 20 // 50MB
 
-	http.HandleFunc("/", handleIndex)
-	http.HandleFunc("/upload", handleUpload)
-	http.HandleFunc("/download", handleDownload)
-	http.HandleFunc("/delete", handleDelete)
-	http.HandleFunc("/internal/magicbox-webhook", handleWebhook)
+var cachedUsername string
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+// --- JSON helpers ---
+
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
 }
 
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// resolvePath returns the clean, absolute host path safely ensuring no directory traversal.
+func resolvePath(volumeName, subPath string) (string, error) {
+	basePath, ok := volumes[volumeName]
+	if !ok {
+		return "", fmt.Errorf("invalid volume: %q", volumeName)
+	}
+
+	cleanSub := filepath.Clean(subPath)
+	if cleanSub == "." || cleanSub == "/" || cleanSub == "" {
+		return basePath, nil
+	}
+
+	// Block relative directory traversal and absolute escape routes.
+	if strings.HasPrefix(cleanSub, "/") || strings.HasPrefix(cleanSub, "..") || strings.Contains(cleanSub, "../") {
+		return "", fmt.Errorf("invalid subpath: %q", subPath)
+	}
+
+	fullPath := filepath.Join(basePath, cleanSub)
+	
+	if !strings.HasPrefix(fullPath, basePath) {
+		return "", fmt.Errorf("access denied")
+	}
+
+	return fullPath, nil
+}
+
+// --- gRPC Client helper ---
+
+func getUsernameFromCore() (string, error) {
+	if coreURL == "" || apiToken == "" {
+		return "", fmt.Errorf("missing gRPC core URL or authorization API token env vars")
+	}
+
+	conn, err := grpc.Dial(coreURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return "", fmt.Errorf("failed to dial core gRPC server: %w", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewMagicboxOSClient(conn)
+
+	// Set credentials header
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+apiToken))
+
+	resp, err := client.GetProfile(ctx, &pb.GetProfileRequest{})
+	if err != nil {
+		return "", fmt.Errorf("gRPC GetProfile call failed: %w", err)
+	}
+
+	return resp.Username, nil
+}
+
+// --- Handlers ---
+
+type FileInfo struct {
+	Name       string    `json:"name"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modified_at"`
+	IsDir      bool      `json:"is_dir"`
+}
+
+func handleInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Read directories
-	photos, _ := listFiles("/data/shared/photos")
-	docs, _ := listFiles("/data/shared/documents")
-	state, _ := listFiles("/data/app_state")
-
-	// Parse JWT info (manually decode JWT payload segment to keep container zero-dependency)
-	jwtParsed := "Invalid Token"
-	if parts := strings.Split(apiToken, "."); len(parts) == 3 {
-		payloadSegment := parts[1]
-		// Add padding if missing
-		if rem := len(payloadSegment) % 4; rem > 0 {
-			payloadSegment += strings.Repeat("=", 4-rem)
-		}
-		decoded, err := base64.URLEncoding.DecodeString(payloadSegment)
-		if err == nil {
-			jwtParsed = string(decoded)
+	username := cachedUsername
+	if username == "" {
+		var err error
+		username, err = getUsernameFromCore()
+		if err != nil {
+			log.Printf("Warning: failed to fetch username via gRPC: %v", err)
+			username = "User (" + userID + ")" // Fallback
+		} else {
+			cachedUsername = username
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magic Drive</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-primary: #09090e;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --accent-cyan: #06b6d4;
-            --accent-violet: #8b5cf6;
-            --text-primary: #f3f4f6;
-            --text-muted: #9ca3af;
-            --font-sans: 'Outfit', sans-serif;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: var(--font-sans);
-            padding: 40px;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 30px;
-        }
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 20px;
-        }
-        h1 {
-            font-size: 2rem;
-            background: linear-gradient(135deg, var(--accent-violet), var(--accent-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .meta-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 20px;
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
-        .meta-card h3 { color: var(--accent-cyan); margin-bottom: 10px; }
-        .meta-card code {
-            font-family: monospace;
-            background: rgba(0,0,0,0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            display: block;
-            white-space: pre-wrap;
-            margin-top: 5px;
-        }
-        .sections {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 24px;
-        }
-        .section {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .section h2 { font-size: 1.3rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-        .file-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            min-height: 100px;
-        }
-        .file-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid var(--border-color);
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-        .file-name { font-weight: 500; }
-        .file-actions { display: flex; gap: 10px; }
-        .btn {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            border-radius: 6px;
-            cursor: pointer;
-            border: none;
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        .btn-primary { background: var(--accent-cyan); color: #000; }
-        .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text-primary); border: 1px solid var(--border-color); }
-        .btn-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
-        .btn:hover { opacity: 0.8; }
-        .upload-form {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .upload-form input[type="file"] {
-            flex: 1;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <div>
-                <h1>Magic Drive App</h1>
-                <p style="color: var(--text-muted); margin-top: 5px;">Sandbox application demonstrating multi-tenant isolated storage.</p>
-            </div>
-            <div class="btn btn-secondary">User: %s</div>
-        </header>
-
-        <div class="meta-card">
-            <h3>Mother App Injected Context Telemetry</h3>
-            <div><strong>MAGICBOX_CORE_URL:</strong> <code>%s</code></div>
-            <div><strong>MAGICBOX_USER_ID:</strong> <code>%s</code></div>
-            <div><strong>MAGICBOX_APP_ID:</strong> <code>%s</code></div>
-            <div><strong>Decoded JWT Payload (MAGICBOX_API_TOKEN):</strong> <code>%s</code></div>
-        </div>
-
-        <div class="sections">
-            <!-- Photos Section -->
-            <div class="section">
-                <h2>Photos shared volume (/data/shared/photos)</h2>
-                <div class="file-list">
-                    %s
-                </div>
-                <form class="upload-form" action="/upload?dir=photos" method="POST" enctype="multipart/form-data">
-                    <input type="file" name="file" required>
-                    <button class="btn btn-primary" type="submit">Upload</button>
-                </form>
-            </div>
-
-            <!-- Documents Section -->
-            <div class="section">
-                <h2>Documents shared volume (/data/shared/documents)</h2>
-                <div class="file-list">
-                    %s
-                </div>
-                <form class="upload-form" action="/upload?dir=documents" method="POST" enctype="multipart/form-data">
-                    <input type="file" name="file" required>
-                    <button class="btn btn-primary" type="submit">Upload</button>
-                </form>
-            </div>
-
-            <!-- Private Config Section -->
-            <div class="section">
-                <h2>Private App State (/data/app_state)</h2>
-                <p style="font-size: 0.85rem; color: var(--text-muted);">This directory is completely private to this app container and is destroyed on uninstall.</p>
-                <div class="file-list">
-                    %s
-                </div>
-                <form class="upload-form" action="/upload?dir=state" method="POST" enctype="multipart/form-data">
-                    <input type="file" name="file" required>
-                    <button class="btn btn-primary" type="submit">Save File</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</body>
-</html>`,
-		escape(userID),
-		escape(coreURL),
-		escape(userID),
-		escape(appID),
-		escape(jwtParsed),
-		renderFilesHTML("photos", photos),
-		renderFilesHTML("documents", docs),
-		renderFilesHTML("state", state),
-	)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"user_id":  userID,
+		"app_id":   appID,
+		"username": username,
+	})
 }
 
-func handleUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	dirKey := r.URL.Query().Get("dir")
-	uploadDir := ""
-	switch dirKey {
-	case "photos":
-		uploadDir = "/data/shared/photos"
-	case "documents":
-		uploadDir = "/data/shared/documents"
-	case "state":
-		uploadDir = "/data/app_state"
+func handleFiles(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		handleListFiles(w, r)
+	case http.MethodPost:
+		handleUploadFiles(w, r)
+	case http.MethodDelete:
+		handleDeleteFile(w, r)
 	default:
-		http.Error(w, "Invalid directory", http.StatusBadRequest)
-		return
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
 
-	// Parse file
-	r.ParseMultipartForm(10 << 20) // 10MB max
-	file, handler, err := r.FormFile("file")
+func handleListFiles(w http.ResponseWriter, r *http.Request) {
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+
+	dirPath, err := resolvePath(volumeName, subPath)
 	if err != nil {
-		http.Error(w, "Failed to parse file: "+err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	defer file.Close()
 
-	destPath := filepath.Join(uploadDir, filepath.Base(handler.Filename))
-	dest, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		http.Error(w, "Failed to create destination file: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer dest.Close()
-
-	if _, err := io.Copy(dest, file); err != nil {
-		http.Error(w, "Failed to write file: "+err.Error(), http.StatusInternalServerError)
+		writeJSON(w, http.StatusOK, []FileInfo{})
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	files := make([]FileInfo, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, FileInfo{
+			Name:       entry.Name(),
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime().UTC(),
+			IsDir:      entry.IsDir(),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, files)
+}
+
+func handleUploadFiles(w http.ResponseWriter, r *http.Request) {
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+
+	dirPath, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		writeError(w, http.StatusBadRequest, "failed to parse multipart form: "+err.Error())
+		return
+	}
+
+	uploadedFiles := r.MultipartForm.File["files"]
+	if len(uploadedFiles) == 0 {
+		writeError(w, http.StatusBadRequest, "no files provided in 'files' field")
+		return
+	}
+
+	uploaded := 0
+	for _, fh := range uploadedFiles {
+		src, err := fh.Open()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to open uploaded file: "+err.Error())
+			return
+		}
+
+		safeName := filepath.Base(fh.Filename)
+		destPath := filepath.Join(dirPath, safeName)
+
+		dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			src.Close()
+			writeError(w, http.StatusInternalServerError, "failed to create destination file: "+err.Error())
+			return
+		}
+
+		_, err = io.Copy(dst, src)
+		src.Close()
+		dst.Close()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to write file: "+err.Error())
+			return
+		}
+
+		uploaded++
+	}
+
+	writeJSON(w, http.StatusOK, map[string]int{"uploaded": uploaded})
+}
+
+func handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+	filename := r.URL.Query().Get("file")
+
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
+		return
+	}
+
+	dirPath, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	safeName := filepath.Base(filename)
+	fullPath := filepath.Join(dirPath, safeName)
+
+	if err := os.RemoveAll(fullPath); err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
+		} else {
+			writeError(w, http.StatusInternalServerError, "failed to delete file/folder: "+err.Error())
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": safeName})
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
-	dirKey := r.URL.Query().Get("dir")
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
 	filename := r.URL.Query().Get("file")
-	
-	uploadDir := ""
-	switch dirKey {
-	case "photos":
-		uploadDir = "/data/shared/photos"
-	case "documents":
-		uploadDir = "/data/shared/documents"
-	case "state":
-		uploadDir = "/data/app_state"
-	default:
-		http.Error(w, "Invalid directory", http.StatusBadRequest)
+
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
 		return
 	}
 
-	safePath := filepath.Join(uploadDir, filepath.Base(filename))
-	
-	// Double-check base path constraint
-	if !strings.HasPrefix(safePath, uploadDir) {
-		http.Error(w, "Access Denied", http.StatusForbidden)
+	dirPath, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(filename))
-	http.ServeFile(w, r, safePath)
+	safeName := filepath.Base(filename)
+	fullPath := filepath.Join(dirPath, safeName)
+
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
+		return
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeName))
+	http.ServeFile(w, r, fullPath)
 }
 
-func handleDelete(w http.ResponseWriter, r *http.Request) {
-	dirKey := r.URL.Query().Get("dir")
-	filename := r.URL.Query().Get("file")
-
-	uploadDir := ""
-	switch dirKey {
-	case "photos":
-		uploadDir = "/data/shared/photos"
-	case "documents":
-		uploadDir = "/data/shared/documents"
-	case "state":
-		uploadDir = "/data/app_state"
-	default:
-		http.Error(w, "Invalid directory", http.StatusBadRequest)
+func handleFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	safePath := filepath.Join(uploadDir, filepath.Base(filename))
-	if err := os.Remove(safePath); err != nil {
-		http.Error(w, "Failed to delete: "+err.Error(), http.StatusInternalServerError)
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	if body.Name == "" {
+		writeError(w, http.StatusBadRequest, "missing 'name' property")
+		return
+	}
+
+	if strings.Contains(body.Name, "/") || strings.Contains(body.Name, "\\") || body.Name == "." || body.Name == ".." {
+		writeError(w, http.StatusBadRequest, "invalid folder name")
+		return
+	}
+
+	dirPath, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	targetPath := filepath.Join(dirPath, body.Name)
+	if err := os.MkdirAll(targetPath, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create folder: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"created": body.Name})
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
-	// Simple webhook responder logging payloads
 	body, _ := io.ReadAll(r.Body)
-	log.Printf("Webhook received from app %s (user %s): %s",
+	log.Printf("Webhook received from app=%s user=%s: %s",
 		r.Header.Get("X-Magicbox-Source-App"),
 		r.Header.Get("X-Magicbox-Source-User"),
 		string(body),
@@ -363,45 +350,52 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Helpers
-func listFiles(dir string) ([]string, error) {
-	var files []string
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
+// --- SPA serving ---
+
+func spaHandler(w http.ResponseWriter, r *http.Request) {
+	filePath := filepath.Join("/web", filepath.Clean(r.URL.Path))
+
+	info, err := os.Stat(filePath)
+	if err == nil && !info.IsDir() {
+		http.ServeFile(w, r, filePath)
+		return
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			files = append(files, entry.Name())
+
+	http.ServeFile(w, r, "/web/index.html")
+}
+
+// --- Main ---
+
+func main() {
+	log.Println("Starting Magic Drive API on port 8080...")
+
+	mux := http.NewServeMux()
+
+	// API routes
+	mux.HandleFunc("/api/info", handleInfo)
+	mux.HandleFunc("/api/files", handleFiles)
+	mux.HandleFunc("/api/files/download", handleDownload)
+	mux.HandleFunc("/api/folders", handleFolders)
+
+	// Internal webhook
+	mux.HandleFunc("/internal/magicbox-webhook", handleWebhook)
+
+	// SPA fallback
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			writeError(w, http.StatusNotFound, "unknown API endpoint")
+			return
 		}
-	}
-	return files, nil
-}
+		if strings.HasPrefix(r.URL.Path, "/api/folders") {
+			writeError(w, http.StatusNotFound, "unknown API endpoint")
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/internal/") {
+			writeError(w, http.StatusNotFound, "unknown internal endpoint")
+			return
+		}
+		spaHandler(w, r)
+	})
 
-func renderFilesHTML(dirKey string, files []string) string {
-	if len(files) == 0 {
-		return `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px 0;">No files present.</div>`
-	}
-	var html strings.Builder
-	for _, f := range files {
-		html.WriteString(fmt.Sprintf(`
-			<div class="file-item">
-				<span class="file-name">%s</span>
-				<div class="file-actions">
-					<a class="btn btn-secondary" href="/download?dir=%s&file=%s">Download</a>
-					<a class="btn btn-danger" href="/delete?dir=%s&file=%s">✕</a>
-				</div>
-			</div>
-		`, escape(f), dirKey, escape(f), dirKey, escape(f)))
-	}
-	return html.String()
-}
-
-func escape(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&#39;")
-	return s
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }
