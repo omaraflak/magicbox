@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package magicbox.v1;
+
+option go_package = "github.com/magicbox/core/api/proto/v1;magicboxpb";
+
+// MagicboxOS is the gRPC API exposed to installed app containers.
+// Apps authenticate using the MAGICBOX_API_TOKEN JWT injected as an env var.
+// The token encodes the user_id, app_id, and granted scopes.
+//
+// File I/O (shared volumes, app_state, transit) is handled via direct
+// Docker volume mounts — no gRPC needed for filesystem operations.
+service MagicboxOS {
+
+  // SendWebhook dispatches a payload to another app's webhook endpoint.
+  // This is the only way for apps to communicate since inter-container
+  // communication (ICC) is disabled on the magicbox_net network.
+  rpc SendWebhook(SendWebhookRequest) returns (SendWebhookResponse);
+
+  // GetProfile returns the owning user's profile information.
+  // Requires scope: profile:read
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+
+  // ListSharedVolumes returns the shared volumes accessible to the calling app,
+  // derived from the app's granted scopes. Useful for runtime discovery.
+  rpc ListSharedVolumes(ListSharedVolumesRequest) returns (ListSharedVolumesResponse);
+}
+
+// --------------------------------------------------------------------------
+// SendWebhook
+// --------------------------------------------------------------------------
+
+message SendWebhookRequest {
+  // The app_id of the target app (e.g. "com.magicbox.drive").
+  string target_app_id = 1;
+  // The user_id who owns the target app instance.
+  string target_user_id = 2;
+  // Arbitrary payload delivered to the target's webhook endpoint.
+  bytes payload = 3;
+}
+
+message SendWebhookResponse {
+  // HTTP status code returned by the target app's webhook handler.
+  int32 http_status = 1;
+}
+
+// --------------------------------------------------------------------------
+// GetProfile
+// --------------------------------------------------------------------------
+
+message GetProfileRequest {}
+
+message GetProfileResponse {
+  string user_id = 1;
+  string username = 2;
+  string created_at = 3;
+}
+
+// --------------------------------------------------------------------------
+// ListSharedVolumes
+// --------------------------------------------------------------------------
+
+message ListSharedVolumesRequest {}
+
+message ListSharedVolumesResponse {
+  repeated SharedVolume volumes = 1;
+}
+
+message SharedVolume {
+  string name = 1;
+  // "ro" or "rw"
+  string access = 2;
+}

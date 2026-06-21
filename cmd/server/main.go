@@ -132,9 +132,6 @@ func run() error {
 	stopTransit()
 	stopBackup()
 
-	// Close database.
-	database.Close()
-
 	logger.Info("shutdown complete")
 	return nil
 }

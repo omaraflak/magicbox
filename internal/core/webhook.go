@@ -37,11 +37,9 @@ func (o *Orchestrator) DispatchWebhook(ctx context.Context, targetAppID, targetU
 		return 0, fmt.Errorf("target container has no IP address")
 	}
 
-	// 3. Build the webhook URL.
-	// Use the app's entry port (default 8080) and webhook path.
-	// The webhook path is stored in the manifest but we use a default here.
-	webhookPath := "/internal/magicbox-webhook"
-	url := fmt.Sprintf("http://%s:8080%s", status.IPAddress, webhookPath)
+	// 3. Build the webhook URL using stored entry_port and webhook_path.
+	webhookPath := app.WebhookPath
+	url := fmt.Sprintf("http://%s:%d%s", status.IPAddress, app.EntryPort, webhookPath)
 
 	// 4. Create the HTTP request with a 30s timeout.
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

@@ -76,9 +76,23 @@ func (s *Server) Handler() http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(traefikURL)
 	mux.Handle("/u/", proxy)
 
-	// Static file fallback — serve web UI.
+	// Static file fallback — serve web UI with SPA fallback.
+	// For client-side routing, serve index.html for any path that doesn't
+	// match a real static file (e.g. /admin/logs → index.html).
 	webDir := s.cfg.Root + "/core/web/"
-	mux.Handle("/", http.FileServer(http.Dir(webDir)))
+	fileServer := http.FileServer(http.Dir(webDir))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the requested file exists on disk.
+		filePath := webDir + r.URL.Path
+		if r.URL.Path != "/" {
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				// Not a real file — serve index.html for SPA routing.
+				http.ServeFile(w, r, webDir+"index.html")
+				return
+			}
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
 
 	// Wrap everything with security headers.
 	return SecurityHeadersMiddleware(mux)

@@ -16,6 +16,7 @@ import {
     checkNeedsSetup, 
     fetchMe 
 } from './utils/api';
+import { viewFromPath, pathFromView, ROUTES } from './utils/routes';
 
 export default function App() {
     // Session State
@@ -23,6 +24,7 @@ export default function App() {
     const [csrfToken, setCsrfToken] = useState('');
     const [user, setUser] = useState(null);
     const [view, setView] = useState('login'); // 'setup', 'login', 'dashboard', 'admin'
+    const [adminTab, setAdminTab] = useState('users'); // 'users', 'registries', 'logs'
 
     // Core Business Data
     const [apps, setApps] = useState([]);
@@ -40,10 +42,36 @@ export default function App() {
     const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
     const [addRegistryModalOpen, setAddRegistryModalOpen] = useState(false);
 
+    // Navigation: sync view state with URL path.
+    const navigate = (newView, tab = null) => {
+        const t = tab || adminTab || 'users';
+        if (newView === 'admin') setAdminTab(t);
+        const path = pathFromView(newView, t);
+        window.history.pushState({ view: newView, tab: t }, '', path);
+        setView(newView);
+    };
+
+    // Handle browser back/forward.
+    useEffect(() => {
+        const onPopState = (e) => {
+            if (e.state?.view) {
+                setView(e.state.view);
+                if (e.state.tab) setAdminTab(e.state.tab);
+            } else {
+                const { view: v, tab } = viewFromPath(window.location.pathname);
+                setView(v);
+                setAdminTab(tab);
+            }
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
+
     // Global unauthorized handler passed to apiRequest
     const handleUnauthorized = () => {
         setUser(null);
         setView('login');
+        window.history.replaceState(null, '', ROUTES.DASHBOARD);
     };
 
     // Helper wrapper for API requests
@@ -63,7 +91,12 @@ export default function App() {
                 const me = await fetchMe(token);
                 if (me) {
                     setUser(me);
-                    setView('dashboard');
+                    // Restore view from URL path on refresh.
+                    const { view: v, tab } = viewFromPath(window.location.pathname);
+                    setView(v);
+                    setAdminTab(tab);
+                    // Replace state so back/forward works from initial load.
+                    window.history.replaceState({ view: v, tab }, '', window.location.pathname);
                 } else {
                     // Check if initial setup is required
                     const needsSetup = await checkNeedsSetup(token);
@@ -139,12 +172,12 @@ export default function App() {
         setActionError('');
         const { status, data } = await callAPI('POST', '/setup', { username, password });
         setActionLoading(false);
-        if (status === 200) {
-            // Auto login after setup returns 200
+        if (status === 201) {
+            // Auto login after setup
             const me = await fetchMe(csrfToken);
             if (me) {
                 setUser(me);
-                setView('dashboard');
+                navigate('dashboard');
             }
         } else {
             setActionError(data?.error || "Setup initialization failed");
@@ -161,7 +194,7 @@ export default function App() {
             const me = await fetchMe(csrfToken);
             if (me) {
                 setUser(me);
-                setView('dashboard');
+                navigate('dashboard');
             }
         } else {
             setActionError("Invalid username or password");
@@ -173,6 +206,7 @@ export default function App() {
         await callAPI('POST', '/auth/logout');
         setUser(null);
         setView('login');
+        window.history.replaceState(null, '', '/');
     };
 
     // App Control: Start
@@ -242,7 +276,7 @@ export default function App() {
         setActionError('');
         const { status, data } = await callAPI('POST', '/admin/users', { username, password, is_admin: isAdmin });
         setActionLoading(false);
-        if (status === 200) {
+        if (status === 201) {
             setCreateUserModalOpen(false);
             loadUsers();
         } else {
@@ -269,7 +303,7 @@ export default function App() {
         setActionError('');
         const { status, data } = await callAPI('POST', '/admin/registries', { prefix });
         setActionLoading(false);
-        if (status === 200) {
+        if (status === 201) {
             setAddRegistryModalOpen(false);
             loadRegistries();
         } else {
@@ -315,7 +349,7 @@ export default function App() {
                     user={user}
                     onLogout={handleLogout}
                     adminView={view === 'admin'}
-                    onToggleView={setView}
+                    onToggleView={(v) => navigate(v)}
                 />
             )}
 
@@ -353,6 +387,8 @@ export default function App() {
                             setActionError('');
                             setCreateUserModalOpen(true);
                         }}
+                        activeTab={adminTab}
+                        onTabChange={(tab) => navigate('admin', tab)}
                         registries={registries}
                         onDeleteRegistry={handleDeleteRegistry}
                         onOpenAddRegistryModal={() => {

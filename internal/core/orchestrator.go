@@ -104,14 +104,16 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 
 	// 7. Insert app record (status=installing), token, and scopes.
 	app := &db.App{
-		ID:        appDBID,
-		AppID:     manifest.AppID,
-		UserID:    userID,
-		Status:    "installing",
-		RouteSlug: manifest.RouteSlug,
-		Image:     manifest.Image,
-		Version:   manifest.Version,
-		Host:      manifest.Host,
+		ID:          appDBID,
+		AppID:       manifest.AppID,
+		UserID:      userID,
+		Status:      "installing",
+		RouteSlug:   manifest.RouteSlug,
+		Image:       manifest.Image,
+		Version:     manifest.Version,
+		Host:        manifest.Host,
+		EntryPort:   manifest.EntryPort,
+		WebhookPath: manifest.WebhookPath,
 	}
 	if err := o.DB.InsertApp(app); err != nil {
 		return nil, fmt.Errorf("failed to insert app: %w", err)
@@ -308,7 +310,7 @@ func (o *Orchestrator) Start(ctx context.Context, appDBID string) error {
 		AppID:        app.AppID,
 		AppName:      app.AppID, // Use appID as name fallback.
 		Image:        app.Image,
-		EntryPort:    8080, // Default; ideally from stored manifest.
+		EntryPort:    app.EntryPort,
 		RouteSlug:    app.RouteSlug,
 		Username:     user.Username,
 		UserID:       app.UserID,

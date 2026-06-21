@@ -63,9 +63,11 @@ func (d *DB) Migrate() error {
 		}
 	}
 
-	// Incremental schema update: add host column to apps table if it doesn't exist.
-	// Ignored if column already exists.
+	// Incremental schema updates: add columns if they don't exist.
+	// Ignored if column already exists (SQLite silently errors on duplicate ALTER).
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN host TEXT`)
+	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN entry_port INTEGER DEFAULT 8080`)
+	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN webhook_path TEXT DEFAULT '/internal/magicbox-webhook'`)
 
 	// Seed default allowed registry.
 	now := time.Now().UTC().Format(time.RFC3339)

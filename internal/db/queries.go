@@ -27,6 +27,8 @@ type App struct {
 	Version     string
 	ContainerID string
 	Host        string
+	EntryPort   int
+	WebhookPath string
 	InstalledAt string
 	UpdatedAt   string
 }
@@ -120,10 +122,11 @@ func (d *DB) UserCount() (int, error) {
 func (d *DB) InsertApp(app *App) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := d.conn.Exec(
-		`INSERT INTO apps (id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, installed_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO apps (id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		app.ID, app.AppID, app.UserID, app.Status, app.RouteSlug,
-		app.Image, app.ImageDigest, app.Version, app.ContainerID, app.Host, now, now,
+		app.Image, app.ImageDigest, app.Version, app.ContainerID, app.Host,
+		app.EntryPort, app.WebhookPath, now, now,
 	)
 	return err
 }
@@ -131,7 +134,7 @@ func (d *DB) InsertApp(app *App) error {
 // GetAppByID returns an app by its primary key ID, or (nil, nil) if not found.
 func (d *DB) GetAppByID(id string) (*App, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, installed_at, updated_at
+		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at
 		 FROM apps WHERE id = ?`, id,
 	)
 	return scanApp(row)
@@ -140,7 +143,7 @@ func (d *DB) GetAppByID(id string) (*App, error) {
 // GetAppByAppIDAndUserID returns an app by its composite key, or (nil, nil) if not found.
 func (d *DB) GetAppByAppIDAndUserID(appID, userID string) (*App, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, installed_at, updated_at
+		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at
 		 FROM apps WHERE app_id = ? AND user_id = ?`, appID, userID,
 	)
 	return scanApp(row)
@@ -149,7 +152,7 @@ func (d *DB) GetAppByAppIDAndUserID(appID, userID string) (*App, error) {
 // ListAppsByUserID returns all apps owned by a given user.
 func (d *DB) ListAppsByUserID(userID string) ([]App, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, installed_at, updated_at
+		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at
 		 FROM apps WHERE user_id = ?`, userID,
 	)
 	if err != nil {
@@ -162,7 +165,7 @@ func (d *DB) ListAppsByUserID(userID string) ([]App, error) {
 // ListAppsByAppID returns all app instances with a given app_id (across users).
 func (d *DB) ListAppsByAppID(appID string) ([]App, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, installed_at, updated_at
+		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at
 		 FROM apps WHERE app_id = ?`, appID,
 	)
 	if err != nil {
@@ -201,7 +204,7 @@ func (d *DB) DeleteApp(id string) error {
 // ListRunningApps returns all apps with status 'running'.
 func (d *DB) ListRunningApps() ([]App, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, installed_at, updated_at
+		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at
 		 FROM apps WHERE status = ?`, "running",
 	)
 	if err != nil {
@@ -394,10 +397,12 @@ func scanUserRow(row rowScanner) (*User, error) {
 
 func scanApp(row rowScanner) (*App, error) {
 	var a App
-	var imageDigest, version, containerID, host, updatedAt sql.NullString
+	var imageDigest, version, containerID, host, webhookPath, updatedAt sql.NullString
+	var entryPort sql.NullInt64
 	err := row.Scan(
 		&a.ID, &a.AppID, &a.UserID, &a.Status, &a.RouteSlug,
-		&a.Image, &imageDigest, &version, &containerID, &host, &a.InstalledAt, &updatedAt,
+		&a.Image, &imageDigest, &version, &containerID, &host,
+		&entryPort, &webhookPath, &a.InstalledAt, &updatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -409,6 +414,16 @@ func scanApp(row rowScanner) (*App, error) {
 	a.Version = version.String
 	a.ContainerID = containerID.String
 	a.Host = host.String
+	if entryPort.Valid {
+		a.EntryPort = int(entryPort.Int64)
+	} else {
+		a.EntryPort = 8080
+	}
+	if webhookPath.Valid && webhookPath.String != "" {
+		a.WebhookPath = webhookPath.String
+	} else {
+		a.WebhookPath = "/internal/magicbox-webhook"
+	}
 	a.UpdatedAt = updatedAt.String
 	return &a, nil
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import AdminUsersTab from './AdminUsersTab';
 import AdminRegistriesTab from './AdminRegistriesTab';
 import AdminLogsTab from './AdminLogsTab';
@@ -8,6 +8,8 @@ export default function AdminConsoleView({
     currentUser, 
     onDeleteUser, 
     onOpenCreateUserModal,
+    activeTab,
+    onTabChange,
     registries, 
     onDeleteRegistry, 
     onOpenAddRegistryModal,
@@ -16,26 +18,24 @@ export default function AdminConsoleView({
     onLogLevelChange, 
     onRefreshLogs 
 }) {
-    const [activeTab, setActiveTab] = useState('users');
-
     return (
         <div className="admin-layout" style={{ display: 'flex', minHeight: 'calc(100vh - 70px)', marginTop: '20px' }}>
             <aside className="admin-sidebar" style={{ width: '240px', borderRight: '1px solid var(--border-color)', paddingRight: '20px' }}>
                 <button 
                     className={`sidebar-item ${activeTab === 'users' ? 'active' : ''}`} 
-                    onClick={() => setActiveTab('users')}
+                    onClick={() => onTabChange('users')}
                 >
                     Users
                 </button>
                 <button 
                     className={`sidebar-item ${activeTab === 'registries' ? 'active' : ''}`} 
-                    onClick={() => setActiveTab('registries')}
+                    onClick={() => onTabChange('registries')}
                 >
                     Registries
                 </button>
                 <button 
                     className={`sidebar-item ${activeTab === 'logs' ? 'active' : ''}`} 
-                    onClick={() => setActiveTab('logs')}
+                    onClick={() => onTabChange('logs')}
                 >
                     Kernel Logs
                 </button>
