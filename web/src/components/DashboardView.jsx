@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, isRebuilding }) {
+function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, isRebuilding, isUninstalling }) {
     const [menuOpen, setMenuOpen] = useState(false);
 
     let statusClass = 'status-stopped';
@@ -79,14 +79,14 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
                 </div>
             </div>
             
-            {isRebuilding && (
+            {(isRebuilding || isUninstalling || app.status === 'installing') && (
                 <div style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    background: 'rgba(10, 10, 20, 0.75)',
+                    background: 'rgba(255, 255, 255, 0.8)',
                     backdropFilter: 'blur(4px)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -94,10 +94,12 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
                     alignItems: 'center',
                     zIndex: 10,
                     borderRadius: 'var(--radius-lg)',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                 }}>
-                    <div className="spinner" style={{ width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent-cyan)' }}></div>
-                    <span style={{ marginTop: '12px', fontSize: '0.8rem', fontWeight: 500 }}>Updating...</span>
+                    <div className="spinner" style={{ width: '32px', height: '32px', border: '3px solid rgba(0, 0, 0, 0.1)', borderTopColor: isUninstalling ? 'var(--accent-error)' : 'var(--accent-cyan)' }}></div>
+                    <span style={{ marginTop: '12px', fontSize: '0.8rem', fontWeight: 500 }}>
+                        {isUninstalling ? 'Uninstalling...' : app.status === 'installing' ? 'Installing...' : 'Updating...'}
+                    </span>
                 </div>
             )}
         </div>
@@ -113,6 +115,7 @@ export default function DashboardView({
     onRotateToken, 
     onRebuildApp,
     rebuildingAppId,
+    uninstallingAppId,
     onOpenInstallModal 
 }) {
     return (
@@ -145,6 +148,7 @@ export default function DashboardView({
                                 onRotateToken={onRotateToken}
                                 onRebuildApp={onRebuildApp}
                                 isRebuilding={rebuildingAppId === app.id}
+                                isUninstalling={uninstallingAppId === app.id}
                             />
                         ))}
                     </div>

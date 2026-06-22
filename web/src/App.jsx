@@ -43,6 +43,9 @@ export default function App() {
     const [installModalOpen, setInstallModalOpen] = useState(false);
     const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
     const [addRegistryModalOpen, setAddRegistryModalOpen] = useState(false);
+    const [uninstallAppId, setUninstallAppId] = useState(null);
+    const [uninstallingAppId, setUninstallingAppId] = useState(null);
+    const [wipeAppData, setWipeAppData] = useState(false);
 
     // Dynamic Confirmation & Alert Modal State
     const [confirmModal, setConfirmModal] = useState({
@@ -157,8 +160,8 @@ export default function App() {
     const loadApps = async () => {
         if (view !== 'dashboard' && view !== 'admin') return;
         const { status, data } = await callAPI('GET', '/apps');
-        if (status === 200 && data) {
-            setApps(data);
+        if (status === 200) {
+            setApps(data || []);
         }
     };
 
@@ -172,12 +175,12 @@ export default function App() {
     // 3. Fetch Admin Data (Runs when switching to admin tabs)
     const loadUsers = async () => {
         const { status, data } = await callAPI('GET', '/admin/users');
-        if (status === 200 && data) setUsers(data);
+        if (status === 200) setUsers(data || []);
     };
 
     const loadRegistries = async () => {
         const { status, data } = await callAPI('GET', '/admin/registries');
-        if (status === 200 && data) setRegistries(data);
+        if (status === 200) setRegistries(data || []);
     };
 
     const loadLogs = async (level = logLevel) => {
@@ -295,15 +298,20 @@ export default function App() {
     };
 
     // App Control: Uninstall
-    const handleUninstallApp = async (id) => {
-        showConfirm("Uninstalling will completely destroy this app container and erase its private configuration. Shared user data folder will remain untouched on the host filesystem. Proceed?", async () => {
-            const { status, data } = await callAPI('DELETE', `/apps/${id}`);
-            if (status === 200) {
-                loadApps();
-            } else {
-                showAlert(data?.error || "Uninstall failed", "Error");
-            }
-        }, "Uninstall Application");
+    const handleUninstallApp = (id) => {
+        setWipeAppData(false);
+        setUninstallAppId(id);
+    };
+
+    const performUninstall = async (id, wipe) => {
+        setUninstallingAppId(id);
+        const { status, data } = await callAPI('DELETE', `/apps/${id}?wipe=${wipe}`);
+        setUninstallingAppId(null);
+        if (status === 200) {
+            loadApps();
+        } else {
+            showAlert(data?.error || "Uninstall failed", "Error");
+        }
     };
 
     // App Control: Install
@@ -421,6 +429,7 @@ export default function App() {
                         onRotateToken={handleRotateToken}
                         onRebuildApp={handleRebuildApp}
                         rebuildingAppId={rebuildingAppId}
+                        uninstallingAppId={uninstallingAppId}
                         onOpenInstallModal={() => {
                             setActionError('');
                             setInstallModalOpen(true);
@@ -477,6 +486,60 @@ export default function App() {
                 error={actionError}
                 loading={actionLoading}
             />
+
+            <Modal
+                isOpen={uninstallAppId !== null}
+                onClose={() => setUninstallAppId(null)}
+                title="Uninstall Application"
+            >
+                <div className="modal-desc" style={{ marginBottom: '16px' }}>
+                    <p style={{ fontWeight: 500, marginBottom: '8px' }}>
+                        Are you sure you want to uninstall this application?
+                    </p>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        This will stop and remove the container.
+                    </p>
+                </div>
+                
+                <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    gap: '10px', 
+                    background: 'rgba(255,255,255,0.02)',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    marginBottom: '20px'
+                }}>
+                    <input 
+                        type="checkbox" 
+                        id="wipe-data-checkbox"
+                        checked={wipeAppData}
+                        onChange={(e) => setWipeAppData(e.target.checked)}
+                        style={{ marginTop: '3px', cursor: 'pointer' }}
+                    />
+                    <label htmlFor="wipe-data-checkbox" style={{ fontSize: '0.85rem', color: wipeAppData ? 'var(--accent-red)' : 'var(--text-primary)', cursor: 'pointer', userSelect: 'none' }}>
+                        <span style={{ fontWeight: 600, display: 'block', marginBottom: '2px' }}>Wipe all app configuration and database data</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Wipes `/data/app_state`. This action is irreversible. User shared volumes (like files/photos) are not deleted.
+                        </span>
+                    </label>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button className="btn btn-secondary" onClick={() => setUninstallAppId(null)}>Cancel</button>
+                    <button 
+                        className={`btn ${wipeAppData ? 'btn-danger' : 'btn-primary'}`}
+                        onClick={() => {
+                            const id = uninstallAppId;
+                            setUninstallAppId(null);
+                            performUninstall(id, wipeAppData);
+                        }}
+                    >
+                        {wipeAppData ? 'Uninstall & Wipe Data' : 'Uninstall App'}
+                    </button>
+                </div>
+            </Modal>
 
             <Modal 
                 isOpen={confirmModal.isOpen} 

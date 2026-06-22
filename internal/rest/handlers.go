@@ -347,7 +347,9 @@ func (s *Server) handleUninstallApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orch.Uninstall(r.Context(), appDBID); err != nil {
+	wipe := (r.URL.Query().Get("wipe") == "true")
+
+	if err := s.orch.Uninstall(r.Context(), appDBID, wipe); err != nil {
 		s.logger.Error("uninstall app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

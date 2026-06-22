@@ -30,13 +30,14 @@ export default function AdminUsersTab({ users, currentUser, onDeleteUser, onOpen
                                 </td>
                                 <td>{new Date(u.created_at).toLocaleString()}</td>
                                 <td className="text-right">
-                                    <button 
-                                        className="btn btn-danger btn-sm" 
-                                        onClick={() => onDeleteUser(u.id)}
-                                        disabled={currentUser?.id === u.id}
-                                    >
-                                        Delete
-                                    </button>
+                                    {currentUser?.id !== u.id && (
+                                        <button 
+                                            className="btn btn-danger btn-sm" 
+                                            onClick={() => onDeleteUser(u.id)}
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

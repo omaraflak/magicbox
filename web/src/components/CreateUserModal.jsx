@@ -54,7 +54,7 @@ export default function CreateUserModal({ isOpen, onClose, onCreateUser, error, 
                         onChange={(e) => setIsAdmin(e.target.checked)}
                     />
                     <label htmlFor="create-is-admin" style={{ margin: 0, cursor: 'pointer' }}>
-                        Grant administrative access (is_admin)
+              Grant administrative access
                     </label>
                 </div>
                 {error && <div className="error-box" style={{ marginBottom: '12px' }}>{error}</div>}

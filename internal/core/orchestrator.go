@@ -127,76 +127,84 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 		}
 	}
 
-	// 8. Pull image.
-	digest, err := o.Docker.PullImage(ctx, manifest.Image, false)
-	if err != nil {
-		o.DB.UpdateAppStatus(appDBID, "error", "")
-		return nil, fmt.Errorf("failed to pull image: %w", err)
-	}
-	if err := o.DB.UpdateAppVersion(appDBID, manifest.Version, digest); err != nil {
-		o.Logger.Error("install: failed to update app version", logging.F("error", err.Error()))
-	}
+	// Run the remainder of installation (image pull, container creation and start) in the background.
+	go func() {
+		bgCtx := context.Background()
 
-	// 9. Generate app JWT token for the container.
-	scopes, err := o.DB.ListAppScopes(manifest.AppID, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list scopes: %w", err)
-	}
-	appToken, err := o.TokenGenerator([]byte(tokenSecret), userID, manifest.AppID, scopes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate app token: %w", err)
-	}
-
-	// 10. Build container config and create+start container.
-	var volumeMounts []docker.AppVolumeMount
-	for _, scope := range manifest.RequiredScopes {
-		volName, readOnly, ok := ScopeToVolumeAccess(scope)
-		if ok {
-			volumeMounts = append(volumeMounts, docker.AppVolumeMount{
-				Name:     volName,
-				ReadOnly: readOnly,
-			})
+		// 8. Pull image.
+		digest, err := o.Docker.PullImage(bgCtx, manifest.Image, false)
+		if err != nil {
+			o.Logger.Error("install: pull image failed", logging.F("app_id", manifest.AppID), logging.F("error", err.Error()))
+			o.DB.UpdateAppStatus(appDBID, "error", "failed to pull image: "+err.Error())
+			return
 		}
-	}
+		if err := o.DB.UpdateAppVersion(appDBID, manifest.Version, digest); err != nil {
+			o.Logger.Error("install: failed to update app version", logging.F("error", err.Error()))
+		}
 
-	containerCfg := &docker.AppContainerConfig{
-		AppID:        manifest.AppID,
-		AppName:      manifest.Name,
-		Image:        manifest.Image,
-		EntryPort:    manifest.EntryPort,
-		RouteSlug:    manifest.RouteSlug,
-		Username:     user.Username,
-		UserID:       userID,
-		AppToken:     appToken,
-		CoreURL:      "magicbox_core:50051",
-		MagicboxRoot: o.Cfg.Root,
-		VolumeMounts: volumeMounts,
-		MemoryMB:     manifest.ResourceLimits.MemoryMB,
-		CPUCores:     manifest.ResourceLimits.CPUCores,
-		Host:         manifest.Host,
-	}
+		// 9. Generate app JWT token for the container.
+		scopes, err := o.DB.ListAppScopes(manifest.AppID, userID)
+		if err != nil {
+			o.Logger.Error("install: failed to list scopes", logging.F("error", err.Error()))
+			o.DB.UpdateAppStatus(appDBID, "error", "failed to list scopes: "+err.Error())
+			return
+		}
+		appToken, err := o.TokenGenerator([]byte(tokenSecret), userID, manifest.AppID, scopes)
+		if err != nil {
+			o.Logger.Error("install: failed to generate app token", logging.F("error", err.Error()))
+			o.DB.UpdateAppStatus(appDBID, "error", "failed to generate app token: "+err.Error())
+			return
+		}
 
-	containerID, err := o.Docker.CreateAndStartContainer(ctx, containerCfg)
-	if err != nil {
-		o.DB.UpdateAppStatus(appDBID, "error", "")
-		return nil, fmt.Errorf("failed to create container: %w", err)
-	}
+		// 10. Build container config and create+start container.
+		var volumeMounts []docker.AppVolumeMount
+		for _, scope := range manifest.RequiredScopes {
+			volName, readOnly, ok := ScopeToVolumeAccess(scope)
+			if ok {
+				volumeMounts = append(volumeMounts, docker.AppVolumeMount{
+					Name:     volName,
+					ReadOnly: readOnly,
+				})
+			}
+		}
 
-	// 11. Update status to running.
-	if err := o.DB.UpdateAppStatus(appDBID, "running", containerID); err != nil {
-		o.Logger.Error("install: failed to update app status", logging.F("error", err.Error()))
-	}
+		containerCfg := &docker.AppContainerConfig{
+			AppID:        manifest.AppID,
+			AppName:      manifest.Name,
+			Image:        manifest.Image,
+			EntryPort:    manifest.EntryPort,
+			RouteSlug:    manifest.RouteSlug,
+			Username:     user.Username,
+			UserID:       userID,
+			AppToken:     appToken,
+			CoreURL:      "magicbox_core:50051",
+			MagicboxRoot: o.Cfg.Root,
+			VolumeMounts: volumeMounts,
+			MemoryMB:     manifest.ResourceLimits.MemoryMB,
+			CPUCores:     manifest.ResourceLimits.CPUCores,
+			Host:         manifest.Host,
+		}
 
-	app.Status = "running"
-	app.ContainerID = containerID
-	app.ImageDigest = digest
+		containerID, err := o.Docker.CreateAndStartContainer(bgCtx, containerCfg)
+		if err != nil {
+			o.Logger.Error("install: start container failed", logging.F("app_id", manifest.AppID), logging.F("error", err.Error()))
+			o.DB.UpdateAppStatus(appDBID, "error", "failed to start container: "+err.Error())
+			return
+		}
 
-	o.Logger.Info("app installed", logging.F("app_id", manifest.AppID), logging.F("user", user.Username))
+		// 11. Update status to running.
+		if err := o.DB.UpdateAppStatus(appDBID, "running", containerID); err != nil {
+			o.Logger.Error("install: failed to update app status", logging.F("error", err.Error()))
+		}
+
+		o.Logger.Info("app installed successfully", logging.F("app_id", manifest.AppID), logging.F("user", user.Username))
+	}()
+
 	return app, nil
 }
 
 // Uninstall removes an installed app and cleans up all resources.
-func (o *Orchestrator) Uninstall(ctx context.Context, appDBID string) error {
+func (o *Orchestrator) Uninstall(ctx context.Context, appDBID string, wipe bool) error {
 	app, err := o.DB.GetAppByID(appDBID)
 	if err != nil {
 		return fmt.Errorf("failed to get app: %w", err)
@@ -219,9 +227,11 @@ func (o *Orchestrator) Uninstall(ctx context.Context, appDBID string) error {
 		_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
 	}
 
-	// Remove private app directory (NOT shared dirs).
-	appDir := filepath.Join(o.Cfg.Root, "users", user.Username, "apps", app.AppID)
-	os.RemoveAll(appDir)
+	// Remove private app directory (NOT shared dirs) if requested.
+	if wipe {
+		appDir := filepath.Join(o.Cfg.Root, "users", user.Username, "apps", app.AppID)
+		os.RemoveAll(appDir)
+	}
 
 	// Delete scopes, tokens, and app row.
 	o.DB.DeleteAppScopes(app.AppID, app.UserID)
@@ -504,7 +514,7 @@ func (o *Orchestrator) CascadeDeleteUser(ctx context.Context, userID string) err
 		return fmt.Errorf("failed to list user apps: %w", err)
 	}
 	for _, app := range apps {
-		if err := o.Uninstall(ctx, app.ID); err != nil {
+		if err := o.Uninstall(ctx, app.ID, true); err != nil {
 			o.Logger.Error("cascade delete: failed to uninstall app",
 				logging.F("app_id", app.AppID),
 				logging.F("error", err.Error()))
