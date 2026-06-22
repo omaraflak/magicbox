@@ -26,6 +26,7 @@ export default function App() {
   const [folderPromptOpen, setFolderPromptOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
   const [selectedFileNames, setSelectedFileNames] = useState([]);
   const uploadRef = useRef(null);
 
@@ -85,6 +86,17 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [deleteTarget]);
+
+  useEffect(() => {
+    if (!renameTarget) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setRenameTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [renameTarget]);
 
   const loadFiles = useCallback(async (volume, path, showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -151,6 +163,20 @@ export default function App() {
       handleRefresh();
     } catch (err) {
       window.alert('Failed to delete file/folder: ' + err.message);
+    }
+  };
+
+  const handleConfirmRename = async (newName) => {
+    if (!renameTarget || !newName || newName === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
+    try {
+      await moveFile(activeVolume, currentPath, renameTarget.name, currentPath, newName);
+      setRenameTarget(null);
+      handleRefresh();
+    } catch (err) {
+      window.alert('Failed to rename file/folder: ' + err.message);
     }
   };
 
@@ -352,6 +378,9 @@ export default function App() {
                 <button className="menu-item" onClick={() => handleDownloadItem(contextMenu.item)}>
                   ⬇ Download
                 </button>
+                <button className="menu-item" onClick={() => setRenameTarget(contextMenu.item)}>
+                  ✏️ Rename
+                </button>
                 <button className="menu-item menu-item-danger" onClick={() => handleTriggerDelete(contextMenu.item)}>
                   🗑 Delete
                 </button>
@@ -401,6 +430,65 @@ export default function App() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
               <button className="btn btn-danger" onClick={handleConfirmDelete}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameTarget && (
+        <div 
+          onClick={() => setRenameTarget(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ 
+            background: 'var(--bg-secondary)', 
+            border: '1px solid var(--border-color)', 
+            borderRadius: 'var(--radius-lg)', 
+            padding: '24px', 
+            maxWidth: '380px', 
+            width: '90%',
+            boxShadow: 'var(--shadow-premium)',
+          }}>
+            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Rename {renameTarget.is_dir ? 'Folder' : 'File'}</h3>
+            <input 
+              type="text" 
+              defaultValue={renameTarget.name}
+              id="rename-target-input"
+              style={{ width: '100%', padding: '10px', marginBottom: '16px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleConfirmRename(e.target.value);
+                }
+              }}
+              autoFocus
+              onFocus={(e) => {
+                const val = e.target.value;
+                const dotIdx = val.lastIndexOf('.');
+                if (dotIdx > 0 && !renameTarget.is_dir) {
+                  e.target.setSelectionRange(0, dotIdx);
+                } else {
+                  e.target.select();
+                }
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={() => setRenameTarget(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => {
+                const val = document.getElementById('rename-target-input')?.value;
+                handleConfirmRename(val);
+              }}>Rename</button>
             </div>
           </div>
         </div>

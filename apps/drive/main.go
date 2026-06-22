@@ -627,6 +627,7 @@ func handleMoveFile(w http.ResponseWriter, r *http.Request) {
 	subPath := r.URL.Query().Get("path")
 	filename := r.URL.Query().Get("file")
 	destPath := r.URL.Query().Get("dest_path")
+	newName := r.URL.Query().Get("new_name")
 
 	if filename == "" {
 		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
@@ -647,7 +648,12 @@ func handleMoveFile(w http.ResponseWriter, r *http.Request) {
 
 	safeName := filepath.Base(filename)
 	srcFullPath := filepath.Join(srcDir, safeName)
-	destFullPath := filepath.Join(destDir, safeName)
+
+	targetName := safeName
+	if newName != "" {
+		targetName = filepath.Base(newName)
+	}
+	destFullPath := filepath.Join(destDir, targetName)
 
 	if _, err := os.Stat(srcFullPath); os.IsNotExist(err) {
 		writeError(w, http.StatusNotFound, "source file/folder not found")

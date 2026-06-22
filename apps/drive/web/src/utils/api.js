@@ -107,14 +107,15 @@ export async function createFolder(volume, path, name) {
   return res.json();
 }
 
-export async function moveFile(volume, path, filename, destPath) {
-  const res = await fetch(
-    `${API_BASE}/files/move?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}&dest_path=${encodeURIComponent(destPath)}`,
-    { method: 'POST' }
-  );
+export async function moveFile(volume, path, filename, destPath, newName = '') {
+  let url = `${API_BASE}/files/move?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}&dest_path=${encodeURIComponent(destPath)}`;
+  if (newName) {
+    url += `&new_name=${encodeURIComponent(newName)}`;
+  }
+  const res = await fetch(url, { method: 'POST' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to move file: ${res.statusText}`);
+    throw new Error(errorData.error || `Failed to move/rename file: ${res.statusText}`);
   }
   return res.json();
 }
