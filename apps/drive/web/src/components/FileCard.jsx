@@ -1,13 +1,20 @@
 import { getFileIcon, formatFileSize, formatDate } from '../utils/format';
 import { getFileUrl } from '../utils/api';
 
-export default function FileCard({ file, volume, path, onFolderClick, onContextMenu, viewMode }) {
-  const handleCardClick = () => {
-    if (file.is_dir && onFolderClick) {
-      onFolderClick();
-    }
-  };
-
+export default function FileCard({ 
+  file, 
+  volume, 
+  path, 
+  selected, 
+  onClick,
+  onDoubleClick,
+  onContextMenu,
+  onDragStart,
+  onDragEnd,
+  dropHandlers,
+  viewMode 
+}) {
+  
   const isImage = (filename) => {
     const ext = filename.split('.').pop().toLowerCase();
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext);
@@ -17,9 +24,15 @@ export default function FileCard({ file, volume, path, onFolderClick, onContextM
   if (viewMode === 'list') {
     return (
       <div 
-        className="file-card list-row"
-        onClick={handleCardClick}
+        className={`file-card list-row ${selected ? 'selected' : ''}`}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        {...dropHandlers}
+        data-name={file.name}
         style={{ cursor: file.is_dir ? 'pointer' : 'default' }}
       >
         <div className="file-card-icon">
@@ -47,9 +60,15 @@ export default function FileCard({ file, volume, path, onFolderClick, onContextM
   if (file.is_dir) {
     return (
       <div 
-        className="file-card folder-card"
-        onClick={handleCardClick}
+        className={`file-card folder-card ${selected ? 'selected' : ''}`}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        {...dropHandlers}
+        data-name={file.name}
         style={{ cursor: 'pointer' }}
       >
         <div className="folder-icon" style={{ fontSize: '1.5rem', marginRight: '8px' }}>📁</div>
@@ -63,8 +82,14 @@ export default function FileCard({ file, volume, path, onFolderClick, onContextM
   // 3. Grid View - File Card Layout (with large square preview)
   return (
     <div 
-      className="file-card grid-file-card"
+      className={`file-card grid-file-card ${selected ? 'selected' : ''}`}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      data-name={file.name}
     >
       {/* Square Preview Box */}
       <div className="file-preview-area">
@@ -73,6 +98,7 @@ export default function FileCard({ file, volume, path, onFolderClick, onContextM
             src={getFileUrl(volume, path, file.name)} 
             alt={file.name} 
             className="file-preview-image"
+            draggable="false"
           />
         ) : (
           <div className="file-preview-placeholder">

@@ -1126,3 +1126,23 @@ ul {
 .grid-file-card:hover .file-card-actions {
   opacity: 1;
 }
+
+/* Drag and Drop & Selection Styles */
+.dragging {
+  opacity: 0.4;
+  border: 1px dashed var(--accent-cyan);
+}
+
+.drag-over {
+  background: rgba(6, 182, 212, 0.08) !important;
+  box-shadow: inset 0 0 0 1px var(--accent-cyan) !important;
+}
+
+.file-card.selected {
+  background: rgba(6, 182, 212, 0.08) !important;
+  border-color: var(--accent-cyan) !important;
+}
+
+.file-grid {
+  user-select: none;
+}

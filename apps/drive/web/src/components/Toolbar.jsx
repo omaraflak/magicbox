@@ -7,7 +7,9 @@ export default function Toolbar({
   onUploadClick, 
   onCreateFolderClick, 
   viewMode, 
-  onViewModeChange 
+  onViewModeChange,
+  selectedCount,
+  onToggleSelectAll
 }) {
   return (
     <div className="toolbar">
@@ -39,7 +41,7 @@ export default function Toolbar({
           })}
         </h2>
         <span className="toolbar-count" style={{ marginLeft: '12px', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>
-          {fileCount} {fileCount === 1 ? 'file' : 'files'}
+          {selectedCount > 0 ? `${selectedCount} of ${fileCount} selected` : `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`}
         </span>
       </div>
 

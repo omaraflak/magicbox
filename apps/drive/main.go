@@ -591,6 +591,7 @@ func main() {
 	mux.HandleFunc("/api/files", handleFiles)
 	mux.HandleFunc("/api/files/download", handleDownload)
 	mux.HandleFunc("/api/files/download-plan", handleDownloadPlan)
+	mux.HandleFunc("/api/files/move", handleMoveFile)
 	mux.HandleFunc("/api/folders", handleFolders)
 
 	// Internal webhook
@@ -614,4 +615,72 @@ func main() {
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func handleMoveFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+	filename := r.URL.Query().Get("file")
+	destPath := r.URL.Query().Get("dest_path")
+
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
+		return
+	}
+
+	srcDir, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	destDir, err := resolvePath(volumeName, destPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	safeName := filepath.Base(filename)
+	srcFullPath := filepath.Join(srcDir, safeName)
+	destFullPath := filepath.Join(destDir, safeName)
+
+	if _, err := os.Stat(srcFullPath); os.IsNotExist(err) {
+		writeError(w, http.StatusNotFound, "source file/folder not found")
+		return
+	}
+
+	fi, err := os.Stat(destDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "destination directory not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	} else if !fi.IsDir() {
+		writeError(w, http.StatusBadRequest, "destination is not a directory")
+		return
+	}
+
+	if strings.HasPrefix(destFullPath, srcFullPath+string(filepath.Separator)) || destFullPath == srcFullPath {
+		writeError(w, http.StatusBadRequest, "cannot move a directory into itself")
+		return
+	}
+
+	if _, err := os.Stat(destFullPath); !os.IsNotExist(err) {
+		writeError(w, http.StatusConflict, "a file/folder with the same name already exists in the destination folder")
+		return
+	}
+
+	if err := os.Rename(srcFullPath, destFullPath); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to move file/folder: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"moved": safeName})
 }

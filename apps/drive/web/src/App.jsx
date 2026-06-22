@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchInfo, listFiles, createFolder, deleteFile, getDownloadPlan, getFileUrl } from './utils/api';
+import { fetchInfo, listFiles, createFolder, deleteFile, getDownloadPlan, getFileUrl, moveFile } from './utils/api';
 import Header from './components/Header';
 import Toolbar from './components/Toolbar';
 import DropZone from './components/DropZone';
@@ -26,6 +26,7 @@ export default function App() {
   const [folderPromptOpen, setFolderPromptOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedFileNames, setSelectedFileNames] = useState([]);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -90,6 +91,7 @@ export default function App() {
     try {
       const data = await listFiles(volume, path);
       setFiles(data || []);
+      setSelectedFileNames([]);
       setFileCounts((prev) => ({ ...prev, [volume]: (data || []).length }));
     } catch (err) {
       console.error('Failed to list files:', err);
@@ -176,6 +178,19 @@ export default function App() {
     }
   };
 
+  const handleMoveFiles = async (sourceFiles, destFolder) => {
+    const destPath = currentPath ? `${currentPath}/${destFolder.name}` : destFolder.name;
+    try {
+      for (const f of sourceFiles) {
+        await moveFile(activeVolume, currentPath, f.name, destPath);
+      }
+      setSelectedFileNames([]);
+      handleRefresh();
+    } catch (err) {
+      window.alert('Failed to move files: ' + err.message);
+    }
+  };
+
   return (
     <div className="app">
       <Header
@@ -194,6 +209,14 @@ export default function App() {
             onCreateFolderClick={() => setFolderPromptOpen(true)}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
+            selectedCount={selectedFileNames.length}
+            onToggleSelectAll={() => {
+              if (selectedFileNames.length === files.length) {
+                setSelectedFileNames([]);
+              } else {
+                setSelectedFileNames(files.map(f => f.name));
+              }
+            }}
           />
 
           <DropZone
@@ -223,6 +246,9 @@ export default function App() {
                 searchQuery={searchQuery}
                 viewMode={viewMode}
                 onFolderClick={handleFolderClick}
+                selectedFileNames={selectedFileNames}
+                onSelectionChange={setSelectedFileNames}
+                onMoveFiles={handleMoveFiles}
                 onContextMenu={(e, file) => {
                   e.preventDefault();
                   e.stopPropagation();
