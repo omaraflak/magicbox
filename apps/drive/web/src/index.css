@@ -591,6 +591,8 @@ ul {
   position: relative;
   overflow-y: auto;
   padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
 }
 
 .dropzone-input {
@@ -674,10 +676,11 @@ ul {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-md);
+  flex: 1;
+  align-content: start;
 }
 
 .file-grid-item {
-  animation: fadeIn 0.3s ease both;
 }
 
 /* ==============================
@@ -860,6 +863,8 @@ ul {
   padding: var(--space-2xl);
   gap: var(--space-md);
   color: var(--text-muted);
+  animation: fadeIn 0.15s ease both;
+  animation-delay: 0.15s;
 }
 
 .loading-spinner {

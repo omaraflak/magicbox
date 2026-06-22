@@ -326,7 +326,6 @@ export default function FileGrid({
           <div
             key={file.name}
             className="file-grid-item"
-            style={{ animationDelay: `${index * 0.02}s` }}
           >
             <FileCard 
               file={file} 
