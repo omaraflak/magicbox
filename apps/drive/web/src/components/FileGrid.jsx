@@ -7,7 +7,7 @@ export default function FileGrid({
   searchQuery, 
   viewMode, 
   onFolderClick, 
-  onDelete 
+  onContextMenu
 }) {
   const filtered = (files || [])
     .filter((f) => {
@@ -44,7 +44,7 @@ export default function FileGrid({
             volume={volume} 
             path={path} 
             onFolderClick={file.is_dir ? () => onFolderClick(file.name) : null} 
-            onDelete={onDelete} 
+            onContextMenu={(e) => onContextMenu(e, file)} 
             viewMode={viewMode}
           />
         </div>

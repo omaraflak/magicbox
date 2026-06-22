@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,8 +36,9 @@ var (
 )
 
 const (
-	maxMemoryBytes  = 32 << 20  // 32MB in-memory buffer
-	maxRequestBytes = 10 << 30  // 10GB max request body size
+	maxMemoryBytes    = 32 << 20  // 32MB in-memory buffer
+	maxRequestBytes   = 10 << 30  // 10GB max request body size
+	maxZipVolumeSize  = 200 << 20 // 200MB max split folder zip volume size
 )
 
 var cachedUsername string
@@ -284,6 +288,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	volumeName := r.URL.Query().Get("volume")
 	subPath := r.URL.Query().Get("path")
 	filename := r.URL.Query().Get("file")
+	volIndexStr := r.URL.Query().Get("vol_index")
 
 	if filename == "" {
 		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
@@ -299,13 +304,213 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	safeName := filepath.Base(filename)
 	fullPath := filepath.Join(dirPath, safeName)
 
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
+	fi, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
+		} else {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeName))
-	http.ServeFile(w, r, fullPath)
+	// 1. Single File Download
+	if !fi.IsDir() {
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeName))
+		http.ServeFile(w, r, fullPath)
+		return
+	}
+
+	// 2. Folder Download (zipped on the fly)
+	volIndex := 0
+	if volIndexStr != "" {
+		volIndex, err = strconv.Atoi(volIndexStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid 'vol_index' parameter")
+			return
+		}
+	}
+
+	plan, err := generateDownloadPlan(fullPath, safeName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate plan: "+err.Error())
+		return
+	}
+
+	if volIndex < 0 || volIndex >= len(plan.Volumes) {
+		writeError(w, http.StatusBadRequest, "vol_index out of bounds")
+		return
+	}
+
+	targetVolume := plan.Volumes[volIndex]
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", targetVolume.Name))
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	for _, relPath := range targetVolume.Files {
+		fileOnDisk := filepath.Join(fullPath, relPath)
+		src, err := os.Open(fileOnDisk)
+		if err != nil {
+			log.Printf("Failed to open file %s for zipping: %v", fileOnDisk, err)
+			continue
+		}
+
+		header := &zip.FileHeader{
+			Name:   filepath.ToSlash(relPath),
+			Method: zip.Deflate,
+		}
+		header.Modified = time.Now()
+
+		writer, err := zw.CreateHeader(header)
+		if err != nil {
+			src.Close()
+			log.Printf("Failed to create zip header for %s: %v", relPath, err)
+			continue
+		}
+
+		_, err = io.Copy(writer, src)
+		src.Close()
+		if err != nil {
+			log.Printf("Failed to copy file %s content to zip: %v", fileOnDisk, err)
+			continue
+		}
+	}
+}
+
+type ZipVolume struct {
+	Index int      `json:"index"`
+	Name  string   `json:"name"`
+	Files []string `json:"files"`
+	Size  int64    `json:"size"`
+}
+
+type DownloadPlan struct {
+	Volumes []ZipVolume `json:"volumes"`
+}
+
+func walkDirectory(fullPath string) ([]string, map[string]int64, error) {
+	files := []string{}
+	sizes := make(map[string]int64)
+
+	err := filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			relPath, err := filepath.Rel(fullPath, path)
+			if err != nil {
+				return err
+			}
+			files = append(files, relPath)
+			sizes[relPath] = info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sort.Strings(files)
+	return files, sizes, nil
+}
+
+func generateDownloadPlan(fullPath string, folderName string) (DownloadPlan, error) {
+	files, sizes, err := walkDirectory(fullPath)
+	if err != nil {
+		return DownloadPlan{}, err
+	}
+
+	plan := DownloadPlan{Volumes: []ZipVolume{}}
+	if len(files) == 0 {
+		return plan, nil
+	}
+
+	var currentVol ZipVolume
+	currentVol.Index = 0
+	currentVol.Name = fmt.Sprintf("%s.part%d.zip", folderName, currentVol.Index+1)
+	currentVol.Files = []string{}
+	currentVol.Size = 0
+
+	for _, file := range files {
+		fileSize := sizes[file]
+		if currentVol.Size+fileSize > maxZipVolumeSize && len(currentVol.Files) > 0 {
+			plan.Volumes = append(plan.Volumes, currentVol)
+			currentVol.Index++
+			currentVol.Name = fmt.Sprintf("%s.part%d.zip", folderName, currentVol.Index+1)
+			currentVol.Files = []string{}
+			currentVol.Size = 0
+		}
+		currentVol.Files = append(currentVol.Files, file)
+		currentVol.Size += fileSize
+	}
+
+	plan.Volumes = append(plan.Volumes, currentVol)
+
+	if len(plan.Volumes) == 1 {
+		plan.Volumes[0].Name = folderName + ".zip"
+	}
+
+	return plan, nil
+}
+
+func handleDownloadPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+	filename := r.URL.Query().Get("file")
+
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
+		return
+	}
+
+	dirPath, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	safeName := filepath.Base(filename)
+	fullPath := filepath.Join(dirPath, safeName)
+
+	fi, err := os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "file not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+
+	if !fi.IsDir() {
+		writeJSON(w, http.StatusOK, DownloadPlan{
+			Volumes: []ZipVolume{
+				{
+					Index: 0,
+					Name:  safeName,
+					Files: []string{safeName},
+					Size:  fi.Size(),
+				},
+			},
+		})
+		return
+	}
+
+	plan, err := generateDownloadPlan(fullPath, safeName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate download plan: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, plan)
 }
 
 func handleFolders(w http.ResponseWriter, r *http.Request) {
@@ -385,6 +590,7 @@ func main() {
 	mux.HandleFunc("/api/info", handleInfo)
 	mux.HandleFunc("/api/files", handleFiles)
 	mux.HandleFunc("/api/files/download", handleDownload)
+	mux.HandleFunc("/api/files/download-plan", handleDownloadPlan)
 	mux.HandleFunc("/api/folders", handleFolders)
 
 	// Internal webhook

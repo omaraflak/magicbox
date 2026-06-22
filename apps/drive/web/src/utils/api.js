@@ -51,8 +51,20 @@ export async function uploadFiles(volume, path, files, onProgress) {
   });
 }
 
-export function getFileUrl(volume, path, filename) {
-  return `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`;
+export function getFileUrl(volume, path, filename, volIndex = null) {
+  let url = `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`;
+  if (volIndex !== null) {
+    url += `&vol_index=${volIndex}`;
+  }
+  return url;
+}
+
+export async function getDownloadPlan(volume, path, filename) {
+  const res = await fetch(
+    `${API_BASE}/files/download-plan?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`
+  );
+  if (!res.ok) throw new Error(`Failed to fetch download plan: ${res.statusText}`);
+  return res.json();
 }
 
 export async function downloadFile(volume, path, filename) {

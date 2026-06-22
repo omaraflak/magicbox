@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchInfo, listFiles, createFolder } from './utils/api';
+import { fetchInfo, listFiles, createFolder, deleteFile, getDownloadPlan, getFileUrl } from './utils/api';
 import Header from './components/Header';
 import Toolbar from './components/Toolbar';
 import DropZone from './components/DropZone';
@@ -25,6 +25,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [folderPromptOpen, setFolderPromptOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -59,6 +60,30 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Listen to Escape key to close the new folder prompt dialog
+  useEffect(() => {
+    if (!folderPromptOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setFolderPromptOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [folderPromptOpen]);
+
+  // Listen to Escape key to close the delete confirmation dialog
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setDeleteTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteTarget]);
 
   const loadFiles = useCallback(async (volume, path, showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -111,6 +136,46 @@ export default function App() {
     setCurrentPath(newPath);
   };
 
+  const handleTriggerDelete = (item) => {
+    setContextMenu(null);
+    setDeleteTarget(item);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteFile(activeVolume, currentPath, deleteTarget.name);
+      setDeleteTarget(null);
+      handleRefresh();
+    } catch (err) {
+      window.alert('Failed to delete file/folder: ' + err.message);
+    }
+  };
+
+  const handleDownloadItem = async (item) => {
+    setContextMenu(null);
+    try {
+      const plan = await getDownloadPlan(activeVolume, currentPath, item.name);
+      if (!plan || !plan.volumes || plan.volumes.length === 0) {
+        window.alert('No files to download.');
+        return;
+      }
+      
+      for (const vol of plan.volumes) {
+        const downloadUrl = getFileUrl(activeVolume, currentPath, item.name, vol.index);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = vol.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        await new Promise(r => setTimeout(r, 600));
+      }
+    } catch (err) {
+      window.alert('Failed to initiate download: ' + err.message);
+    }
+  };
+
   return (
     <div className="app">
       <Header
@@ -139,7 +204,7 @@ export default function App() {
             onContextMenu={(e) => {
               if (!e.target.closest('.file-card')) {
                 e.preventDefault();
-                setContextMenu({ x: e.clientX, y: e.clientY });
+                setContextMenu({ x: e.clientX, y: e.clientY, item: null });
               }
             }}
           >
@@ -158,7 +223,11 @@ export default function App() {
                 searchQuery={searchQuery}
                 viewMode={viewMode}
                 onFolderClick={handleFolderClick}
-                onDelete={handleRefresh}
+                onContextMenu={(e, file) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, item: file });
+                }}
               />
             )}
           </DropZone>
@@ -166,20 +235,23 @@ export default function App() {
       </div>
 
       {folderPromptOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-        }}>
-          <div className="card" style={{ 
+        <div 
+          onClick={() => setFolderPromptOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ 
             background: 'var(--bg-secondary)', 
             border: '1px solid var(--border-color)', 
             borderRadius: 'var(--radius-lg)', 
@@ -249,11 +321,63 @@ export default function App() {
             }}
             onClick={() => setContextMenu(null)}
           >
-            <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
-              📁 New Folder
-            </button>
+            {contextMenu.item ? (
+              <>
+                <button className="menu-item" onClick={() => handleDownloadItem(contextMenu.item)}>
+                  ⬇ Download
+                </button>
+                <button className="menu-item menu-item-danger" onClick={() => handleTriggerDelete(contextMenu.item)}>
+                  🗑 Delete
+                </button>
+              </>
+            ) : (
+              <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
+                📁 New Folder
+              </button>
+            )}
           </div>
         </>
+      )}
+
+      {deleteTarget && (
+        <div 
+          onClick={() => setDeleteTarget(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ 
+            background: 'var(--bg-secondary)', 
+            border: '1px solid var(--border-color)', 
+            borderRadius: 'var(--radius-lg)', 
+            padding: '24px', 
+            maxWidth: '380px', 
+            width: '90%',
+            boxShadow: 'var(--shadow-premium)',
+          }}>
+            <h3 style={{ marginBottom: '12px', fontSize: '1.1rem', fontWeight: 600 }}>Confirm Deletion</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+            </p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+              This action is permanent and cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleConfirmDelete}>Delete</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
