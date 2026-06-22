@@ -14,7 +14,10 @@ export default function App() {
   const [userID, setUserID] = useState('');
   const [username, setUsername] = useState('');
   const [activeVolume, setActiveVolume] = useState('storage');
-  const [currentPath, setCurrentPath] = useState('');
+  const [currentPath, setCurrentPath] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('path') || '';
+  });
   const [files, setFiles] = useState([]);
   const [fileCounts, setFileCounts] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +34,30 @@ export default function App() {
         setUsername(info.username || info.user_id);
       })
       .catch((err) => console.error('Failed to fetch info:', err));
+  }, []);
+
+  // Synchronize currentPath state changes with the URL query params
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const existingPath = url.searchParams.get('path') || '';
+    if (currentPath !== existingPath) {
+      if (currentPath) {
+        url.searchParams.set('path', currentPath);
+      } else {
+        url.searchParams.delete('path');
+      }
+      window.history.pushState(null, '', url.pathname + url.search);
+    }
+  }, [currentPath]);
+
+  // Synchronize browser history navigation (back/forward) with currentPath state
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      setCurrentPath(params.get('path') || '');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const loadFiles = useCallback(async (volume, path, showSpinner = true) => {
