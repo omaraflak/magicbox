@@ -5,6 +5,7 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [activeUploads, setActiveUploads] = useState({ completed: 0, total: 0 });
   const fileInputRef = useRef(null);
   const dragCounter = useRef(0);
 
@@ -17,17 +18,51 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
 
   const handleUpload = useCallback(async (files) => {
     if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    const total = fileArray.length;
+
     setUploading(true);
     setProgress(0);
-    try {
-      await uploadFiles(volume, path, files, (pct) => setProgress(pct));
-      onUploadComplete?.();
-    } catch (err) {
-      console.error('Upload error:', err);
-    } finally {
-      setUploading(false);
-      setProgress(0);
+    setActiveUploads({ completed: 0, total });
+
+    const progressMap = {};
+    let completedCount = 0;
+    let nextIndex = 0;
+
+    const updateProgress = (filename, percent) => {
+      progressMap[filename] = percent;
+      const totalProgress = fileArray.reduce((acc, f) => acc + (progressMap[f.name] || 0), 0);
+      setProgress(Math.round(totalProgress / total));
+    };
+
+    const uploadWorker = async () => {
+      while (nextIndex < fileArray.length) {
+        const i = nextIndex++;
+        const file = fileArray[i];
+        try {
+          await uploadFiles(volume, path, [file], (pct) => {
+            updateProgress(file.name, pct);
+          });
+          completedCount++;
+          setActiveUploads({ completed: completedCount, total });
+          // Trigger file list refresh IMMEDIATELY so the user sees files appear one by one!
+          onUploadComplete?.();
+        } catch (err) {
+          console.error(`Failed to upload ${file.name}:`, err);
+        }
+      }
+    };
+
+    const workers = [];
+    const concurrency = Math.min(4, total);
+    for (let w = 0; w < concurrency; w++) {
+      workers.push(uploadWorker());
     }
+    await Promise.all(workers);
+
+    setUploading(false);
+    setProgress(0);
+    setActiveUploads({ completed: 0, total: 0 });
   }, [volume, path, onUploadComplete]);
 
   const handleDragEnter = useCallback((e) => {
@@ -101,7 +136,9 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="upload-progress-text">Uploading... {progress}%</span>
+          <span className="upload-progress-text">
+            Uploading {activeUploads.completed} of {activeUploads.total} files ({progress}%)
+          </span>
         </div>
       )}
 

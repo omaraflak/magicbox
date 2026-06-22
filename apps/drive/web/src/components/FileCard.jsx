@@ -115,16 +115,16 @@ export default function FileCard({ file, volume, path, onFolderClick, onDelete, 
         </div>
         <div className="folder-actions" onClick={e => e.stopPropagation()}>
           {confirming ? (
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <button className="btn btn-danger btn-xs" onClick={handleDelete} disabled={deleting} style={{ padding: '2px 6px', fontSize: '0.7rem' }}>
-                ✓
+            <div className="file-card-confirm">
+              <button className="btn btn-danger btn-sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? '...' : 'Confirm'}
               </button>
-              <button className="btn btn-secondary btn-xs" onClick={handleCancelDelete} style={{ padding: '2px 6px', fontSize: '0.7rem' }}>
-                ✗
+              <button className="btn btn-secondary btn-sm" onClick={handleCancelDelete}>
+                Cancel
               </button>
             </div>
           ) : (
-            <button className="btn btn-icon btn-sm" onClick={handleDelete} style={{ padding: '4px' }}>
+            <button className="btn btn-icon btn-icon-danger btn-sm" onClick={handleDelete} style={{ padding: '4px' }}>
               🗑
             </button>
           )}

@@ -33,8 +33,8 @@ export default function App() {
       .catch((err) => console.error('Failed to fetch info:', err));
   }, []);
 
-  const loadFiles = useCallback(async (volume, path) => {
-    setLoading(true);
+  const loadFiles = useCallback(async (volume, path, showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const data = await listFiles(volume, path);
       setFiles(data || []);
@@ -43,7 +43,7 @@ export default function App() {
       console.error('Failed to list files:', err);
       setFiles([]);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, []);
 
@@ -63,7 +63,7 @@ export default function App() {
   }, [activeVolume, currentPath, loadFiles]);
 
   const handleRefresh = useCallback(() => {
-    loadFiles(activeVolume, currentPath);
+    loadFiles(activeVolume, currentPath, false);
   }, [activeVolume, currentPath, loadFiles]);
 
   const handleUploadClick = () => {
