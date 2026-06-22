@@ -32,7 +32,10 @@ var (
 	appID    = os.Getenv("MAGICBOX_APP_ID")
 )
 
-const maxUploadSize = 50 << 20 // 50MB
+const (
+	maxMemoryBytes  = 32 << 20  // 32MB in-memory buffer
+	maxRequestBytes = 10 << 30  // 10GB max request body size
+)
 
 var cachedUsername string
 
@@ -190,38 +193,45 @@ func handleUploadFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		writeError(w, http.StatusBadRequest, "failed to parse multipart form: "+err.Error())
-		return
-	}
+	// Limit request body size to maxRequestBytes (e.g. 10GB)
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 
-	uploadedFiles := r.MultipartForm.File["files"]
-	if len(uploadedFiles) == 0 {
-		writeError(w, http.StatusBadRequest, "no files provided in 'files' field")
+	mr, err := r.MultipartReader()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to open multipart reader: "+err.Error())
 		return
 	}
 
 	uploaded := 0
-	for _, fh := range uploadedFiles {
-		src, err := fh.Open()
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to open uploaded file: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "failed to read next part: "+err.Error())
 			return
 		}
 
-		safeName := filepath.Base(fh.Filename)
+		// Skip parts that don't have a filename (i.e. standard text form fields)
+		if part.FileName() == "" {
+			part.Close()
+			continue
+		}
+
+		safeName := filepath.Base(part.FileName())
 		destPath := filepath.Join(dirPath, safeName)
 
 		dst, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 		if err != nil {
-			src.Close()
+			part.Close()
 			writeError(w, http.StatusInternalServerError, "failed to create destination file: "+err.Error())
 			return
 		}
 
-		_, err = io.Copy(dst, src)
-		src.Close()
+		// Pipe the multipart part stream directly into the destination file!
+		_, err = io.Copy(dst, part)
+		part.Close()
 		dst.Close()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to write file: "+err.Error())
