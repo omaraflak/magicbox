@@ -38,13 +38,15 @@ export default function App() {
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState('');
     const [rebuildingAppId, setRebuildingAppId] = useState(null);
+    const [uninstallingAppId, setUninstallingAppId] = useState(null);
+    const [startingAppId, setStartingAppId] = useState(null);
+    const [stoppingAppId, setStoppingAppId] = useState(null);
 
     // Modal Visibilities
     const [installModalOpen, setInstallModalOpen] = useState(false);
     const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
     const [addRegistryModalOpen, setAddRegistryModalOpen] = useState(false);
     const [uninstallAppId, setUninstallAppId] = useState(null);
-    const [uninstallingAppId, setUninstallingAppId] = useState(null);
     const [wipeAppData, setWipeAppData] = useState(false);
 
     // Dynamic Confirmation & Alert Modal State
@@ -251,7 +253,9 @@ export default function App() {
 
     // App Control: Start
     const handleStartApp = async (id) => {
+        setStartingAppId(id);
         const { status, data } = await callAPI('POST', `/apps/${id}/start`);
+        setStartingAppId(null);
         if (status === 200) {
             loadApps();
         } else {
@@ -261,7 +265,9 @@ export default function App() {
 
     // App Control: Stop
     const handleStopApp = async (id) => {
+        setStoppingAppId(id);
         const { status, data } = await callAPI('POST', `/apps/${id}/stop`);
+        setStoppingAppId(null);
         if (status === 200) {
             loadApps();
         } else {
@@ -289,7 +295,6 @@ export default function App() {
             const { status, data } = await callAPI('POST', `/apps/${id}/rebuild`);
             setRebuildingAppId(null);
             if (status === 200) {
-                showAlert("Application refreshed successfully.", "Success");
                 loadApps();
             } else {
                 showAlert(data?.error || "Failed to refresh application", "Error");
@@ -410,31 +415,35 @@ export default function App() {
             )}
 
             {/* Views */}
-            <div className="container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-                {view === 'setup' && (
-                    <SetupView onSubmit={handleSetup} error={actionError} loading={actionLoading} />
-                )}
-
-                {view === 'login' && (
-                    <LoginView onSubmit={handleLogin} error={actionError} loading={actionLoading} />
+            {/* Views */}
+            <div className="main-viewport">
+                {(view === 'setup' || view === 'login') && (
+                    <div className="container auth-container">
+                        {view === 'setup' && <SetupView onSubmit={handleSetup} error={actionError} loading={actionLoading} />}
+                        {view === 'login' && <LoginView onSubmit={handleLogin} error={actionError} loading={actionLoading} />}
+                    </div>
                 )}
 
                 {view === 'dashboard' && (
-                    <DashboardView 
-                        apps={apps}
-                        user={user}
-                        onStartApp={handleStartApp}
-                        onStopApp={handleStopApp}
-                        onUninstallApp={handleUninstallApp}
-                        onRotateToken={handleRotateToken}
-                        onRebuildApp={handleRebuildApp}
-                        rebuildingAppId={rebuildingAppId}
-                        uninstallingAppId={uninstallingAppId}
-                        onOpenInstallModal={() => {
-                            setActionError('');
-                            setInstallModalOpen(true);
-                        }}
-                    />
+                    <div className="container dashboard-container">
+                        <DashboardView 
+                            apps={apps}
+                            user={user}
+                            onStartApp={handleStartApp}
+                            onStopApp={handleStopApp}
+                            onUninstallApp={handleUninstallApp}
+                            onRotateToken={handleRotateToken}
+                            onRebuildApp={handleRebuildApp}
+                            rebuildingAppId={rebuildingAppId}
+                            uninstallingAppId={uninstallingAppId}
+                            startingAppId={startingAppId}
+                            stoppingAppId={stoppingAppId}
+                            onOpenInstallModal={() => {
+                                setActionError('');
+                                setInstallModalOpen(true);
+                            }}
+                        />
+                    </div>
                 )}
 
                 {view === 'admin' && (

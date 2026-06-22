@@ -19,8 +19,8 @@ export default function AdminConsoleView({
     onRefreshLogs 
 }) {
     return (
-        <div className="admin-layout" style={{ display: 'flex', minHeight: 'calc(100vh - 70px)', marginTop: '20px' }}>
-            <aside className="admin-sidebar" style={{ width: '240px', borderRight: '1px solid var(--border-color)', paddingRight: '20px' }}>
+        <div className="admin-layout">
+            <aside className="admin-sidebar">
                 <button 
                     className={`sidebar-item ${activeTab === 'users' ? 'active' : ''}`} 
                     onClick={() => onTabChange('users')}
@@ -41,7 +41,7 @@ export default function AdminConsoleView({
                 </button>
             </aside>
 
-            <main className="admin-main animate-fade-in" style={{ flex: 1, paddingLeft: '24px' }}>
+            <main className="admin-main animate-fade-in">
                 {activeTab === 'users' && (
                     <AdminUsersTab 
                         users={users} 

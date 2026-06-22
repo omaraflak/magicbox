@@ -1,12 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, isRebuilding, isUninstalling }) {
+function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, isRebuilding, isUninstalling, isStarting, isStopping }) {
     const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef(null);
 
-    let statusClass = 'status-stopped';
-    if (app.status === 'running') statusClass = 'status-running';
-    if (app.status === 'error') statusClass = 'status-error';
-    if (app.status === 'installing') statusClass = 'status-installing';
+    const isInstalling = app.status === 'installing';
+    const isTransitioning = isInstalling || isRebuilding || isUninstalling || isStarting || isStopping;
+
+    let statusText = app.status;
+    let statusClass = `status-${app.status}`;
+    
+    if (isRebuilding) {
+        statusText = 'updating';
+        statusClass = 'status-updating';
+    } else if (isUninstalling) {
+        statusText = 'uninstalling';
+        statusClass = 'status-uninstalling';
+    } else if (isStarting) {
+        statusText = 'starting';
+        statusClass = 'status-starting';
+    } else if (isStopping) {
+        statusText = 'stopping';
+        statusClass = 'status-stopping';
+    }
+
+    // Hide dropdown on outside click
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handleOutsideClick = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleOutsideClick);
+        return () => document.removeEventListener('mousedown', handleOutsideClick);
+    }, [menuOpen]);
 
     const appTitle = app.app_id.split('.').pop();
     const appUrl = app.host 
@@ -24,21 +52,32 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
                     </div>
                     <span className="app-slug">{app.app_id}</span>
                 </div>
-                <div className={`status-indicator ${statusClass}`}>{app.status}</div>
+                <div className={`status-indicator ${statusClass}`}>
+                    {isTransitioning && (
+                        <div className="spinner-sm" style={{ marginRight: '4px', width: '12px', height: '12px', borderWidth: '1.5px' }} />
+                    )}
+                    {statusText}
+                </div>
             </div>
             
             <div className="app-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
                 {/* Primary Action */}
                 <div className="action-buttons">
                     {app.status === 'running' ? (
-                        <a href={appUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
+                        <a 
+                            href={appUrl} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className={`btn btn-primary btn-sm ${isTransitioning ? 'disabled' : ''}`}
+                            style={isTransitioning ? { pointerEvents: 'none', opacity: 0.5 } : {}}
+                        >
                             Open App
                         </a>
                     ) : (
                         <button 
                             className="btn btn-primary btn-sm" 
                             onClick={() => onStartApp(app.id)} 
-                            disabled={app.status === 'installing'}
+                            disabled={isTransitioning}
                         >
                             Start
                         </button>
@@ -46,62 +85,35 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
                 </div>
 
                 {/* Dropdown Options Menu */}
-                <div className="card-menu-container">
-                    <button className="btn btn-secondary btn-sm" onClick={() => setMenuOpen(!menuOpen)}>
+                <div className="card-menu-container" ref={menuRef}>
+                    <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={() => setMenuOpen(!menuOpen)}
+                        disabled={isTransitioning}
+                    >
                         Options ▾
                     </button>
                     
                     {menuOpen && (
-                        <>
-                            {/* Full-screen invisible overlay to handle clicks outside the menu */}
-                            <div 
-                                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 98, background: 'transparent' }} 
-                                onClick={() => setMenuOpen(false)} 
-                            />
-                            <div className="menu-dropdown" style={{ zIndex: 99 }} onClick={() => setMenuOpen(false)}>
-                                {app.status === 'running' && (
-                                    <button className="menu-item" onClick={() => onStopApp(app.id)}>
-                                        🛑 Stop App
-                                    </button>
-                                )}
-                                <button className="menu-item" onClick={() => onRebuildApp(app.id)} title="Pull latest image and restart container">
-                                    ✨ Update App
+                        <div className="menu-dropdown" style={{ zIndex: 99 }} onClick={() => setMenuOpen(false)}>
+                            {app.status === 'running' && (
+                                <button className="menu-item" onClick={() => onStopApp(app.id)}>
+                                    🛑 Stop App
                                 </button>
-                                <button className="menu-item" onClick={() => onRotateToken(app.id)}>
-                                    🔑 Rotate API Token
-                                </button>
-                                <button className="menu-item menu-item-danger" onClick={() => onUninstallApp(app.id)}>
-                                    🗑️ Uninstall App
-                                </button>
-                            </div>
-                        </>
+                            )}
+                            <button className="menu-item" onClick={() => onRebuildApp(app.id)} title="Pull latest image and restart container">
+                                ✨ Update App
+                            </button>
+                            <button className="menu-item" onClick={() => onRotateToken(app.id)}>
+                                🔑 Rotate API Token
+                            </button>
+                            <button className="menu-item menu-item-danger" onClick={() => onUninstallApp(app.id)}>
+                                🗑️ Uninstall App
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
-            
-            {(isRebuilding || isUninstalling || app.status === 'installing') && (
-                <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(255, 255, 255, 0.8)',
-                    backdropFilter: 'blur(4px)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 10,
-                    borderRadius: 'var(--radius-lg)',
-                    color: 'var(--text-primary)',
-                }}>
-                    <div className="spinner" style={{ width: '32px', height: '32px', border: '3px solid rgba(0, 0, 0, 0.1)', borderTopColor: isUninstalling ? 'var(--accent-error)' : 'var(--accent-cyan)' }}></div>
-                    <span style={{ marginTop: '12px', fontSize: '0.8rem', fontWeight: 500 }}>
-                        {isUninstalling ? 'Uninstalling...' : app.status === 'installing' ? 'Installing...' : 'Updating...'}
-                    </span>
-                </div>
-            )}
         </div>
     );
 }
@@ -116,6 +128,8 @@ export default function DashboardView({
     onRebuildApp,
     rebuildingAppId,
     uninstallingAppId,
+    startingAppId,
+    stoppingAppId,
     onOpenInstallModal 
 }) {
     return (
@@ -139,8 +153,8 @@ export default function DashboardView({
                     <div className="apps-grid">
                         {apps.map(app => (
                             <AppCard 
-                                key={app.id}
-                                app={app}
+                                key={app.id} 
+                                app={app} 
                                 user={user}
                                 onStartApp={onStartApp}
                                 onStopApp={onStopApp}
@@ -149,6 +163,8 @@ export default function DashboardView({
                                 onRebuildApp={onRebuildApp}
                                 isRebuilding={rebuildingAppId === app.id}
                                 isUninstalling={uninstallingAppId === app.id}
+                                isStarting={startingAppId === app.id}
+                                isStopping={stoppingAppId === app.id}
                             />
                         ))}
                     </div>

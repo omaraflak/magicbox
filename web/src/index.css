@@ -176,6 +176,7 @@ textarea {
     border: none;
     outline: none;
     transition: var(--transition-smooth);
+    text-decoration: none;
 }
 
 .btn-primary {
@@ -183,8 +184,7 @@ textarea {
     color: white;
 }
 .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+    opacity: 0.9;
 }
 
 .btn-secondary {
@@ -386,12 +386,13 @@ textarea {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    position: relative;
 }
 
 .app-card:hover {
     border-color: var(--border-color-hover);
-    transform: translateY(-4px);
-    background: var(--bg-card-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 }
 
 .app-info-block {
@@ -466,6 +467,22 @@ textarea {
 .status-installing {
     background: rgba(6, 182, 212, 0.1);
     color: var(--accent-cyan);
+}
+.status-updating {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+}
+.status-uninstalling {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--accent-error);
+}
+.status-starting {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--accent-success);
+}
+.status-stopping {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--accent-warning);
 }
 
 .app-actions-row {
@@ -611,6 +628,7 @@ textarea {
 .admin-layout {
     display: flex;
     flex: 1;
+    width: 100%;
     min-height: calc(100vh - 70px);
 }
 
@@ -618,10 +636,11 @@ textarea {
     width: 250px;
     background: var(--bg-secondary);
     border-right: 1px solid var(--border-color);
-    padding: 30px 20px;
+    padding: 40px 24px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex-shrink: 0;
 }
 
 .sidebar-item {
@@ -649,7 +668,8 @@ textarea {
 
 .admin-main {
     flex: 1;
-    padding: 40px;
+    padding: 40px 60px;
+    background: var(--bg-primary);
 }
 
 .admin-tab-content {
@@ -810,4 +830,42 @@ tr:last-child td {
 .menu-item-danger:hover {
     background: rgba(239, 68, 68, 0.08);
     color: var(--accent-error);
+}
+
+/* ==================================
+   VIEWPORT LAYOUT WRAPPERS
+   ================================== */
+.main-viewport {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    min-height: calc(100vh - 70px);
+}
+
+.auth-container {
+    max-width: 450px;
+    margin: 80px auto;
+    padding: 0 20px;
+    width: 100%;
+}
+
+.dashboard-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px;
+    width: 100%;
+    flex: 1;
+}
+
+.btn-logout {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.15);
+    color: var(--accent-error);
+    transition: var(--transition-smooth);
+}
+
+.btn-logout:hover {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.25);
 }

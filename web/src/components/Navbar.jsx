@@ -22,8 +22,8 @@ export default function Navbar({ title, user, onLogout, adminView, onToggleView 
                 {user && (
                     <>
                         <span className="user-badge">{user.username}</span>
-                        <button className="btn btn-icon-only" onClick={onLogout} title="Log Out">
-                            <span className="logout-icon">↩</span>
+                        <button className="btn btn-logout nav-btn" onClick={onLogout}>
+                            Logout
                         </button>
                     </>
                 )}
