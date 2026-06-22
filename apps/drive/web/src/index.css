@@ -507,19 +507,22 @@ ul {
 }
 
 .btn-primary:hover {
-  opacity: 0.9;
+  background: var(--accent-cyan);
+  color: white;
+  opacity: 0.85;
   transform: translateY(-1px);
   box-shadow: none;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--border-color);
-  color: var(--text-secondary);
+  background: #f3f4f6;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #e5e7eb;
+  border-color: var(--border-hover);
 }
 
 .btn-danger {
@@ -718,6 +721,16 @@ ul {
   margin-bottom: var(--space-sm);
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+}
+
+.file-card-preview {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
 }
 
 .file-card-info {
@@ -911,14 +924,33 @@ ul {
 .file-grid.list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  overflow: hidden;
 }
 
 .file-grid.list .file-card {
+  aspect-ratio: auto;
   flex-direction: row;
   align-items: center;
   padding: var(--space-sm) var(--space-md);
   gap: var(--space-md);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+}
+
+.file-grid.list .file-card:last-child {
+  border-bottom: none;
+}
+
+.file-grid.list .file-card:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--bg-card-hover);
 }
 
 .file-grid.list .file-card-icon {
@@ -948,5 +980,145 @@ ul {
 
 .file-grid.list .file-card-actions {
   margin-top: 0;
+  opacity: 1;
+}
+
+/* Context Menu / Picker Dropdown */
+.menu-dropdown {
+  position: absolute;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  min-width: 140px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-item {
+  background: none;
+  border: none;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition);
+  width: 100%;
+}
+
+.menu-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--accent-cyan);
+}
+
+/* ==============================
+   FOLDER CARD (GRID VIEW)
+   ============================== */
+.folder-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  align-self: start; /* Prevents stretching to height of file cards in the same grid row */
+}
+
+.folder-card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.folder-actions {
+  opacity: 0;
+  transition: opacity var(--transition);
+  display: flex;
+  align-items: center;
+}
+
+.folder-card:hover .folder-actions {
+  opacity: 1;
+}
+
+/* ==============================
+   GRID FILE CARD (WITH SQUARE PREVIEW)
+   ============================== */
+.grid-file-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+
+.grid-file-card:hover {
+  border-color: var(--border-hover);
+}
+
+/* Square Preview Area inside the file card */
+.file-preview-area {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.file-preview-placeholder {
+  font-size: 2.5rem;
+}
+
+.file-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.grid-file-card .file-card-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-file-card .file-card-meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.grid-file-card .file-card-actions {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.grid-file-card:hover .file-card-actions {
   opacity: 1;
 }

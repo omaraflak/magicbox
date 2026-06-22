@@ -51,6 +51,10 @@ export async function uploadFiles(volume, path, files, onProgress) {
   });
 }
 
+export function getFileUrl(volume, path, filename) {
+  return `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`;
+}
+
 export async function downloadFile(volume, path, filename) {
   const res = await fetch(
     `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`

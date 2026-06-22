@@ -45,6 +45,7 @@ export default function FileGrid({
             path={path} 
             onFolderClick={file.is_dir ? () => onFolderClick(file.name) : null} 
             onDelete={onDelete} 
+            viewMode={viewMode}
           />
         </div>
       ))}

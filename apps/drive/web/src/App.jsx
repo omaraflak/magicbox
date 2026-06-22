@@ -21,6 +21,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState('grid');
   const [loading, setLoading] = useState(true);
   const [folderPromptOpen, setFolderPromptOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -111,7 +112,7 @@ export default function App() {
             onContextMenu={(e) => {
               if (!e.target.closest('.file-card')) {
                 e.preventDefault();
-                setFolderPromptOpen(true);
+                setContextMenu({ x: e.clientX, y: e.clientY });
               }
             }}
           >
@@ -160,12 +161,12 @@ export default function App() {
             width: '90%',
             boxShadow: 'var(--shadow-premium)',
           }}>
-            <h3 style={{ marginBottom: '16px', color: '#fff', fontSize: '1.1rem', fontWeight: 600 }}>Create New Folder</h3>
+            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Create New Folder</h3>
             <input 
               type="text" 
               placeholder="Folder name" 
               id="new-folder-name"
-              style={{ width: '100%', padding: '10px', marginBottom: '16px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.05)', color: '#fff', outline: 'none' }}
+              style={{ width: '100%', padding: '10px', marginBottom: '16px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
               onKeyDown={async (e) => {
                 if (e.key === 'Enter') {
                   const val = e.target.value;
@@ -199,6 +200,33 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {contextMenu && (
+        <>
+          <div 
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 98, background: 'transparent' }} 
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div 
+            className="menu-dropdown" 
+            style={{ 
+              position: 'fixed', 
+              left: `${contextMenu.x}px`, 
+              top: `${contextMenu.y}px`, 
+              zIndex: 99,
+              marginTop: 0,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              border: '1px solid var(--border-color)',
+            }}
+            onClick={() => setContextMenu(null)}
+          >
+            <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
+              📁 New Folder
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
