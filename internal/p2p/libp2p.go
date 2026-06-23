@@ -6,9 +6,12 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -24,6 +27,7 @@ type Libp2pService struct {
 	privKey     crypto.PrivKey
 	listenAddrs []string
 	host        host.Host
+	dht         *dht.IpfsDHT
 	logger      *logging.Logger
 
 	mu       sync.RWMutex
@@ -74,6 +78,50 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 	s.host = h
 	s.host.SetStreamHandler(ProtocolID, s.handleStream)
 
+	// Start DHT in server mode so we can publish/route IP mappings
+	kademliaDHT, err := dht.New(ctx, s.host, dht.Mode(dht.ModeServer))
+	if err != nil {
+		return fmt.Errorf("libp2p: failed to start DHT: %w", err)
+	}
+	s.dht = kademliaDHT
+
+	// Bootstrap the DHT
+	if err := s.dht.Bootstrap(ctx); err != nil {
+		return fmt.Errorf("libp2p: failed to bootstrap DHT: %w", err)
+	}
+
+	// Dial bootstrap peers asynchronously
+	bootstrapPeers := []string{
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnoo2mdwocSfhnF9PRTyGLatC76zpP1WUz17r1267LYX",
+		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGjV7zHeHMbk2CdmDMHbd5LRSc7xVT3KuWBHFgCW",
+		"/ip4/104.248.44.204/tcp/4001/p2p/QmW9m5z6JnBtMnFRHpqx4zMPEbEn4Q9CgNsKa2P2jX8N8v",
+	}
+
+	for _, addrStr := range bootstrapPeers {
+		addr, err := multiaddr.NewMultiaddr(addrStr)
+		if err != nil {
+			continue
+		}
+		pi, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			continue
+		}
+		go func(info peer.AddrInfo) {
+			dialCtx, dialCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer dialCancel()
+			if err := s.host.Connect(dialCtx, info); err != nil {
+				s.logger.Debug("libp2p: failed to connect to bootstrap node",
+					logging.F("peer", info.ID.String()),
+					logging.F("error", err.Error()),
+				)
+			} else {
+				s.logger.Info("libp2p: connected to bootstrap node",
+					logging.F("peer", info.ID.String()),
+				)
+			}
+		}(*pi)
+	}
+
 	s.logger.Info("P2P libp2p host started",
 		logging.F("peer_id", s.HostID()),
 		logging.F("addresses", s.Multiaddrs()),
@@ -82,12 +130,20 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop closes the libp2p host.
+// Stop closes the libp2p host and DHT.
 func (s *Libp2pService) Stop() error {
-	if s.host != nil {
-		return s.host.Close()
+	var dhtErr error
+	if s.dht != nil {
+		dhtErr = s.dht.Close()
 	}
-	return nil
+	var hostErr error
+	if s.host != nil {
+		hostErr = s.host.Close()
+	}
+	if dhtErr != nil {
+		return dhtErr
+	}
+	return hostErr
 }
 
 // HostID returns the peer ID string.
@@ -118,27 +174,50 @@ func (s *Libp2pService) RegisterHandler(protocolType string, handler Handler) {
 	s.handlers[protocolType] = handler
 }
 
-// SendTo dials a target multiaddress and writes the message payload.
-func (s *Libp2pService) SendTo(ctx context.Context, destMultiaddr string, msg *Message) error {
+// SendTo resolves the peer target (which can be a Peer ID, a magicbox://invite link, or a full multiaddress) and writes the message payload.
+func (s *Libp2pService) SendTo(ctx context.Context, target string, msg *Message) error {
 	if s.host == nil {
 		return fmt.Errorf("libp2p: host not started")
 	}
 
-	addr, err := multiaddr.NewMultiaddr(destMultiaddr)
-	if err != nil {
-		return fmt.Errorf("libp2p: invalid multiaddress %q: %w", destMultiaddr, err)
+	// 1. Clean the target (support magicbox://invite/ schema)
+	cleanTarget := strings.TrimPrefix(target, "magicbox://invite/")
+
+	var peerID peer.ID
+
+	// 2. Determine if cleanTarget is a valid Peer ID
+	if id, parseErr := peer.Decode(cleanTarget); parseErr == nil {
+		peerID = id
+		s.logger.Info("libp2p: target is Peer ID, performing DHT lookup", logging.F("peer_id", peerID.String()))
+		
+		// Query DHT for peer address info
+		info, dhtErr := s.dht.FindPeer(ctx, peerID)
+		if dhtErr != nil {
+			return fmt.Errorf("libp2p: failed to resolve peer ID %q via DHT: %w", peerID.String(), dhtErr)
+		}
+
+		if err := s.host.Connect(ctx, info); err != nil {
+			return fmt.Errorf("libp2p: failed to connect to resolved peer: %w", err)
+		}
+	} else {
+		// 3. Otherwise, treat as a full multiaddress
+		addr, err := multiaddr.NewMultiaddr(cleanTarget)
+		if err != nil {
+			return fmt.Errorf("libp2p: invalid destination multiaddress/peer ID %q: %w", cleanTarget, err)
+		}
+
+		info, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			return fmt.Errorf("libp2p: failed to extract peer info from addr: %w", err)
+		}
+		peerID = info.ID
+
+		if err := s.host.Connect(ctx, *info); err != nil {
+			return fmt.Errorf("libp2p: failed to connect to peer: %w", err)
+		}
 	}
 
-	info, err := peer.AddrInfoFromP2pAddr(addr)
-	if err != nil {
-		return fmt.Errorf("libp2p: failed to extract peer info from addr: %w", err)
-	}
-
-	if err := s.host.Connect(ctx, *info); err != nil {
-		return fmt.Errorf("libp2p: failed to connect to peer: %w", err)
-	}
-
-	stream, err := s.host.NewStream(network.WithUseTransient(ctx, "transit"), info.ID, ProtocolID)
+	stream, err := s.host.NewStream(network.WithUseTransient(ctx, "transit"), peerID, ProtocolID)
 	if err != nil {
 		return fmt.Errorf("libp2p: failed to open stream to peer: %w", err)
 	}

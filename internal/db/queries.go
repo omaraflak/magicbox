@@ -43,11 +43,11 @@ type AppToken struct {
 
 // Contact represents a federated P2P contact.
 type Contact struct {
-	ID          string
-	UserID      string
-	DisplayName string
-	Multiaddr   string
-	CreatedAt   string
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Multiaddr   string `json:"multiaddr"`
+	CreatedAt   string `json:"created_at"`
 }
 
 // Registry represents an allowed container image registry prefix.

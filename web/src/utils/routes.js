@@ -5,6 +5,7 @@ export const ROUTES = {
     DASHBOARD: '/',
     SETTINGS: '/settings',
     SETTINGS_SECURITY: '/settings/security',
+    SETTINGS_CONTACTS: '/settings/contacts',
     SETTINGS_ADMIN: '/settings/admin',
     SETTINGS_ADMIN_USERS: '/settings/admin/users',
     SETTINGS_ADMIN_REGISTRIES: '/settings/admin/registries',
@@ -25,6 +26,9 @@ export function viewFromPath(pathname) {
     if (pathname === '/settings/security') {
         return { view: 'settings', section: 'security', tab: 'users' };
     }
+    if (pathname === '/settings/contacts') {
+        return { view: 'settings', section: 'contacts', tab: 'users' };
+    }
     if (pathname.startsWith('/settings/admin')) {
         const segment = pathname.replace('/settings/admin', '').replace(/^\//, '');
         const tab = ADMIN_SUBTABS.includes(segment) ? segment : 'users';
@@ -42,7 +46,7 @@ export function viewFromPath(pathname) {
 /**
  * Build a URL path for a given view, settings section, and admin sub-tab.
  * @param {string} view - 'dashboard' or 'settings'
- * @param {string} section - 'profile', 'security', or 'admin'
+ * @param {string} section - 'profile', 'security', 'contacts', or 'admin'
  * @param {string} tab - 'users', 'registries', or 'logs'
  * @returns {string}
  */
@@ -50,6 +54,9 @@ export function pathFromView(view, section = 'profile', tab = 'users') {
     if (view === 'settings') {
         if (section === 'security') {
             return ROUTES.SETTINGS_SECURITY;
+        }
+        if (section === 'contacts') {
+            return ROUTES.SETTINGS_CONTACTS;
         }
         if (section === 'admin') {
             return tab === 'users' ? ROUTES.SETTINGS_ADMIN : `/settings/admin/${tab}`;

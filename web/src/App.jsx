@@ -35,6 +35,8 @@ export default function App() {
     const [registries, setRegistries] = useState([]);
     const [logs, setLogs] = useState([]);
     const [logLevel, setLogLevel] = useState('');
+    const [contacts, setContacts] = useState([]);
+    const [invitationInfo, setInvitationInfo] = useState(null);
 
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
@@ -207,11 +209,26 @@ export default function App() {
         }
     };
 
+    const loadContacts = async () => {
+        const { status, data } = await callAPI('GET', '/contacts');
+        if (status === 200) setContacts(data || []);
+    };
+
+    const loadInvitationInfo = async () => {
+        const { status, data } = await callAPI('GET', '/me/invitation');
+        if (status === 200) setInvitationInfo(data);
+    };
+
     useEffect(() => {
-        if (view === 'settings' && settingsSection === 'admin') {
-            loadUsers();
-            loadRegistries();
-            loadLogs();
+        if (view === 'settings') {
+            if (settingsSection === 'admin') {
+                loadUsers();
+                loadRegistries();
+                loadLogs();
+            } else if (settingsSection === 'contacts') {
+                loadContacts();
+                loadInvitationInfo();
+            }
         }
     }, [view, settingsSection, csrfToken]);
 
@@ -410,6 +427,33 @@ export default function App() {
         }, "Remove Registry");
     };
 
+    // Contacts: Add
+    const handleAddContact = async ({ displayName, multiaddr }) => {
+        setActionLoading(true);
+        setActionError('');
+        const { status, data } = await callAPI('POST', '/contacts', { display_name: displayName, multiaddr });
+        setActionLoading(false);
+        if (status === 201) {
+            loadContacts();
+            return true;
+        } else {
+            setActionError(data?.error || "Failed to add contact");
+            return false;
+        }
+    };
+
+    // Contacts: Delete
+    const handleDeleteContact = async (id) => {
+        showConfirm("Are you sure you want to delete this contact?", async () => {
+            const { status, data } = await callAPI('DELETE', `/contacts/${id}`);
+            if (status === 200) {
+                loadContacts();
+            } else {
+                showAlert(data?.error || "Failed to delete contact", "Error");
+            }
+        }, "Delete Contact");
+    };
+
     // Filter Logs
     const handleLogLevelChange = (level) => {
         setLogLevel(level);
@@ -497,6 +541,10 @@ export default function App() {
                         logLevel={logLevel}
                         onLogLevelChange={handleLogLevelChange}
                         onRefreshLogs={() => loadLogs(logLevel)}
+                        contacts={contacts}
+                        invitationInfo={invitationInfo}
+                        onAddContact={handleAddContact}
+                        onDeleteContact={handleDeleteContact}
                     />
                 )}
             </div>

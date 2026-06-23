@@ -863,15 +863,18 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addrs := s.p2pService.Multiaddrs()
-	if len(addrs) == 0 {
+	peerID := s.p2pService.HostID()
+	if peerID == "" {
 		writeError(w, http.StatusServiceUnavailable, "P2P network service unavailable")
 		return
 	}
 
+	inviteLink := fmt.Sprintf("magicbox://invite/%s", peerID)
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"peer_id":     s.p2pService.HostID(),
-		"multiaddrs":  addrs,
-		"invitations": addrs,
+		"peer_id":      peerID,
+		"invite_link":  inviteLink,
+		"multiaddrs":   s.p2pService.Multiaddrs(),
+		"invitations":  s.p2pService.Multiaddrs(),
 	})
 }
