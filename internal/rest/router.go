@@ -2,8 +2,6 @@ package rest
 
 import (
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 
 	"github.com/magicbox/core/internal/config"
@@ -78,14 +76,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/admin/registries/{id}", auth(admin(http.HandlerFunc(s.handleAdminDeleteRegistry))))
 	mux.Handle("GET /api/v1/admin/logs", auth(admin(http.HandlerFunc(s.handleAdminListLogs))))
 
-	// Route app traffic through Go server to Traefik if accessed on the dashboard port (helps with single-port proxies / Uberproxy)
-	traefikHost := "127.0.0.1:80"
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		traefikHost = "magicbox_traefik:80"
-	}
-	traefikURL, _ := url.Parse("http://" + traefikHost)
-	proxy := httputil.NewSingleHostReverseProxy(traefikURL)
-	mux.Handle("/u/", proxy)
+	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
+	mux.Handle("/u/", auth(AppAccessMiddleware()(http.HandlerFunc(s.handleAppProxy))))
 
 	// Static file fallback — serve web UI with SPA fallback.
 	// For client-side routing, serve index.html for any path that doesn't

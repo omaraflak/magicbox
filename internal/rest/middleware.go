@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // contextKey is an unexported type for context keys to prevent collisions.
@@ -30,6 +31,32 @@ func AuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), contextKeyUser, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// AppAccessMiddleware enforces that the logged-in user can only access their own apps.
+// Must be chained after AuthMiddleware.
+func AppAccessMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := GetUserFromContext(r)
+			if claims == nil {
+				writeJSONError(w, http.StatusUnauthorized, "authentication required")
+				return
+			}
+
+			// Path format: /u/{username}/{app_id}/...
+			parts := strings.Split(r.URL.Path, "/")
+			if len(parts) >= 3 && parts[1] == "u" {
+				targetUsername := parts[2]
+				if claims.Username != targetUsername {
+					writeJSONError(w, http.StatusForbidden, "access denied to this app instance")
+					return
+				}
+			}
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }

@@ -168,6 +168,15 @@ func (d *DB) GetAppByAppIDAndUserID(appID, userID string) (*App, error) {
 	return scanApp(row)
 }
 
+// GetAppByRouteSlugAndUserID returns an app by its route slug and owner userID, or (nil, nil) if not found.
+func (d *DB) GetAppByRouteSlugAndUserID(routeSlug, userID string) (*App, error) {
+	row := d.conn.QueryRow(
+		`SELECT id, app_id, user_id, status, route_slug, image, image_digest, version, container_id, host, entry_port, webhook_path, installed_at, updated_at
+		 FROM apps WHERE route_slug = ? AND user_id = ?`, routeSlug, userID,
+	)
+	return scanApp(row)
+}
+
 // ListAppsByUserID returns all apps owned by a given user.
 func (d *DB) ListAppsByUserID(userID string) ([]App, error) {
 	rows, err := d.conn.Query(

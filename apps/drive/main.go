@@ -565,7 +565,15 @@ func getCoreClient() (pb.MagicboxOSClient, *grpc.ClientConn, context.Context, er
 		return nil, nil, nil, fmt.Errorf("missing gRPC core URL or authorization API token env vars")
 	}
 
-	conn, err := grpc.Dial(coreURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	const maxMessageSize = 512 * 1024 * 1024 // 512 MB
+	conn, err := grpc.Dial(
+		coreURL,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxMessageSize),
+			grpc.MaxCallSendMsgSize(maxMessageSize),
+		),
+	)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to dial core gRPC server: %w", err)
 	}

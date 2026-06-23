@@ -61,8 +61,11 @@ func (s *RPCServer) Start(port string) error {
 		return fmt.Errorf("grpc: failed to listen on port %s: %w", port, err)
 	}
 
+	const maxMessageSize = 512 * 1024 * 1024 // 512 MB
 	s.grpcServer = grpc.NewServer(
 		grpc.UnaryInterceptor(s.authInterceptor),
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
 	)
 
 	pb.RegisterMagicboxOSServer(s.grpcServer, s)

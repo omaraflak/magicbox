@@ -74,8 +74,8 @@ func (c *Client) CreateAndStartContainer(ctx context.Context, cfg *AppContainerC
 		binds = append(binds, hostPath+":/data/shared/"+vm.Name+":"+access)
 	}
 
-	// 3. Build Traefik labels.
-	labels := GenerateTraefikLabels(cfg.Username, cfg.RouteSlug, cfg.EntryPort, cfg.Host)
+	// 3. Disable direct Traefik routing to enforce Core gateway auth
+	labels := map[string]string{}
 
 	// 4. Exposed port.
 	portStr := fmt.Sprintf("%d/tcp", cfg.EntryPort)

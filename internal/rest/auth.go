@@ -28,8 +28,9 @@ const (
 // SessionClaims are the JWT claims for a user session.
 type SessionClaims struct {
 	jwt.RegisteredClaims
-	UserID  string `json:"uid"`
-	IsAdmin bool   `json:"adm"`
+	UserID   string `json:"uid"`
+	Username string `json:"usr"`
+	IsAdmin  bool   `json:"adm"`
 }
 
 // AppTokenClaims are the JWT claims for per-app authentication tokens.
@@ -41,7 +42,7 @@ type AppTokenClaims struct {
 }
 
 // GenerateSessionToken creates a signed JWT for a user session.
-func GenerateSessionToken(secret []byte, userID string, isAdmin bool) (string, error) {
+func GenerateSessionToken(secret []byte, userID, username string, isAdmin bool) (string, error) {
 	now := time.Now()
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -49,8 +50,9 @@ func GenerateSessionToken(secret []byte, userID string, isAdmin bool) (string, e
 			ExpiresAt: jwt.NewNumericDate(now.Add(SessionDuration)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
-		UserID:  userID,
-		IsAdmin: isAdmin,
+		UserID:   userID,
+		Username: username,
+		IsAdmin:  isAdmin,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -127,7 +128,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Auto-login: generate session token and set cookie.
-	token, err := GenerateSessionToken(s.cfg.JWTSecret, userID, true)
+	token, err := GenerateSessionToken(s.cfg.JWTSecret, userID, req.Username, true)
 	if err != nil {
 		s.logger.Error("setup: failed to generate session token", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -174,7 +175,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := GenerateSessionToken(s.cfg.JWTSecret, user.ID, user.IsAdmin)
+	token, err := GenerateSessionToken(s.cfg.JWTSecret, user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		s.logger.Error("login: failed to generate token", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -888,4 +889,78 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		"multiaddrs":   s.p2pService.Multiaddrs(),
 		"invitations":  s.p2pService.Multiaddrs(),
 	})
+}
+
+// handleAppProxy dynamically reverse proxies requests to the target app's container IP.
+func (s *Server) handleAppProxy(w http.ResponseWriter, r *http.Request) {
+	// Path format: /u/{username}/{app_id}/...
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 || parts[1] != "u" {
+		writeError(w, http.StatusBadRequest, "invalid app path")
+		return
+	}
+
+	s.logger.Info("handleAppProxy routing request", logging.F("path", r.URL.Path), logging.F("parts", fmt.Sprintf("%+v", parts)))
+	username := parts[2]
+	routeSlug := parts[3]
+
+	// Redirect to trailing slash if missing (e.g. /u/omar/drive -> /u/omar/drive/) to prevent relative asset path resolution issues.
+	if len(parts) == 4 {
+		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+		return
+	}
+
+	// Fetch target user and app record
+	user, err := s.db.GetUserByUsername(username)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query user: "+err.Error())
+		return
+	}
+	if user == nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	app, err := s.db.GetAppByRouteSlugAndUserID(routeSlug, user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query app: "+err.Error())
+		return
+	}
+	if app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.Status != "running" || app.ContainerID == "" {
+		writeError(w, http.StatusServiceUnavailable, "app is not running")
+		return
+	}
+
+	// Inspect container to resolve IP address
+	status, err := s.docker.InspectContainer(r.Context(), app.ContainerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve container IP: "+err.Error())
+		return
+	}
+	if status.IPAddress == "" {
+		writeError(w, http.StatusServiceUnavailable, "app container has no IP address")
+		return
+	}
+
+	targetURL, err := url.Parse(fmt.Sprintf("http://%s:%d", status.IPAddress, app.EntryPort))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse app target URL: "+err.Error())
+		return
+	}
+
+	// Create reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	// Strip prefix /u/{username}/{routeSlug} before sending to the app container.
+	prefix := fmt.Sprintf("/u/%s/%s", username, routeSlug)
+	r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+	if r.URL.Path == "" {
+		r.URL.Path = "/"
+	}
+
+	proxy.ServeHTTP(w, r)
 }
