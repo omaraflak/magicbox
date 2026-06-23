@@ -182,6 +182,7 @@ textarea {
 .btn-primary {
     background: var(--accent-glow);
     color: white;
+    border: 1px solid transparent;
 }
 .btn-primary:hover {
     opacity: 0.9;
@@ -199,7 +200,7 @@ textarea {
 
 .btn-danger {
     background: var(--accent-error);
-    border: none;
+    border: 1px solid transparent;
     color: white;
 }
 .btn-danger:hover {

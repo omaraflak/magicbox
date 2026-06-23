@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Badge from './Badge';
 
 function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, isRebuilding, isUninstalling, isStarting, isStopping }) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -52,12 +53,12 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
                     </div>
                     <span className="app-slug">{app.app_id}</span>
                 </div>
-                <div className={`status-indicator ${statusClass}`}>
+                <Badge type={statusText}>
                     {isTransitioning && (
                         <div className="spinner-sm" style={{ marginRight: '4px', width: '12px', height: '12px', borderWidth: '1.5px' }} />
                     )}
                     {statusText}
-                </div>
+                </Badge>
             </div>
             
             <div className="app-actions-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>

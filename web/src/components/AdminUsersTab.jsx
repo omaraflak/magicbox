@@ -1,4 +1,5 @@
 import React from 'react';
+import Badge from './Badge';
 
 export default function AdminUsersTab({ users, currentUser, onDeleteUser, onOpenCreateModal }) {
     return (
@@ -22,11 +23,9 @@ export default function AdminUsersTab({ users, currentUser, onDeleteUser, onOpen
                             <tr key={u.id}>
                                 <td><strong>{u.username}</strong></td>
                                 <td>
-                                    {u.is_admin ? (
-                                        <span className="status-indicator status-running">Admin</span>
-                                    ) : (
-                                        <span className="status-indicator status-stopped">User</span>
-                                    )}
+                                    <Badge type={u.is_admin ? 'admin' : 'secondary'}>
+                                        {u.is_admin ? 'Admin' : 'User'}
+                                    </Badge>
                                 </td>
                                 <td>{new Date(u.created_at).toLocaleString()}</td>
                                 <td className="text-right">
