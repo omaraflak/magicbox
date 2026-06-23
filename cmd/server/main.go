@@ -120,7 +120,8 @@ func run() error {
 			msg.AppID,
 			msg.TargetUserID,
 			"p2p-gateway",
-			"peer:"+fromPeerID,
+			fromPeerID,
+			"remote",
 			msg.Payload,
 		)
 		if err != nil {

@@ -156,6 +156,7 @@ func (s *RPCServer) SendWebhook(ctx context.Context, req *pb.SendWebhookRequest)
 		req.TargetUserId,
 		claims.AppID,
 		claims.UserID,
+		"local",
 		req.Payload,
 	)
 	if err != nil {
@@ -248,6 +249,31 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 	targetUserID := ""
 	if u, parseErr := url.Parse(contact.Multiaddr); parseErr == nil {
 		targetUserID = u.Query().Get("user_id")
+	}
+
+	// Check if the contact's peer ID matches our local host ID (loopback/local transfer)
+	isLocal := strings.Contains(contact.Multiaddr, s.p2pService.HostID())
+	if isLocal {
+		s.logger.Info("SendToContact: target is a local contact, routing locally",
+			logging.F("user_id", claims.UserID),
+			logging.F("target_user_id", targetUserID),
+		)
+		_, err = s.orchestrator.DispatchWebhook(
+			ctx,
+			req.AppId,
+			targetUserID,
+			claims.AppID,
+			claims.UserID,
+			"local",
+			req.Payload,
+		)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "local webhook dispatch failed: %v", err)
+		}
+		return &pb.SendToContactResponse{
+			Success:       true,
+			StatusMessage: "payload delivered locally",
+		}, nil
 	}
 
 	// Dispatch message directly to the remote peer multiaddress over libp2p

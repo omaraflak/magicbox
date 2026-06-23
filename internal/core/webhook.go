@@ -12,7 +12,7 @@ import (
 
 // DispatchWebhook sends a webhook payload to a target app's container.
 // It looks up the container's internal IP and POSTs to the app's webhook endpoint.
-func (o *Orchestrator) DispatchWebhook(ctx context.Context, targetAppID, targetUserID, sourceAppID, sourceUserID string, payload []byte) (int, error) {
+func (o *Orchestrator) DispatchWebhook(ctx context.Context, targetAppID, targetUserID, sourceAppID, sourceUserID, sourceType string, payload []byte) (int, error) {
 	// 1. Look up the target app.
 	app, err := o.DB.GetAppByAppIDAndUserID(targetAppID, targetUserID)
 	if err != nil {
@@ -53,6 +53,7 @@ func (o *Orchestrator) DispatchWebhook(ctx context.Context, targetAppID, targetU
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Magicbox-Source-App", sourceAppID)
 	req.Header.Set("X-Magicbox-Source-User", sourceUserID)
+	req.Header.Set("X-Magicbox-Source-Type", sourceType)
 
 	// 5. Execute the request.
 	client := &http.Client{}

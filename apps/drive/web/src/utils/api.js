@@ -119,3 +119,19 @@ export async function moveFile(volume, path, filename, destPath, newName = '') {
   }
   return res.json();
 }
+
+export async function fetchContacts() {
+  const res = await fetch(`${API_BASE}/contacts`);
+  if (!res.ok) throw new Error(`Failed to fetch contacts: ${res.statusText}`);
+  return res.json();
+}
+
+export async function shareFile(volume, path, filename, contactID) {
+  const url = `${API_BASE}/files/share?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}&contact_id=${encodeURIComponent(contactID)}`;
+  const res = await fetch(url, { method: 'POST' });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to share file: ${res.statusText}`);
+  }
+  return res.json();
+}

@@ -555,13 +555,184 @@ func handleFolders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"created": body.Name})
 }
 
+type ShareMessage struct {
+	Filename string `json:"filename"`
+	Content  []byte `json:"content"`
+}
+
+func getCoreClient() (pb.MagicboxOSClient, *grpc.ClientConn, context.Context, error) {
+	if coreURL == "" || apiToken == "" {
+		return nil, nil, nil, fmt.Errorf("missing gRPC core URL or authorization API token env vars")
+	}
+
+	conn, err := grpc.Dial(coreURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to dial core gRPC server: %w", err)
+	}
+
+	client := pb.NewMagicboxOSClient(conn)
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+apiToken))
+
+	return client, conn, ctx, nil
+}
+
+func handleListContacts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer conn.Close()
+
+	resp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query contacts from core: "+err.Error())
+		return
+	}
+
+	type ContactJSON struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"display_name"`
+		Multiaddr   string `json:"multiaddr"`
+	}
+
+	var contacts []ContactJSON
+	for _, c := range resp.Contacts {
+		contacts = append(contacts, ContactJSON{
+			ID:          c.Id,
+			DisplayName: c.DisplayName,
+			Multiaddr:   c.Multiaddr,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, contacts)
+}
+
+func handleShareFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	volumeName := r.URL.Query().Get("volume")
+	subPath := r.URL.Query().Get("path")
+	filename := r.URL.Query().Get("file")
+	contactID := r.URL.Query().Get("contact_id")
+
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
+		return
+	}
+	if contactID == "" {
+		writeError(w, http.StatusBadRequest, "missing 'contact_id' parameter")
+		return
+	}
+
+	dirPath, err := resolvePath(volumeName, subPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	safeName := filepath.Base(filename)
+	fullPath := filepath.Join(dirPath, safeName)
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "file not found: "+err.Error())
+		return
+	}
+
+	// Prepare payload envelope
+	shareMsg := ShareMessage{
+		Filename: safeName,
+		Content:  content,
+	}
+	payload, err := json.Marshal(shareMsg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to marshal payload: "+err.Error())
+		return
+	}
+
+	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer conn.Close()
+
+	sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
+		ContactId: contactID,
+		AppId:     appID,
+		Payload:   payload,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to send message via core: "+err.Error())
+		return
+	}
+
+	if !sendResp.Success {
+		writeError(w, http.StatusBadGateway, "failed to deliver payload: "+sendResp.StatusMessage)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"shared": safeName})
+}
+
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(r.Body)
-	log.Printf("Webhook received from app=%s user=%s: %s",
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Failed to read webhook body: %v", err)
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	var msg ShareMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		log.Printf("Failed to parse incoming ShareMessage: %v", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	sourceType := r.Header.Get("X-Magicbox-Source-Type")
+	sourceUser := r.Header.Get("X-Magicbox-Source-User")
+	log.Printf("Webhook received from app=%s user=%s type=%s filename=%s size=%d",
 		r.Header.Get("X-Magicbox-Source-App"),
-		r.Header.Get("X-Magicbox-Source-User"),
-		string(body),
+		sourceUser,
+		sourceType,
+		msg.Filename,
+		len(msg.Content),
 	)
+
+	if msg.Filename == "" {
+		log.Println("Incoming ShareMessage has empty filename")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Create Incoming directory if it doesn't exist under user's storage
+	incomingDir := filepath.Join(volumes["storage"], "Incoming")
+	if err := os.MkdirAll(incomingDir, 0755); err != nil {
+		log.Printf("Failed to create Incoming directory: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create Incoming folder")
+		return
+	}
+
+	safeName := filepath.Base(msg.Filename)
+	destPath := filepath.Join(incomingDir, safeName)
+
+	if err := os.WriteFile(destPath, msg.Content, 0644); err != nil {
+		log.Printf("Failed to write incoming file %q: %v", safeName, err)
+		writeError(w, http.StatusInternalServerError, "failed to save file")
+		return
+	}
+
+	log.Printf("Successfully saved shared file %q to Incoming directory", safeName)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -593,6 +764,8 @@ func main() {
 	mux.HandleFunc("/api/files/download-plan", handleDownloadPlan)
 	mux.HandleFunc("/api/files/move", handleMoveFile)
 	mux.HandleFunc("/api/folders", handleFolders)
+	mux.HandleFunc("/api/contacts", handleListContacts)
+	mux.HandleFunc("/api/files/share", handleShareFile)
 
 	// Internal webhook
 	mux.HandleFunc("/internal/magicbox-webhook", handleWebhook)

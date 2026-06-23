@@ -191,6 +191,11 @@ func (s *Libp2pService) SendTo(ctx context.Context, target string, msg *Message)
 	// 1. Clean the target (support magicbox://invite/ schema)
 	cleanTarget := strings.TrimPrefix(target, "magicbox://invite/")
 
+	// Strip query string parameters like ?user_id=...
+	if idx := strings.Index(cleanTarget, "?"); idx != -1 {
+		cleanTarget = cleanTarget[:idx]
+	}
+
 	var peerID peer.ID
 
 	// 2. Determine if cleanTarget is a valid Peer ID
