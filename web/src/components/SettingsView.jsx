@@ -1,7 +1,30 @@
 import React, { useState } from 'react';
+import AdminUsersTab from './AdminUsersTab';
+import AdminRegistriesTab from './AdminRegistriesTab';
+import AdminLogsTab from './AdminLogsTab';
 
-export default function SettingsView({ user, onSubmit, error, loading, onBack }) {
-    const [activeSection, setActiveSection] = useState('security'); // 'profile', 'security'
+export default function SettingsView({ 
+    user, 
+    onSubmit, 
+    error, 
+    loading, 
+    onBack, 
+    onLogout,
+    activeSection,
+    onSectionChange,
+    adminTab,
+    onAdminTabChange,
+    users,
+    onDeleteUser,
+    onOpenCreateUserModal,
+    registries,
+    onDeleteRegistry,
+    onOpenAddRegistryModal,
+    logs,
+    logLevel,
+    onLogLevelChange,
+    onRefreshLogs
+}) {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -38,25 +61,37 @@ export default function SettingsView({ user, onSubmit, error, loading, onBack })
                 
                 <button 
                     className={`sidebar-item ${activeSection === 'profile' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('profile')}
+                    onClick={() => onSectionChange('profile')}
                 >
                     👤 Profile Details
                 </button>
                 <button 
                     className={`sidebar-item ${activeSection === 'security' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('security')}
+                    onClick={() => onSectionChange('security')}
                 >
                     🔒 Password & Security
                 </button>
 
-                <div style={{ marginTop: 'auto', padding: '10px' }}>
+                {user?.is_admin && (
+                    <button 
+                        className={`sidebar-item ${activeSection === 'admin' ? 'active' : ''}`}
+                        onClick={() => onSectionChange('admin')}
+                    >
+                        ⚙️ Admin Console
+                    </button>
+                )}
+
+                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px' }}>
                     <button className="btn btn-secondary btn-block" onClick={onBack}>
                         ← Back to Console
+                    </button>
+                    <button className="btn btn-danger btn-block" onClick={onLogout} style={{ marginTop: '4px' }}>
+                        🚪 Logout
                     </button>
                 </div>
             </aside>
 
-            <main className="admin-main" style={{ padding: '40px 60px', maxWidth: '800px' }}>
+            <main className="admin-main" style={{ padding: '40px 60px', maxWidth: activeSection === 'admin' ? '1200px' : '800px', width: '100%' }}>
                 {activeSection === 'profile' && (
                     <div>
                         <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '32px' }}>
@@ -154,6 +189,65 @@ export default function SettingsView({ user, onSubmit, error, loading, onBack })
                                 <span>{loading ? 'Updating...' : 'Update Password'}</span>
                             </button>
                         </form>
+                    </div>
+                )}
+
+                {activeSection === 'admin' && (
+                    <div>
+                        <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '24px' }}>
+                            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>Admin Console</h1>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '6px' }}>Manage users, registries, and kernel logs.</p>
+                        </div>
+
+                        {/* Horizontal top sub-tabs */}
+                        <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '24px' }}>
+                            <button 
+                                className={`btn ${adminTab === 'users' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => onAdminTabChange('users')}
+                                style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+                            >
+                                Users
+                            </button>
+                            <button 
+                                className={`btn ${adminTab === 'registries' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => onAdminTabChange('registries')}
+                                style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+                            >
+                                Registries
+                            </button>
+                            <button 
+                                className={`btn ${adminTab === 'logs' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => onAdminTabChange('logs')}
+                                style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+                            >
+                                Kernel Logs
+                            </button>
+                        </div>
+
+                        {/* Rendering sub-tab components */}
+                        {adminTab === 'users' && (
+                            <AdminUsersTab 
+                                users={users} 
+                                currentUser={user} 
+                                onDeleteUser={onDeleteUser} 
+                                onOpenCreateModal={onOpenCreateUserModal}
+                            />
+                        )}
+                        {adminTab === 'registries' && (
+                            <AdminRegistriesTab 
+                                registries={registries} 
+                                onDeleteRegistry={onDeleteRegistry} 
+                                onOpenAddModal={onOpenAddRegistryModal}
+                            />
+                        )}
+                        {adminTab === 'logs' && (
+                            <AdminLogsTab 
+                                logs={logs} 
+                                logLevel={logLevel} 
+                                onLevelChange={onLogLevelChange} 
+                                onRefresh={onRefreshLogs}
+                            />
+                        )}
                     </div>
                 )}
             </main>

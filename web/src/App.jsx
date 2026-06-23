@@ -25,7 +25,8 @@ export default function App() {
     const [booting, setBooting] = useState(true);
     const [csrfToken, setCsrfToken] = useState('');
     const [user, setUser] = useState(null);
-    const [view, setView] = useState('login'); // 'setup', 'login', 'dashboard', 'admin'
+    const [view, setView] = useState('login'); // 'setup', 'login', 'dashboard', 'settings'
+    const [settingsSection, setSettingsSection] = useState('profile'); // 'profile', 'security', 'admin'
     const [adminTab, setAdminTab] = useState('users'); // 'users', 'registries', 'logs'
 
     // Core Business Data
@@ -86,11 +87,15 @@ export default function App() {
     };
 
     // Navigation: sync view state with URL path.
-    const navigate = (newView, tab = null) => {
+    const navigate = (newView, section = 'profile', tab = null) => {
+        const s = section || settingsSection || 'profile';
         const t = tab || adminTab || 'users';
-        if (newView === 'admin') setAdminTab(t);
-        const path = pathFromView(newView, t);
-        window.history.pushState({ view: newView, tab: t }, '', path);
+        if (newView === 'settings') {
+            setSettingsSection(s);
+            if (s === 'admin') setAdminTab(t);
+        }
+        const path = pathFromView(newView, s, t);
+        window.history.pushState({ view: newView, section: s, tab: t }, '', path);
         setView(newView);
     };
 
@@ -99,16 +104,18 @@ export default function App() {
         const onPopState = (e) => {
             if (e.state?.view) {
                 setView(e.state.view);
+                if (e.state.section) setSettingsSection(e.state.section);
                 if (e.state.tab) setAdminTab(e.state.tab);
             } else {
-                const { view: v, tab } = viewFromPath(window.location.pathname);
+                const { view: v, section: s, tab: t } = viewFromPath(window.location.pathname);
                 setView(v);
-                setAdminTab(tab);
+                setSettingsSection(s);
+                setAdminTab(t);
             }
         };
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
-    }, []);
+    }, [settingsSection, adminTab]);
 
     // Global unauthorized handler passed to apiRequest
     const handleUnauthorized = () => {
@@ -135,11 +142,12 @@ export default function App() {
                 if (me) {
                     setUser(me);
                     // Restore view from URL path on refresh.
-                    const { view: v, tab } = viewFromPath(window.location.pathname);
+                    const { view: v, section: s, tab: t } = viewFromPath(window.location.pathname);
                     setView(v);
-                    setAdminTab(tab);
+                    setSettingsSection(s);
+                    setAdminTab(t);
                     // Replace state so back/forward works from initial load.
-                    window.history.replaceState({ view: v, tab }, '', window.location.pathname);
+                    window.history.replaceState({ view: v, section: s, tab: t }, '', window.location.pathname);
                 } else {
                     // Check if initial setup is required
                     const needsSetup = await checkNeedsSetup(token);
@@ -200,12 +208,12 @@ export default function App() {
     };
 
     useEffect(() => {
-        if (view === 'admin') {
+        if (view === 'settings' && settingsSection === 'admin') {
             loadUsers();
             loadRegistries();
             loadLogs();
         }
-    }, [view, csrfToken]);
+    }, [view, settingsSection, csrfToken]);
 
     // 4. Action Handlers
 
@@ -421,13 +429,11 @@ export default function App() {
     return (
         <div id="app">
             {/* Top Navigation Navbar */}
-            {(view === 'dashboard' || view === 'admin') && (
+            {(view === 'dashboard' || view === 'settings') && (
                 <Navbar 
-                    title={view === 'admin' ? "Magicbox Admin Console" : "Magicbox OS"}
+                    title="Magicbox OS"
                     user={user}
-                    onLogout={handleLogout}
-                    adminView={view === 'admin'}
-                    onToggleView={(v) => navigate(v)}
+                    onNavigate={navigate}
                 />
             )}
 
@@ -463,17 +469,24 @@ export default function App() {
                     </div>
                 )}
 
-                {view === 'admin' && (
-                    <AdminConsoleView 
+                {view === 'settings' && (
+                    <SettingsView 
+                        user={user}
+                        onSubmit={handleUpdatePassword} 
+                        error={actionError} 
+                        loading={actionLoading}
+                        onBack={() => navigate('dashboard')}
+                        onLogout={handleLogout}
+                        activeSection={settingsSection}
+                        onSectionChange={(sec) => navigate('settings', sec)}
+                        adminTab={adminTab}
+                        onAdminTabChange={(tab) => navigate('settings', 'admin', tab)}
                         users={users}
-                        currentUser={user}
                         onDeleteUser={handleDeleteUser}
                         onOpenCreateUserModal={() => {
                             setActionError('');
                             setCreateUserModalOpen(true);
                         }}
-                        activeTab={adminTab}
-                        onTabChange={(tab) => navigate('admin', tab)}
                         registries={registries}
                         onDeleteRegistry={handleDeleteRegistry}
                         onOpenAddRegistryModal={() => {
@@ -484,16 +497,6 @@ export default function App() {
                         logLevel={logLevel}
                         onLogLevelChange={handleLogLevelChange}
                         onRefreshLogs={() => loadLogs(logLevel)}
-                    />
-                )}
-
-                {view === 'settings' && (
-                    <SettingsView 
-                        user={user}
-                        onSubmit={handleUpdatePassword} 
-                        error={actionError} 
-                        loading={actionLoading}
-                        onBack={() => navigate('dashboard')}
                     />
                 )}
             </div>

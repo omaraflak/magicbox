@@ -1,37 +1,21 @@
 import React from 'react';
 
-export default function Navbar({ title, user, onLogout, adminView, onToggleView }) {
+export default function Navbar({ title, user, onNavigate }) {
     return (
         <nav className="navbar">
-            <div className="nav-brand">
-                <span className="brand-logo">{adminView ? '⚙️' : '✨'}</span>
+            <div className="nav-brand" style={{ cursor: 'pointer' }} onClick={() => onNavigate('dashboard')}>
+                <span className="brand-logo">✨</span>
                 <span className="brand-name">{title}</span>
             </div>
             <div className="nav-actions">
-                {user?.is_admin && (
-                    adminView ? (
-                        <button className="btn btn-secondary nav-btn" onClick={() => onToggleView('dashboard')}>
-                            Back to Dashboard
-                        </button>
-                    ) : (
-                        <button className="btn btn-secondary nav-btn" onClick={() => onToggleView('admin')}>
-                            Admin Console
-                        </button>
-                    )
-                )}
                 {user && (
-                    <>
-                        <span 
-                            className="user-badge clickable" 
-                            onClick={() => onToggleView('settings')}
-                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            <span className="user-icon">👤</span> {user.username}
-                        </span>
-                        <button className="btn btn-logout nav-btn" onClick={onLogout}>
-                            Logout
-                        </button>
-                    </>
+                    <span 
+                        className="user-badge clickable" 
+                        onClick={() => onNavigate('settings', 'profile')}
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <span className="user-icon">👤</span> {user.username}
+                    </span>
                 )}
             </div>
         </nav>
