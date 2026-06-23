@@ -8,14 +8,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/magicbox/core/internal/crypto"
 )
 
 // Config holds the runtime configuration for Magicbox.
 type Config struct {
-	Root      string
-	Port      string
-	JWTSecret []byte
-	DBPath    string
+	Root          string
+	Port          string
+	JWTSecret     []byte
+	DBPath        string
+	PrivateKeyPEM []byte
+	PublicKeyPEM  []byte
 }
 
 // Load reads configuration from environment variables and initializes
@@ -67,11 +71,19 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load JWT secret: %w", err)
 	}
 
+	// Load or generate Identity RSA key pair.
+	privPEM, pubPEM, err := loadOrGenerateIdentityKeys(root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load/generate identity keys: %w", err)
+	}
+
 	return &Config{
-		Root:      root,
-		Port:      port,
-		JWTSecret: jwtSecret,
-		DBPath:    filepath.Join(root, "core", "magicbox.db"),
+		Root:          root,
+		Port:          port,
+		JWTSecret:     jwtSecret,
+		DBPath:        filepath.Join(root, "core", "magicbox.db"),
+		PrivateKeyPEM: privPEM,
+		PublicKeyPEM:  pubPEM,
 	}, nil
 }
 
@@ -141,4 +153,39 @@ func syncWebAssets(root string) error {
 
 		return os.WriteFile(target, data, info.Mode())
 	})
+}
+
+// loadOrGenerateIdentityKeys loads existing RSA keys from disk, or generates a new pair.
+func loadOrGenerateIdentityKeys(root string) ([]byte, []byte, error) {
+	privPath := filepath.Join(root, "core", "identity.key")
+	pubPath := filepath.Join(root, "core", "identity.pub")
+
+	privPEM, err1 := os.ReadFile(privPath)
+	pubPEM, err2 := os.ReadFile(pubPath)
+
+	if err1 == nil && err2 == nil {
+		return privPEM, pubPEM, nil
+	}
+
+	// Generate a new key pair
+	priv, err := crypto.GenerateKeyPair()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	privPEM = crypto.EncodePrivateKeyToPEM(priv)
+	pubPEM, err = crypto.EncodePublicKeyToPEM(&priv.PublicKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Write key files with strict permissions
+	if err := os.WriteFile(privPath, privPEM, 0600); err != nil {
+		return nil, nil, err
+	}
+	if err := os.WriteFile(pubPath, pubPEM, 0644); err != nil {
+		return nil, nil, err
+	}
+
+	return privPEM, pubPEM, nil
 }
