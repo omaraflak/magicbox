@@ -86,7 +86,7 @@ message SharedVolume {
 
 message SendToContactRequest {
   string contact_id = 1;
-  string protocol_type = 2;
+  string app_id = 2;
   bytes payload = 3;
 }
 

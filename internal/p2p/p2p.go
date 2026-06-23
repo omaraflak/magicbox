@@ -6,7 +6,7 @@ import (
 
 // Message represents a payload sent between peers.
 type Message struct {
-	ProtocolType string `json:"protocol_type"`
+	AppID        string `json:"app_id"`
 	TargetUserID string `json:"target_user_id"`
 	Payload      []byte `json:"payload"`
 }
@@ -29,7 +29,7 @@ type Service interface {
 	Multiaddrs() []string
 
 	// RegisterHandler registers a callback handler for a specific message protocol.
-	RegisterHandler(protocolType string, handler Handler)
+	RegisterHandler(appID string, handler Handler)
 
 	// SendTo dials a remote peer using their multiaddress invitation and sends a message.
 	SendTo(ctx context.Context, destMultiaddr string, msg *Message) error

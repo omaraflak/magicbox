@@ -102,7 +102,7 @@ func run() error {
 		if msg.TargetUserID == "" {
 			logger.Warn("Incoming P2P message dropped: missing target_user_id in message envelope",
 				logging.F("from_peer", fromPeerID),
-				logging.F("protocol", msg.ProtocolType),
+				logging.F("app_id", msg.AppID),
 			)
 			return fmt.Errorf("missing target_user_id")
 		}
@@ -110,14 +110,14 @@ func run() error {
 		logger.Info("Routing incoming P2P message to app webhook",
 			logging.F("from_peer", fromPeerID),
 			logging.F("target_user", msg.TargetUserID),
-			logging.F("app_id", msg.ProtocolType),
+			logging.F("app_id", msg.AppID),
 		)
 
 		// Dispatch message payload to the local app's container webhook endpoint.
 		// Set source app ID as "p2p-gateway" and source user ID as "peer:" + fromPeerID.
 		_, err := orch.DispatchWebhook(
 			ctx,
-			msg.ProtocolType,
+			msg.AppID,
 			msg.TargetUserID,
 			"p2p-gateway",
 			"peer:"+fromPeerID,
@@ -127,7 +127,7 @@ func run() error {
 			logger.Error("Failed to dispatch incoming P2P message webhook",
 				logging.F("from_peer", fromPeerID),
 				logging.F("target_user", msg.TargetUserID),
-				logging.F("app_id", msg.ProtocolType),
+				logging.F("app_id", msg.AppID),
 				logging.F("error", err.Error()),
 			)
 			return err

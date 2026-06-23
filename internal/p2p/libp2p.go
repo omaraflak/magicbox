@@ -169,10 +169,10 @@ func (s *Libp2pService) Multiaddrs() []string {
 }
 
 // RegisterHandler registers a message handler for a protocol type.
-func (s *Libp2pService) RegisterHandler(protocolType string, handler Handler) {
+func (s *Libp2pService) RegisterHandler(appID string, handler Handler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.handlers[protocolType] = handler
+	s.handlers[appID] = handler
 }
 
 // SetDefaultHandler registers a fallback handler for any unhandled protocol type.
@@ -260,7 +260,7 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 		}
 
 		s.mu.RLock()
-		handler, exists := s.handlers[msg.ProtocolType]
+		handler, exists := s.handlers[msg.AppID]
 		if !exists {
 			handler = s.defaultHandler
 			exists = handler != nil
@@ -269,7 +269,7 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 
 		if !exists {
 			s.logger.Error("libp2p: unhandled protocol message type",
-				logging.F("type", msg.ProtocolType),
+				logging.F("type", msg.AppID),
 				logging.F("from", fromPeer))
 			continue
 		}
@@ -277,7 +277,7 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 		ctx := context.Background()
 		if err := handler(ctx, fromPeer, &msg); err != nil {
 			s.logger.Error("libp2p: handler failed for protocol type",
-				logging.F("type", msg.ProtocolType),
+				logging.F("type", msg.AppID),
 				logging.F("from", fromPeer),
 				logging.F("error", err.Error()))
 		}

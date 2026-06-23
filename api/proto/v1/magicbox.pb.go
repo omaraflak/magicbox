@@ -361,7 +361,7 @@ func (x *SharedVolume) GetAccess() string {
 type SendToContactRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ContactId     string                 `protobuf:"bytes,1,opt,name=contact_id,json=contactId,proto3" json:"contact_id,omitempty"`
-	ProtocolType  string                 `protobuf:"bytes,2,opt,name=protocol_type,json=protocolType,proto3" json:"protocol_type,omitempty"`
+	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -404,9 +404,9 @@ func (x *SendToContactRequest) GetContactId() string {
 	return ""
 }
 
-func (x *SendToContactRequest) GetProtocolType() string {
+func (x *SendToContactRequest) GetAppId() string {
 	if x != nil {
-		return x.ProtocolType
+		return x.AppId
 	}
 	return ""
 }
@@ -633,11 +633,11 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\avolumes\x18\x01 \x03(\v2\x19.magicbox.v1.SharedVolumeR\avolumes\":\n" +
 	"\fSharedVolume\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06access\x18\x02 \x01(\tR\x06access\"t\n" +
+	"\x06access\x18\x02 \x01(\tR\x06access\"f\n" +
 	"\x14SendToContactRequest\x12\x1d\n" +
 	"\n" +
-	"contact_id\x18\x01 \x01(\tR\tcontactId\x12#\n" +
-	"\rprotocol_type\x18\x02 \x01(\tR\fprotocolType\x12\x18\n" +
+	"contact_id\x18\x01 \x01(\tR\tcontactId\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\"X\n" +
 	"\x15SendToContactResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12%\n" +

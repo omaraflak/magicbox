@@ -252,7 +252,7 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 
 	// Dispatch message directly to the remote peer multiaddress over libp2p
 	msg := &p2p.Message{
-		ProtocolType: req.ProtocolType,
+		AppID:        req.AppId,
 		TargetUserID: targetUserID,
 		Payload:      req.Payload,
 	}

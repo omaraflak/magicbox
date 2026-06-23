@@ -93,8 +93,8 @@ func TestLibp2pServiceFlow(t *testing.T) {
 	}
 
 	testMsg := &Message{
-		ProtocolType: "com.magicbox.test",
-		Payload:      []byte("Hello from peer 1!"),
+		AppID:   "com.magicbox.test",
+		Payload: []byte("Hello from peer 1!"),
 	}
 
 	err = srv1.SendTo(ctx, targetAddr, testMsg)
@@ -150,8 +150,8 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 	targetAddr := addrs2[0]
 
 	testMsg := &Message{
-		ProtocolType: "com.magicbox.unhandled",
-		Payload:      []byte("Some data"),
+		AppID:   "com.magicbox.unhandled",
+		Payload: []byte("Some data"),
 	}
 
 	var wg sync.WaitGroup
