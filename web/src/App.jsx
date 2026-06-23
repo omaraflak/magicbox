@@ -4,6 +4,7 @@ import SetupView from './components/SetupView';
 import LoginView from './components/LoginView';
 import DashboardView from './components/DashboardView';
 import AdminConsoleView from './components/AdminConsoleView';
+import SettingsView from './components/SettingsView';
 
 // Modals
 import InstallAppModal from './components/InstallAppModal';
@@ -251,6 +252,22 @@ export default function App() {
         window.history.replaceState(null, '', '/');
     };
 
+    const handleUpdatePassword = async (currentPassword, newPassword) => {
+        setActionLoading(true);
+        setActionError('');
+        const { status, data } = await callAPI('POST', '/me/password', {
+            current_password: currentPassword,
+            new_password: newPassword,
+        });
+        setActionLoading(false);
+        if (status === 200) {
+            showAlert('Password updated successfully!', 'Success');
+            navigate('dashboard');
+        } else {
+            setActionError(data?.error || 'Failed to update password');
+        }
+    };
+
     // App Control: Start
     const handleStartApp = async (id) => {
         setStartingAppId(id);
@@ -467,6 +484,16 @@ export default function App() {
                         logLevel={logLevel}
                         onLogLevelChange={handleLogLevelChange}
                         onRefreshLogs={() => loadLogs(logLevel)}
+                    />
+                )}
+
+                {view === 'settings' && (
+                    <SettingsView 
+                        user={user}
+                        onSubmit={handleUpdatePassword} 
+                        error={actionError} 
+                        loading={actionLoading}
+                        onBack={() => navigate('dashboard')}
                     />
                 )}
             </div>

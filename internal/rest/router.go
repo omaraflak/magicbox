@@ -48,6 +48,7 @@ func (s *Server) Handler() http.Handler {
 	auth := AuthMiddleware(s.cfg.JWTSecret)
 
 	mux.Handle("GET /api/v1/me", auth(http.HandlerFunc(s.handleMe)))
+	mux.Handle("POST /api/v1/me/password", auth(http.HandlerFunc(s.handleUpdatePassword)))
 	mux.Handle("GET /api/v1/apps", auth(http.HandlerFunc(s.handleListApps)))
 	mux.Handle("POST /api/v1/apps/install", auth(http.HandlerFunc(s.handleInstallApp)))
 	mux.Handle("DELETE /api/v1/apps/{id}", auth(http.HandlerFunc(s.handleUninstallApp)))

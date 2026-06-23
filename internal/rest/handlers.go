@@ -738,3 +738,49 @@ func (s *Server) handleAdminListLogs(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, lines)
 }
+
+func (s *Server) handleUpdatePassword(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "current_password and new_password are required")
+		return
+	}
+
+	user, err := s.db.GetUserByID(claims.UserID)
+	if err != nil || user == nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid current password")
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcryptCost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	if err := s.db.UpdateUserPassword(claims.UserID, string(hash)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update password: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
+}

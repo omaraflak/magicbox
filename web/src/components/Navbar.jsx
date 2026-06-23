@@ -21,7 +21,13 @@ export default function Navbar({ title, user, onLogout, adminView, onToggleView 
                 )}
                 {user && (
                     <>
-                        <span className="user-badge">{user.username}</span>
+                        <span 
+                            className="user-badge clickable" 
+                            onClick={() => onToggleView('settings')}
+                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        >
+                            <span className="user-icon">👤</span> {user.username}
+                        </span>
                         <button className="btn btn-logout nav-btn" onClick={onLogout}>
                             Logout
                         </button>

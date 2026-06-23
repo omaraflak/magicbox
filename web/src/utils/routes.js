@@ -7,6 +7,7 @@ export const ROUTES = {
     ADMIN_USERS: '/admin',          // users is the default admin tab
     ADMIN_REGISTRIES: '/admin/registries',
     ADMIN_LOGS: '/admin/logs',
+    SETTINGS: '/settings',
 };
 
 // Valid admin tab segments (used to parse URL paths).
@@ -23,18 +24,24 @@ export function viewFromPath(pathname) {
         const tab = ADMIN_TABS.includes(segment) ? segment : 'users';
         return { view: 'admin', tab };
     }
+    if (pathname === '/settings') {
+        return { view: 'settings', tab: 'users' };
+    }
     return { view: 'dashboard', tab: 'users' };
 }
 
 /**
  * Build a URL path for a given view and optional admin tab.
- * @param {string} view - 'dashboard' or 'admin'
+ * @param {string} view - 'dashboard', 'admin', or 'settings'
  * @param {string} [tab] - 'users', 'registries', or 'logs'
  * @returns {string}
  */
 export function pathFromView(view, tab = 'users') {
     if (view === 'admin') {
         return tab === 'users' ? ROUTES.ADMIN : `/admin/${tab}`;
+    }
+    if (view === 'settings') {
+        return ROUTES.SETTINGS;
     }
     return ROUTES.DASHBOARD;
 }

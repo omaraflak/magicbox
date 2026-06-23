@@ -66,6 +66,15 @@ func (d *DB) CreateUser(id, username, passwordHash string, isAdmin bool) error {
 	return err
 }
 
+// UpdateUserPassword updates the password hash for a specific user ID.
+func (d *DB) UpdateUserPassword(id, passwordHash string) error {
+	_, err := d.conn.Exec(
+		`UPDATE users SET password_hash = ? WHERE id = ?`,
+		passwordHash, id,
+	)
+	return err
+}
+
 // GetUserByID returns a user by their ID, or (nil, nil) if not found.
 func (d *DB) GetUserByID(id string) (*User, error) {
 	row := d.conn.QueryRow(
