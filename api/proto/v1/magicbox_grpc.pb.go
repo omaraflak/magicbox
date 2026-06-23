@@ -23,6 +23,7 @@ const (
 	MagicboxOS_GetProfile_FullMethodName        = "/magicbox.v1.MagicboxOS/GetProfile"
 	MagicboxOS_ListSharedVolumes_FullMethodName = "/magicbox.v1.MagicboxOS/ListSharedVolumes"
 	MagicboxOS_SendToContact_FullMethodName     = "/magicbox.v1.MagicboxOS/SendToContact"
+	MagicboxOS_ListContacts_FullMethodName      = "/magicbox.v1.MagicboxOS/ListContacts"
 )
 
 // MagicboxOSClient is the client API for MagicboxOS service.
@@ -49,6 +50,9 @@ type MagicboxOSClient interface {
 	// SendToContact signs and encrypts a message at the transport layer,
 	// then dispatches it directly to a federated contact over the libp2p network.
 	SendToContact(ctx context.Context, in *SendToContactRequest, opts ...grpc.CallOption) (*SendToContactResponse, error)
+	// ListContacts returns the owning user's contact list.
+	// Requires scope: contacts:read
+	ListContacts(ctx context.Context, in *ListContactsRequest, opts ...grpc.CallOption) (*ListContactsResponse, error)
 }
 
 type magicboxOSClient struct {
@@ -99,6 +103,16 @@ func (c *magicboxOSClient) SendToContact(ctx context.Context, in *SendToContactR
 	return out, nil
 }
 
+func (c *magicboxOSClient) ListContacts(ctx context.Context, in *ListContactsRequest, opts ...grpc.CallOption) (*ListContactsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListContactsResponse)
+	err := c.cc.Invoke(ctx, MagicboxOS_ListContacts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MagicboxOSServer is the server API for MagicboxOS service.
 // All implementations must embed UnimplementedMagicboxOSServer
 // for forward compatibility.
@@ -123,6 +137,9 @@ type MagicboxOSServer interface {
 	// SendToContact signs and encrypts a message at the transport layer,
 	// then dispatches it directly to a federated contact over the libp2p network.
 	SendToContact(context.Context, *SendToContactRequest) (*SendToContactResponse, error)
+	// ListContacts returns the owning user's contact list.
+	// Requires scope: contacts:read
+	ListContacts(context.Context, *ListContactsRequest) (*ListContactsResponse, error)
 	mustEmbedUnimplementedMagicboxOSServer()
 }
 
@@ -144,6 +161,9 @@ func (UnimplementedMagicboxOSServer) ListSharedVolumes(context.Context, *ListSha
 }
 func (UnimplementedMagicboxOSServer) SendToContact(context.Context, *SendToContactRequest) (*SendToContactResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendToContact not implemented")
+}
+func (UnimplementedMagicboxOSServer) ListContacts(context.Context, *ListContactsRequest) (*ListContactsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListContacts not implemented")
 }
 func (UnimplementedMagicboxOSServer) mustEmbedUnimplementedMagicboxOSServer() {}
 func (UnimplementedMagicboxOSServer) testEmbeddedByValue()                    {}
@@ -238,6 +258,24 @@ func _MagicboxOS_SendToContact_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MagicboxOS_ListContacts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListContactsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MagicboxOSServer).ListContacts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MagicboxOS_ListContacts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MagicboxOSServer).ListContacts(ctx, req.(*ListContactsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MagicboxOS_ServiceDesc is the grpc.ServiceDesc for MagicboxOS service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -260,6 +298,10 @@ var MagicboxOS_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendToContact",
 			Handler:    _MagicboxOS_SendToContact_Handler,
+		},
+		{
+			MethodName: "ListContacts",
+			Handler:    _MagicboxOS_ListContacts_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

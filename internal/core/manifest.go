@@ -41,7 +41,7 @@ var (
 	appIDRegex     = regexp.MustCompile(`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*){2,}$`)
 	semverRegex    = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 	routeSlugRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$`)
-	scopeRegex     = regexp.MustCompile(`^(profile:read|shared:[a-z][a-z0-9-]*:(ro|rw))$`)
+	scopeRegex     = regexp.MustCompile(`^(profile:read|contacts:read|shared:[a-z][a-z0-9-]*:(ro|rw))$`)
 	volumeNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	hostRegex       = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$`)
 )

@@ -12,6 +12,9 @@ func ScopeToHumanReadable(scope string) string {
 	if scope == "profile:read" {
 		return "Read your profile information"
 	}
+	if scope == "contacts:read" {
+		return "Read your contacts list"
+	}
 
 	parts := strings.Split(scope, ":")
 	if len(parts) != 3 || parts[0] != "shared" {

@@ -269,6 +269,37 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 }
 
 // ---------------------------------------------------------------------------
+// ListContacts
+// ---------------------------------------------------------------------------
+
+func (s *RPCServer) ListContacts(ctx context.Context, _ *pb.ListContactsRequest) (*pb.ListContactsResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	if !hasScope(claims.Scopes, "contacts:read") {
+		return nil, status.Error(codes.PermissionDenied, "missing scope: contacts:read")
+	}
+
+	contacts, err := s.db.GetContacts(claims.UserID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "database query error: %v", err)
+	}
+
+	var pbContacts []*pb.Contact
+	for _, c := range contacts {
+		pbContacts = append(pbContacts, &pb.Contact{
+			Id:          c.ID,
+			DisplayName: c.DisplayName,
+			Multiaddr:   c.Multiaddr,
+		})
+	}
+
+	return &pb.ListContactsResponse{Contacts: pbContacts}, nil
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

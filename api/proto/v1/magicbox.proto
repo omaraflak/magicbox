@@ -28,6 +28,10 @@ service MagicboxOS {
   // SendToContact signs and encrypts a message at the transport layer,
   // then dispatches it directly to a federated contact over the libp2p network.
   rpc SendToContact(SendToContactRequest) returns (SendToContactResponse);
+
+  // ListContacts returns the owning user's contact list.
+  // Requires scope: contacts:read
+  rpc ListContacts(ListContactsRequest) returns (ListContactsResponse);
 }
 
 // --------------------------------------------------------------------------
@@ -89,4 +93,20 @@ message SendToContactRequest {
 message SendToContactResponse {
   bool success = 1;
   string status_message = 2;
+}
+
+// --------------------------------------------------------------------------
+// ListContacts
+// --------------------------------------------------------------------------
+
+message ListContactsRequest {}
+
+message ListContactsResponse {
+  repeated Contact contacts = 1;
+}
+
+message Contact {
+  string id = 1;
+  string display_name = 2;
+  string multiaddr = 3;
 }
