@@ -869,7 +869,7 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inviteLink := fmt.Sprintf("magicbox://invite/%s", peerID)
+	inviteLink := fmt.Sprintf("magicbox://invite/%s?user_id=%s", peerID, claims.UserID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"peer_id":      peerID,

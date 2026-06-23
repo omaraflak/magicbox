@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -244,9 +245,15 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 		return nil, status.Errorf(codes.NotFound, "contact %q not found", req.ContactId)
 	}
 
+	targetUserID := ""
+	if u, parseErr := url.Parse(contact.Multiaddr); parseErr == nil {
+		targetUserID = u.Query().Get("user_id")
+	}
+
 	// Dispatch message directly to the remote peer multiaddress over libp2p
 	msg := &p2p.Message{
 		ProtocolType: req.ProtocolType,
+		TargetUserID: targetUserID,
 		Payload:      req.Payload,
 	}
 

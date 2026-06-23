@@ -7,6 +7,7 @@ import (
 // Message represents a payload sent between peers.
 type Message struct {
 	ProtocolType string `json:"protocol_type"`
+	TargetUserID string `json:"target_user_id"`
 	Payload      []byte `json:"payload"`
 }
 

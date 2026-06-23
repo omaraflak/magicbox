@@ -97,6 +97,44 @@ func run() error {
 	}
 	defer p2pService.Stop()
 
+	// Register generic P2P routing callback handler that forwards received P2P payloads to target app webhooks.
+	p2pService.SetDefaultHandler(func(ctx context.Context, fromPeerID string, msg *p2p.Message) error {
+		if msg.TargetUserID == "" {
+			logger.Warn("Incoming P2P message dropped: missing target_user_id in message envelope",
+				logging.F("from_peer", fromPeerID),
+				logging.F("protocol", msg.ProtocolType),
+			)
+			return fmt.Errorf("missing target_user_id")
+		}
+
+		logger.Info("Routing incoming P2P message to app webhook",
+			logging.F("from_peer", fromPeerID),
+			logging.F("target_user", msg.TargetUserID),
+			logging.F("app_id", msg.ProtocolType),
+		)
+
+		// Dispatch message payload to the local app's container webhook endpoint.
+		// Set source app ID as "p2p-gateway" and source user ID as "peer:" + fromPeerID.
+		_, err := orch.DispatchWebhook(
+			ctx,
+			msg.ProtocolType,
+			msg.TargetUserID,
+			"p2p-gateway",
+			"peer:"+fromPeerID,
+			msg.Payload,
+		)
+		if err != nil {
+			logger.Error("Failed to dispatch incoming P2P message webhook",
+				logging.F("from_peer", fromPeerID),
+				logging.F("target_user", msg.TargetUserID),
+				logging.F("app_id", msg.ProtocolType),
+				logging.F("error", err.Error()),
+			)
+			return err
+		}
+		return nil
+	})
+
 	// 10. Start gRPC server in a goroutine.
 	rpcServer := rpc.NewRPCServer(database, dockerClient, orch, logger, cfg, p2pService)
 	go func() {

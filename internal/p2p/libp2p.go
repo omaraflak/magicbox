@@ -30,8 +30,9 @@ type Libp2pService struct {
 	dht         *dht.IpfsDHT
 	logger      *logging.Logger
 
-	mu       sync.RWMutex
-	handlers map[string]Handler
+	mu             sync.RWMutex
+	handlers       map[string]Handler
+	defaultHandler Handler
 }
 
 // NewLibp2pService creates a new libp2p service instance.
@@ -174,6 +175,13 @@ func (s *Libp2pService) RegisterHandler(protocolType string, handler Handler) {
 	s.handlers[protocolType] = handler
 }
 
+// SetDefaultHandler registers a fallback handler for any unhandled protocol type.
+func (s *Libp2pService) SetDefaultHandler(handler Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.defaultHandler = handler
+}
+
 // SendTo resolves the peer target (which can be a Peer ID, a magicbox://invite link, or a full multiaddress) and writes the message payload.
 func (s *Libp2pService) SendTo(ctx context.Context, target string, msg *Message) error {
 	if s.host == nil {
@@ -253,6 +261,10 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 
 		s.mu.RLock()
 		handler, exists := s.handlers[msg.ProtocolType]
+		if !exists {
+			handler = s.defaultHandler
+			exists = handler != nil
+		}
 		s.mu.RUnlock()
 
 		if !exists {
