@@ -82,11 +82,8 @@ export default function SettingsView({
                     </button>
                 )}
 
-                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px' }}>
-                    <button className="btn btn-secondary btn-block" onClick={onBack}>
-                        ← Back to Console
-                    </button>
-                    <button className="btn btn-danger btn-block" onClick={onLogout} style={{ marginTop: '4px' }}>
+                <div style={{ marginTop: 'auto', padding: '10px' }}>
+                    <button className="btn btn-danger btn-block" onClick={onLogout}>
                         🚪 Logout
                     </button>
                 </div>
