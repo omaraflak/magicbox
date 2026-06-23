@@ -43,11 +43,12 @@ type AppToken struct {
 
 // Contact represents a federated P2P contact.
 type Contact struct {
-	ID          string `json:"id"`
-	UserID      string `json:"user_id"`
-	DisplayName string `json:"display_name"`
-	Multiaddr   string `json:"multiaddr"`
-	CreatedAt   string `json:"created_at"`
+	ID           string `json:"id"`
+	UserID       string `json:"user_id"`
+	DisplayName  string `json:"display_name"`
+	Multiaddr    string `json:"multiaddr"`
+	TargetUserID string `json:"target_user_id"`
+	CreatedAt    string `json:"created_at"`
 }
 
 // Registry represents an allowed container image registry prefix.
@@ -460,7 +461,7 @@ func scanApps(rows *sql.Rows) ([]App, error) {
 
 // GetContacts returns all contacts for the given user.
 func (d *DB) GetContacts(userID string) ([]Contact, error) {
-	rows, err := d.conn.Query(`SELECT id, user_id, display_name, multiaddr, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, multiaddr, target_user_id, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +470,7 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.TargetUserID, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		contacts = append(contacts, c)
@@ -479,9 +480,9 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 
 // GetContactByID fetches a contact by ID and owner userID.
 func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
-	row := d.conn.QueryRow(`SELECT id, user_id, display_name, multiaddr, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, multiaddr, target_user_id, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
 	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.TargetUserID, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -492,11 +493,11 @@ func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
 }
 
 // AddContact inserts a new contact into the database.
-func (d *DB) AddContact(id, userID, displayName, multiaddr string) error {
+func (d *DB) AddContact(id, userID, displayName, multiaddr, targetUserID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := d.conn.Exec(
-		`INSERT INTO contacts (id, user_id, display_name, multiaddr, created_at) VALUES (?, ?, ?, ?, ?)`,
-		id, userID, displayName, multiaddr, now,
+		`INSERT INTO contacts (id, user_id, display_name, multiaddr, target_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, userID, displayName, multiaddr, targetUserID, now,
 	)
 	return err
 }

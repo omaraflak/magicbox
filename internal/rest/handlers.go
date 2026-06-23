@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -822,16 +823,26 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	targetUserID := ""
+	if u, parseErr := url.Parse(req.Multiaddr); parseErr == nil {
+		targetUserID = u.Query().Get("user_id")
+	}
+	if targetUserID == "" {
+		writeError(w, http.StatusBadRequest, "invalid multiaddr: missing user_id query parameter")
+		return
+	}
+
 	id := uuid.NewString()
-	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, req.Multiaddr); err != nil {
+	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, req.Multiaddr, targetUserID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save contact: "+err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]string{
-		"id":           id,
-		"display_name": req.DisplayName,
-		"multiaddr":   req.Multiaddr,
+		"id":             id,
+		"display_name":   req.DisplayName,
+		"multiaddr":      req.Multiaddr,
+		"target_user_id": targetUserID,
 	})
 }
 

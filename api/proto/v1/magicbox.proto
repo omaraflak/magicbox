@@ -109,4 +109,5 @@ message Contact {
   string id = 1;
   string display_name = 2;
   string multiaddr = 3;
+  string target_user_id = 4;
 }

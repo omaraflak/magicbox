@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -246,10 +245,7 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 		return nil, status.Errorf(codes.NotFound, "contact %q not found", req.ContactId)
 	}
 
-	targetUserID := ""
-	if u, parseErr := url.Parse(contact.Multiaddr); parseErr == nil {
-		targetUserID = u.Query().Get("user_id")
-	}
+	targetUserID := contact.TargetUserID
 
 	// Check if the contact's peer ID matches our local host ID (loopback/local transfer)
 	isLocal := strings.Contains(contact.Multiaddr, s.p2pService.HostID())
@@ -323,9 +319,10 @@ func (s *RPCServer) ListContacts(ctx context.Context, _ *pb.ListContactsRequest)
 	var pbContacts []*pb.Contact
 	for _, c := range contacts {
 		pbContacts = append(pbContacts, &pb.Contact{
-			Id:          c.ID,
-			DisplayName: c.DisplayName,
-			Multiaddr:   c.Multiaddr,
+			Id:           c.ID,
+			DisplayName:  c.DisplayName,
+			Multiaddr:    c.Multiaddr,
+			TargetUserId: c.TargetUserID,
 		})
 	}
 

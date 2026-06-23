@@ -596,17 +596,19 @@ func handleListContacts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type ContactJSON struct {
-		ID          string `json:"id"`
-		DisplayName string `json:"display_name"`
-		Multiaddr   string `json:"multiaddr"`
+		ID           string `json:"id"`
+		DisplayName  string `json:"display_name"`
+		Multiaddr    string `json:"multiaddr"`
+		TargetUserID string `json:"target_user_id"`
 	}
 
 	var contacts []ContactJSON
 	for _, c := range resp.Contacts {
 		contacts = append(contacts, ContactJSON{
-			ID:          c.Id,
-			DisplayName: c.DisplayName,
-			Multiaddr:   c.Multiaddr,
+			ID:           c.Id,
+			DisplayName:  c.DisplayName,
+			Multiaddr:    c.Multiaddr,
+			TargetUserID: c.TargetUserId,
 		})
 	}
 

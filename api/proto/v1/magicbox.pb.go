@@ -555,6 +555,7 @@ type Contact struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Multiaddr     string                 `protobuf:"bytes,3,opt,name=multiaddr,proto3" json:"multiaddr,omitempty"`
+	TargetUserId  string                 `protobuf:"bytes,4,opt,name=target_user_id,json=targetUserId,proto3" json:"target_user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -610,6 +611,13 @@ func (x *Contact) GetMultiaddr() string {
 	return ""
 }
 
+func (x *Contact) GetTargetUserId() string {
+	if x != nil {
+		return x.TargetUserId
+	}
+	return ""
+}
+
 var File_api_proto_v1_magicbox_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_magicbox_proto_rawDesc = "" +
@@ -644,11 +652,12 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage\"\x15\n" +
 	"\x13ListContactsRequest\"H\n" +
 	"\x14ListContactsResponse\x120\n" +
-	"\bcontacts\x18\x01 \x03(\v2\x14.magicbox.v1.ContactR\bcontacts\"Z\n" +
+	"\bcontacts\x18\x01 \x03(\v2\x14.magicbox.v1.ContactR\bcontacts\"\x80\x01\n" +
 	"\aContact\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1c\n" +
-	"\tmultiaddr\x18\x03 \x01(\tR\tmultiaddr2\xbe\x03\n" +
+	"\tmultiaddr\x18\x03 \x01(\tR\tmultiaddr\x12$\n" +
+	"\x0etarget_user_id\x18\x04 \x01(\tR\ftargetUserId2\xbe\x03\n" +
 	"\n" +
 	"MagicboxOS\x12P\n" +
 	"\vSendWebhook\x12\x1f.magicbox.v1.SendWebhookRequest\x1a .magicbox.v1.SendWebhookResponse\x12M\n" +

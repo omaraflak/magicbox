@@ -61,6 +61,7 @@ func (d *DB) Migrate() error {
 			user_id TEXT NOT NULL REFERENCES users(id),
 			display_name TEXT NOT NULL,
 			multiaddr TEXT NOT NULL,
+			target_user_id TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			UNIQUE(user_id, multiaddr)
 		)`,
@@ -77,6 +78,7 @@ func (d *DB) Migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN host TEXT`)
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN entry_port INTEGER DEFAULT 8080`)
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN webhook_path TEXT DEFAULT '/internal/magicbox-webhook'`)
+	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN target_user_id TEXT NOT NULL DEFAULT ''`)
 
 	// Seed default allowed registry.
 	now := time.Now().UTC().Format(time.RFC3339)
