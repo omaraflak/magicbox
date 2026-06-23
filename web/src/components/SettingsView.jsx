@@ -110,7 +110,7 @@ export default function SettingsView({
                     className={`sidebar-item ${activeSection === 'contacts' ? 'active' : ''}`}
                     onClick={() => onSectionChange('contacts')}
                 >
-                    👥 P2P Contacts
+                    👥 Contacts
                 </button>
 
                 {user?.is_admin && (
@@ -222,13 +222,13 @@ export default function SettingsView({
                 {activeSection === 'contacts' && (
                     <div>
                         <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '32px' }}>
-                            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>P2P Contacts</h1>
+                            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>Contacts</h1>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '6px' }}>Manage secure connections and copy your invite code.</p>
                         </div>
 
                         {/* My Sharing Link Section */}
                         <div style={{ marginBottom: '40px' }}>
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>My Sharing Link</h3>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Sharing Link</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>Share this link with friends so they can add you as a contact.</p>
                             <div style={{ display: 'flex', gap: '8px', maxWidth: '800px' }}>
                                 <input 
@@ -245,21 +245,21 @@ export default function SettingsView({
 
                         {/* Add Contact Form Section */}
                         <div style={{ marginBottom: '40px' }}>
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>Add New Contact</h3>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>New Contact</h3>
                             <form onSubmit={handleContactSubmit}>
                                 <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                     <div className="form-group" style={{ flex: '1 1 250px', marginBottom: '16px' }}>
                                         <label style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>Display Name</label>
                                         <input 
                                             type="text" 
-                                            placeholder="e.g. Omar" 
+                                            placeholder="e.g. Omar Aflak" 
                                             value={contactName}
                                             onChange={(e) => setContactName(e.target.value)}
                                             style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                                         />
                                     </div>
                                     <div className="form-group" style={{ flex: '2 1 450px', marginBottom: '16px' }}>
-                                        <label style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>Invitation String (Multiaddress)</label>
+                                        <label style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', display: 'block' }}>Invitation String</label>
                                         <input 
                                             type="text"
                                             placeholder="magicbox://invite/QmbQGs..." 
@@ -285,7 +285,7 @@ export default function SettingsView({
 
                         {/* Contacts Directory List Section */}
                         <div style={{ marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>Contact Directory</h3>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>Contacts</h3>
                             {contacts.length === 0 ? (
                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic', padding: '24px 0', borderTop: '1px solid var(--border-color)' }}>
                                     No contacts added yet. Add a contact above to start sharing files and communicating!
