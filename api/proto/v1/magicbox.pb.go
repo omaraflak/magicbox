@@ -358,6 +358,118 @@ func (x *SharedVolume) GetAccess() string {
 	return ""
 }
 
+type SendToContactRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContactId     string                 `protobuf:"bytes,1,opt,name=contact_id,json=contactId,proto3" json:"contact_id,omitempty"`
+	ProtocolType  string                 `protobuf:"bytes,2,opt,name=protocol_type,json=protocolType,proto3" json:"protocol_type,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendToContactRequest) Reset() {
+	*x = SendToContactRequest{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendToContactRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendToContactRequest) ProtoMessage() {}
+
+func (x *SendToContactRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendToContactRequest.ProtoReflect.Descriptor instead.
+func (*SendToContactRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SendToContactRequest) GetContactId() string {
+	if x != nil {
+		return x.ContactId
+	}
+	return ""
+}
+
+func (x *SendToContactRequest) GetProtocolType() string {
+	if x != nil {
+		return x.ProtocolType
+	}
+	return ""
+}
+
+func (x *SendToContactRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+type SendToContactResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	StatusMessage string                 `protobuf:"bytes,2,opt,name=status_message,json=statusMessage,proto3" json:"status_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendToContactResponse) Reset() {
+	*x = SendToContactResponse{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendToContactResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendToContactResponse) ProtoMessage() {}
+
+func (x *SendToContactResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendToContactResponse.ProtoReflect.Descriptor instead.
+func (*SendToContactResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SendToContactResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SendToContactResponse) GetStatusMessage() string {
+	if x != nil {
+		return x.StatusMessage
+	}
+	return ""
+}
+
 var File_api_proto_v1_magicbox_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_magicbox_proto_rawDesc = "" +
@@ -381,13 +493,22 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\avolumes\x18\x01 \x03(\v2\x19.magicbox.v1.SharedVolumeR\avolumes\":\n" +
 	"\fSharedVolume\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06access\x18\x02 \x01(\tR\x06access2\x91\x02\n" +
+	"\x06access\x18\x02 \x01(\tR\x06access\"t\n" +
+	"\x14SendToContactRequest\x12\x1d\n" +
+	"\n" +
+	"contact_id\x18\x01 \x01(\tR\tcontactId\x12#\n" +
+	"\rprotocol_type\x18\x02 \x01(\tR\fprotocolType\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\"X\n" +
+	"\x15SendToContactResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12%\n" +
+	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage2\xe9\x02\n" +
 	"\n" +
 	"MagicboxOS\x12P\n" +
 	"\vSendWebhook\x12\x1f.magicbox.v1.SendWebhookRequest\x1a .magicbox.v1.SendWebhookResponse\x12M\n" +
 	"\n" +
 	"GetProfile\x12\x1e.magicbox.v1.GetProfileRequest\x1a\x1f.magicbox.v1.GetProfileResponse\x12b\n" +
-	"\x11ListSharedVolumes\x12%.magicbox.v1.ListSharedVolumesRequest\x1a&.magicbox.v1.ListSharedVolumesResponseB2Z0github.com/magicbox/core/api/proto/v1;magicboxpbb\x06proto3"
+	"\x11ListSharedVolumes\x12%.magicbox.v1.ListSharedVolumesRequest\x1a&.magicbox.v1.ListSharedVolumesResponse\x12V\n" +
+	"\rSendToContact\x12!.magicbox.v1.SendToContactRequest\x1a\".magicbox.v1.SendToContactResponseB2Z0github.com/magicbox/core/api/proto/v1;magicboxpbb\x06proto3"
 
 var (
 	file_api_proto_v1_magicbox_proto_rawDescOnce sync.Once
@@ -401,7 +522,7 @@ func file_api_proto_v1_magicbox_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_magicbox_proto_rawDescData
 }
 
-var file_api_proto_v1_magicbox_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_api_proto_v1_magicbox_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_api_proto_v1_magicbox_proto_goTypes = []any{
 	(*SendWebhookRequest)(nil),        // 0: magicbox.v1.SendWebhookRequest
 	(*SendWebhookResponse)(nil),       // 1: magicbox.v1.SendWebhookResponse
@@ -410,17 +531,21 @@ var file_api_proto_v1_magicbox_proto_goTypes = []any{
 	(*ListSharedVolumesRequest)(nil),  // 4: magicbox.v1.ListSharedVolumesRequest
 	(*ListSharedVolumesResponse)(nil), // 5: magicbox.v1.ListSharedVolumesResponse
 	(*SharedVolume)(nil),              // 6: magicbox.v1.SharedVolume
+	(*SendToContactRequest)(nil),      // 7: magicbox.v1.SendToContactRequest
+	(*SendToContactResponse)(nil),     // 8: magicbox.v1.SendToContactResponse
 }
 var file_api_proto_v1_magicbox_proto_depIdxs = []int32{
 	6, // 0: magicbox.v1.ListSharedVolumesResponse.volumes:type_name -> magicbox.v1.SharedVolume
 	0, // 1: magicbox.v1.MagicboxOS.SendWebhook:input_type -> magicbox.v1.SendWebhookRequest
 	2, // 2: magicbox.v1.MagicboxOS.GetProfile:input_type -> magicbox.v1.GetProfileRequest
 	4, // 3: magicbox.v1.MagicboxOS.ListSharedVolumes:input_type -> magicbox.v1.ListSharedVolumesRequest
-	1, // 4: magicbox.v1.MagicboxOS.SendWebhook:output_type -> magicbox.v1.SendWebhookResponse
-	3, // 5: magicbox.v1.MagicboxOS.GetProfile:output_type -> magicbox.v1.GetProfileResponse
-	5, // 6: magicbox.v1.MagicboxOS.ListSharedVolumes:output_type -> magicbox.v1.ListSharedVolumesResponse
-	4, // [4:7] is the sub-list for method output_type
-	1, // [1:4] is the sub-list for method input_type
+	7, // 4: magicbox.v1.MagicboxOS.SendToContact:input_type -> magicbox.v1.SendToContactRequest
+	1, // 5: magicbox.v1.MagicboxOS.SendWebhook:output_type -> magicbox.v1.SendWebhookResponse
+	3, // 6: magicbox.v1.MagicboxOS.GetProfile:output_type -> magicbox.v1.GetProfileResponse
+	5, // 7: magicbox.v1.MagicboxOS.ListSharedVolumes:output_type -> magicbox.v1.ListSharedVolumesResponse
+	8, // 8: magicbox.v1.MagicboxOS.SendToContact:output_type -> magicbox.v1.SendToContactResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -437,7 +562,7 @@ func file_api_proto_v1_magicbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_magicbox_proto_rawDesc), len(file_api_proto_v1_magicbox_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

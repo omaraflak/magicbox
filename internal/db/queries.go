@@ -41,6 +41,15 @@ type AppToken struct {
 	CreatedAt   string
 }
 
+// Contact represents a federated P2P contact.
+type Contact struct {
+	ID          string
+	UserID      string
+	DisplayName string
+	Multiaddr   string
+	CreatedAt   string
+}
+
 // Registry represents an allowed container image registry prefix.
 type Registry struct {
 	ID        string
@@ -447,4 +456,53 @@ func scanApps(rows *sql.Rows) ([]App, error) {
 		apps = append(apps, *a)
 	}
 	return apps, rows.Err()
+}
+
+// GetContacts returns all contacts for the given user.
+func (d *DB) GetContacts(userID string) ([]Contact, error) {
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, multiaddr, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contacts []Contact
+	for rows.Next() {
+		var c Contact
+		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		contacts = append(contacts, c)
+	}
+	return contacts, rows.Err()
+}
+
+// GetContactByID fetches a contact by ID and owner userID.
+func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, multiaddr, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
+	var c Contact
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// AddContact inserts a new contact into the database.
+func (d *DB) AddContact(id, userID, displayName, multiaddr string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := d.conn.Exec(
+		`INSERT INTO contacts (id, user_id, display_name, multiaddr, created_at) VALUES (?, ?, ?, ?, ?)`,
+		id, userID, displayName, multiaddr, now,
+	)
+	return err
+}
+
+// DeleteContact deletes a contact by ID and owner userID.
+func (d *DB) DeleteContact(id string, userID string) error {
+	_, err := d.conn.Exec(`DELETE FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
+	return err
 }

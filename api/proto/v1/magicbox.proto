@@ -24,6 +24,10 @@ service MagicboxOS {
   // ListSharedVolumes returns the shared volumes accessible to the calling app,
   // derived from the app's granted scopes. Useful for runtime discovery.
   rpc ListSharedVolumes(ListSharedVolumesRequest) returns (ListSharedVolumesResponse);
+
+  // SendToContact signs and encrypts a message at the transport layer,
+  // then dispatches it directly to a federated contact over the libp2p network.
+  rpc SendToContact(SendToContactRequest) returns (SendToContactResponse);
 }
 
 // --------------------------------------------------------------------------
@@ -70,4 +74,19 @@ message SharedVolume {
   string name = 1;
   // "ro" or "rw"
   string access = 2;
+}
+
+// --------------------------------------------------------------------------
+// SendToContact
+// --------------------------------------------------------------------------
+
+message SendToContactRequest {
+  string contact_id = 1;
+  string protocol_type = 2;
+  bytes payload = 3;
+}
+
+message SendToContactResponse {
+  bool success = 1;
+  string status_message = 2;
 }

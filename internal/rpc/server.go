@@ -18,6 +18,7 @@ import (
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
 	"github.com/magicbox/core/internal/logging"
+	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
 )
 
@@ -35,11 +36,12 @@ type RPCServer struct {
 	cfg          *config.Config
 	jwtSecret    []byte
 	rateLimiter  *RateLimiter
+	p2pService   p2p.Service
 	grpcServer   *grpc.Server
 }
 
 // NewRPCServer creates a new RPCServer with the given dependencies.
-func NewRPCServer(database *db.DB, dockerClient *docker.Client, orch *core.Orchestrator, logger *logging.Logger, cfg *config.Config) *RPCServer {
+func NewRPCServer(database *db.DB, dockerClient *docker.Client, orch *core.Orchestrator, logger *logging.Logger, cfg *config.Config, p2pService p2p.Service) *RPCServer {
 	return &RPCServer{
 		db:           database,
 		docker:       dockerClient,
@@ -48,6 +50,7 @@ func NewRPCServer(database *db.DB, dockerClient *docker.Client, orch *core.Orche
 		cfg:          cfg,
 		jwtSecret:    cfg.JWTSecret,
 		rateLimiter:  NewRateLimiter(),
+		p2pService:   p2pService,
 	}
 }
 
@@ -220,6 +223,49 @@ func (s *RPCServer) ListSharedVolumes(ctx context.Context, _ *pb.ListSharedVolum
 	}
 
 	return &pb.ListSharedVolumesResponse{Volumes: volumes}, nil
+}
+
+// ---------------------------------------------------------------------------
+// SendToContact
+// ---------------------------------------------------------------------------
+
+func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequest) (*pb.SendToContactResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	// Fetch contact from DB
+	contact, err := s.db.GetContactByID(req.ContactId, claims.UserID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "database query error: %v", err)
+	}
+	if contact == nil {
+		return nil, status.Errorf(codes.NotFound, "contact %q not found", req.ContactId)
+	}
+
+	// Dispatch message directly to the remote peer multiaddress over libp2p
+	msg := &p2p.Message{
+		ProtocolType: req.ProtocolType,
+		Payload:      req.Payload,
+	}
+
+	err = s.p2pService.SendTo(ctx, contact.Multiaddr, msg)
+	if err != nil {
+		s.logger.Error("SendToContact failed",
+			logging.F("user_id", claims.UserID),
+			logging.F("contact_id", req.ContactId),
+			logging.F("error", err.Error()))
+		return &pb.SendToContactResponse{
+			Success:       false,
+			StatusMessage: fmt.Sprintf("failed to send: %v", err),
+		}, nil
+	}
+
+	return &pb.SendToContactResponse{
+		Success:       true,
+		StatusMessage: "message dispatched successfully",
+	}, nil
 }
 
 // ---------------------------------------------------------------------------

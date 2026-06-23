@@ -55,6 +55,15 @@ func (d *DB) Migrate() error {
 			prefix TEXT UNIQUE NOT NULL,
 			created_at TEXT NOT NULL
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS contacts (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			display_name TEXT NOT NULL,
+			multiaddr TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			UNIQUE(user_id, multiaddr)
+		)`,
 	}
 
 	for _, stmt := range statements {

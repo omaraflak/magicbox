@@ -784,3 +784,94 @@ func (s *Server) handleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
 }
+
+func (s *Server) handleListContacts(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	contacts, err := s.db.GetContacts(claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load contacts: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, contacts)
+}
+
+func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req struct {
+		DisplayName string `json:"display_name"`
+		Multiaddr   string `json:"multiaddr"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.DisplayName == "" || req.Multiaddr == "" {
+		writeError(w, http.StatusBadRequest, "display_name and multiaddr are required")
+		return
+	}
+
+	id := uuid.NewString()
+	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, req.Multiaddr); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save contact: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"id":           id,
+		"display_name": req.DisplayName,
+		"multiaddr":   req.Multiaddr,
+	})
+}
+
+func (s *Server) handleDeleteContact(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing contact ID")
+		return
+	}
+
+	if err := s.db.DeleteContact(id, claims.UserID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete contact: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "contact deleted successfully"})
+}
+
+func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	addrs := s.p2pService.Multiaddrs()
+	if len(addrs) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "P2P network service unavailable")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"peer_id":     s.p2pService.HostID(),
+		"multiaddrs":  addrs,
+		"invitations": addrs,
+	})
+}

@@ -18,6 +18,7 @@ import (
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
 	"github.com/magicbox/core/internal/logging"
+	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
 	"github.com/magicbox/core/internal/rpc"
 )
@@ -84,16 +85,28 @@ func run() error {
 	stopBackup := cron.StartBackupJob(cfg.DBPath, filepath.Join(cfg.Root, "backups"), logger)
 	logger.Info("cron jobs started")
 
-	// 9. Start gRPC server in a goroutine.
-	rpcServer := rpc.NewRPCServer(database, dockerClient, orch, logger, cfg)
+	// 9. Initialize and start P2P service.
+	p2pKey, err := p2p.ParsePEMToPrivKey(cfg.PrivateKeyPEM)
+	if err != nil {
+		return fmt.Errorf("failed to parse identity key for P2P: %w", err)
+	}
+
+	p2pService := p2p.NewLibp2pService(p2pKey, nil, logger)
+	if err := p2pService.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start P2P service: %w", err)
+	}
+	defer p2pService.Stop()
+
+	// 10. Start gRPC server in a goroutine.
+	rpcServer := rpc.NewRPCServer(database, dockerClient, orch, logger, cfg, p2pService)
 	go func() {
 		if err := rpcServer.Start("50051"); err != nil {
 			logger.Error("gRPC server error", logging.F("error", err.Error()))
 		}
 	}()
 
-	// 10. Create REST server and build handler.
-	restServer := rest.NewServer(cfg, database, dockerClient, logger, orch)
+	// 11. Create REST server and build handler.
+	restServer := rest.NewServer(cfg, database, dockerClient, logger, orch, p2pService)
 	handler := restServer.Handler()
 
 	httpServer := &http.Server{

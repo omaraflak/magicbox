@@ -11,25 +11,28 @@ import (
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
 	"github.com/magicbox/core/internal/logging"
+	"github.com/magicbox/core/internal/p2p"
 )
 
 // Server holds all dependencies needed by the REST API handlers.
 type Server struct {
-	cfg    *config.Config
-	db     *db.DB
-	docker *docker.Client
-	logger *logging.Logger
-	orch   *core.Orchestrator
+	cfg        *config.Config
+	db         *db.DB
+	docker     *docker.Client
+	logger     *logging.Logger
+	orch       *core.Orchestrator
+	p2pService p2p.Service
 }
 
 // NewServer creates a new REST API server with the given dependencies.
-func NewServer(cfg *config.Config, database *db.DB, dockerClient *docker.Client, logger *logging.Logger, orch *core.Orchestrator) *Server {
+func NewServer(cfg *config.Config, database *db.DB, dockerClient *docker.Client, logger *logging.Logger, orch *core.Orchestrator, p2pService p2p.Service) *Server {
 	return &Server{
-		cfg:    cfg,
-		db:     database,
-		docker: dockerClient,
-		logger: logger,
-		orch:   orch,
+		cfg:        cfg,
+		db:         database,
+		docker:     dockerClient,
+		logger:     logger,
+		orch:       orch,
+		p2pService: p2pService,
 	}
 }
 
@@ -57,6 +60,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/apps/{id}/update", auth(http.HandlerFunc(s.handleUpdateApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rebuild", auth(http.HandlerFunc(s.handleRebuildApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rotate-token", auth(http.HandlerFunc(s.handleRotateToken)))
+
+	// Contacts & P2P invitation routes.
+	mux.Handle("GET /api/v1/contacts", auth(http.HandlerFunc(s.handleListContacts)))
+	mux.Handle("POST /api/v1/contacts", auth(http.HandlerFunc(s.handleCreateContact)))
+	mux.Handle("DELETE /api/v1/contacts/{id}", auth(http.HandlerFunc(s.handleDeleteContact)))
+	mux.Handle("GET /api/v1/me/invitation", auth(http.HandlerFunc(s.handleGetInvitation)))
 
 	// Admin-only routes — require both AuthMiddleware and AdminMiddleware.
 	admin := AdminMiddleware()
