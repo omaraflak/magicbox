@@ -41,14 +41,14 @@ type RPCServer struct {
 }
 
 // NewRPCServer creates a new RPCServer with the given dependencies.
-func NewRPCServer(database *db.DB, dockerClient *docker.Client, orch *core.Orchestrator, logger *logging.Logger, cfg *config.Config, p2pService p2p.Service) *RPCServer {
+func NewRPCServer(database *db.DB, dockerClient *docker.Client, orchestrator *core.Orchestrator, logger *logging.Logger, config *config.Config, p2pService p2p.Service) *RPCServer {
 	return &RPCServer{
 		db:           database,
 		docker:       dockerClient,
-		orchestrator: orch,
+		orchestrator: orchestrator,
 		logger:       logger,
-		cfg:          cfg,
-		jwtSecret:    cfg.JWTSecret,
+		cfg:          config,
+		jwtSecret:    config.JWTSecret,
 		rateLimiter:  NewRateLimiter(),
 		p2pService:   p2pService,
 	}
