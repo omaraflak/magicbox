@@ -10,9 +10,9 @@ services:
       - "8081:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/magicbox:/opt/magicbox
+      - ${MAGICBOX_HOST_ROOT:-/opt/magicbox}:/opt/magicbox
     environment:
-      - MAGICBOX_ROOT=/opt/magicbox
+      - MAGICBOX_HOST_ROOT=${MAGICBOX_HOST_ROOT:-/opt/magicbox}
       - MAGICBOX_PORT=80
     labels:
       - "traefik.enable=true"
@@ -23,4 +23,4 @@ services:
 networks:
   magicbox_net:
     name: magicbox_net
-    external: true
+    driver: bridge

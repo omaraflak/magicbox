@@ -178,7 +178,7 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 			UserID:       userID,
 			AppToken:     appToken,
 			CoreURL:      "magicbox_core:50051",
-			MagicboxRoot: o.Cfg.Root,
+			MagicboxRoot: o.Cfg.HostRoot,
 			VolumeMounts: volumeMounts,
 			MemoryMB:     manifest.ResourceLimits.MemoryMB,
 			CPUCores:     manifest.ResourceLimits.CPUCores,
@@ -326,7 +326,7 @@ func (o *Orchestrator) Start(ctx context.Context, appDBID string) error {
 		UserID:       app.UserID,
 		AppToken:     appJWT,
 		CoreURL:      "magicbox_core:50051",
-		MagicboxRoot: o.Cfg.Root,
+		MagicboxRoot: o.Cfg.HostRoot,
 		VolumeMounts: volumeMounts,
 		Host:         app.Host,
 	}

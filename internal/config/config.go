@@ -15,6 +15,7 @@ import (
 // Config holds the runtime configuration for Magicbox.
 type Config struct {
 	Root          string
+	HostRoot      string
 	Port          string
 	JWTSecret     []byte
 	DBPath        string
@@ -25,23 +26,17 @@ type Config struct {
 // Load reads configuration from environment variables and initializes
 // all required directories and secrets.
 func Load() (*Config, error) {
-	root := os.Getenv("MAGICBOX_ROOT")
-	if root == "" {
-		root = "/opt/magicbox"
+	root := "/opt/magicbox"
+	if err := os.MkdirAll(root, 0750); err != nil {
+		root = "./data"
+		if err := os.MkdirAll(root, 0750); err != nil {
+			return nil, fmt.Errorf("failed to create root directory: %w", err)
+		}
 	}
 
 	port := os.Getenv("MAGICBOX_PORT")
 	if port == "" {
 		port = "80"
-	}
-
-	// Assert root directory exists.
-	info, err := os.Stat(root)
-	if err != nil {
-		return nil, fmt.Errorf("root directory %q does not exist: %w", root, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("root path %q is not a directory", root)
 	}
 
 	// Create required subdirectories.
@@ -77,8 +72,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load/generate identity keys: %w", err)
 	}
 
+	hostRoot := os.Getenv("MAGICBOX_HOST_ROOT")
+	if hostRoot == "" {
+		hostRoot = root
+	}
+
 	return &Config{
 		Root:          root,
+		HostRoot:      hostRoot,
 		Port:          port,
 		JWTSecret:     jwtSecret,
 		DBPath:        filepath.Join(root, "core", "magicbox.db"),
