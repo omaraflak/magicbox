@@ -3,7 +3,10 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+
+	pb "github.com/magicbox/core/api/proto/v1"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -537,4 +543,111 @@ func TestDownloadMultipleFilesZipped(t *testing.T) {
 		t.Errorf("expected second zip file name 'f2.txt', got %q", f2.Name)
 	}
 }
+
+func TestActiveListFailedTransfersCutoff(t *testing.T) {
+	setupTestDB(t)
+
+	// 1. Insert a failed transfer that is 6 minutes old (should be filtered out)
+	oldFailedTime := time.Now().Add(-6 * time.Minute).Format(time.RFC3339)
+	_, err := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"old-failed-id", "old_photo.jpg", "", "contact-x", "Contact X", "failed", oldFailedTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Insert a failed transfer that is 2 minutes old (should be kept)
+	recentFailedTime := time.Now().Add(-2 * time.Minute).Format(time.RFC3339)
+	_, err = dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"recent-failed-id", "recent_photo.jpg", "", "contact-y", "Contact Y", "failed", recentFailedTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Insert a completed transfer that is 12 seconds old (should be filtered out)
+	oldCompletedTime := time.Now().Add(-12 * time.Second).Format(time.RFC3339)
+	_, err = dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"old-completed-id", "done_photo.jpg", "", "contact-z", "Contact Z", "completed", oldCompletedTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/transfers/active-list", nil)
+	rr := httptest.NewRecorder()
+
+	handleActiveListTransfers(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	var records []TransferRecord
+	if err := json.NewDecoder(rr.Body).Decode(&records); err != nil {
+		t.Fatalf("failed to decode response records: %v", err)
+	}
+
+	// Only the recent failed transfer should be returned
+	if len(records) != 1 {
+		t.Fatalf("expected exactly 1 record, got %d (records: %+v)", len(records), records)
+	}
+
+	if records[0].ID != "recent-failed-id" || records[0].Filename != "recent_photo.jpg" {
+		t.Errorf("unexpected record returned: %+v", records[0])
+	}
+}
+
+type mockOSClient struct {
+	pb.MagicboxOSClient
+	calls     int
+	failTimes int
+}
+
+func (m *mockOSClient) SendToContact(ctx context.Context, in *pb.SendToContactRequest, opts ...grpc.CallOption) (*pb.SendToContactResponse, error) {
+	m.calls++
+	if m.calls <= m.failTimes {
+		return nil, fmt.Errorf("temporary core transport connection failure")
+	}
+	return &pb.SendToContactResponse{Success: true}, nil
+}
+
+func TestSendWithRetry(t *testing.T) {
+	// Temporarily override retry backoff duration to speed up test execution
+	originalBackoff := retryBackoff
+	retryBackoff = 1 * time.Millisecond
+	defer func() { retryBackoff = originalBackoff }()
+
+	ctx := context.Background()
+	req := &pb.SendToContactRequest{
+		ContactId: "c-test",
+		AppId:     "app-test",
+		Payload:   []byte("test-payload"),
+	}
+
+	// Case 1: Temporary failure that recovers on 3rd attempt
+	mClient1 := &mockOSClient{failTimes: 2}
+	resp1, err1 := sendWithRetry(ctx, mClient1, req)
+	if err1 != nil {
+		t.Fatalf("expected success, got error: %v", err1)
+	}
+	if resp1 == nil || !resp1.Success {
+		t.Errorf("expected successful response, got: %+v", resp1)
+	}
+	if mClient1.calls != 3 {
+		t.Errorf("expected exactly 3 SendToContact calls, got %d", mClient1.calls)
+	}
+
+	// Case 2: Permanent failure (all 3 attempts fail)
+	mClient2 := &mockOSClient{failTimes: 5}
+	resp2, err2 := sendWithRetry(ctx, mClient2, req)
+	if err2 == nil {
+		t.Error("expected error on permanent failure, got nil")
+	}
+	if resp2 != nil {
+		t.Errorf("expected nil response on error, got: %+v", resp2)
+	}
+	if mClient2.calls != 3 {
+		t.Errorf("expected exactly 3 SendToContact calls on permanent failure, got %d", mClient2.calls)
+	}
+}
+
+
 

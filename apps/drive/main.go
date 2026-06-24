@@ -47,6 +47,7 @@ const (
 
 var cachedUsername string
 var dbConn *sql.DB
+var retryBackoff = 2 * time.Second
 
 func initDB() {
 	dbPath := "/data/app_state/drive.db"
@@ -201,6 +202,31 @@ func getUsernameFromCore() (string, error) {
 	}
 
 	return resp.Username, nil
+}
+
+func sendWithRetry(ctx context.Context, client pb.MagicboxOSClient, req *pb.SendToContactRequest) (*pb.SendToContactResponse, error) {
+	var lastErr error
+	var lastResp *pb.SendToContactResponse
+	for attempt := 1; attempt <= 3; attempt++ {
+		resp, err := client.SendToContact(ctx, req)
+		if err == nil && resp.Success {
+			return resp, nil
+		}
+		lastErr = err
+		lastResp = resp
+		log.Printf("SendToContact attempt %d/3 failed (err=%v, success=%t). Retrying in %v...", attempt, err, resp != nil && resp.Success, retryBackoff)
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(retryBackoff):
+			}
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return lastResp, nil
 }
 
 // --- Handlers ---
@@ -1010,7 +1036,7 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 			}
 
 			log.Printf("async multi-send: delivering %q to contact %s", tk.filename, cName)
-			sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
+			sendResp, err := sendWithRetry(ctx, client, &pb.SendToContactRequest{
 				ContactId: cID,
 				AppId:     appID,
 				Payload:   payload,
@@ -1747,7 +1773,7 @@ func triggerAutoSendToContacts(matchedFolder, subPath, filename string, targets 
 
 	for _, tk := range tasks {
 		log.Printf("triggerAutoSendToContacts: delivering %q to contact %s (%s)", filename, tk.target.ContactName, tk.target.ContactID)
-		sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
+		sendResp, err := sendWithRetry(ctx, client, &pb.SendToContactRequest{
 			ContactId: tk.target.ContactID,
 			AppId:     appID,
 			Payload:   payload,
@@ -1871,7 +1897,7 @@ func sendExistingFiles(folderPath string, contactIDs []string) {
 			}
 
 			log.Printf("sendExistingFiles background: delivering %q to contact %s", tk.filename, tk.target.ContactName)
-			sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
+			sendResp, err := sendWithRetry(ctx, client, &pb.SendToContactRequest{
 				ContactId: tk.target.ContactID,
 				AppId:     appID,
 				Payload:   payload,
@@ -1913,7 +1939,14 @@ func handleActiveListTransfers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recentCompletedCutoff := time.Now().Add(-10 * time.Second).Format(time.RFC3339)
-	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, status, sent_at FROM sent_history WHERE status = 'sending' OR status = 'failed' OR (status = 'completed' AND sent_at > ?)", recentCompletedCutoff)
+	recentFailedCutoff := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+	rows, err := dbConn.Query(`
+		SELECT id, filename, path, contact_id, contact_name, status, sent_at 
+		FROM sent_history 
+		WHERE status = 'sending' 
+		   OR (status = 'failed' AND sent_at > ?) 
+		   OR (status = 'completed' AND sent_at > ?)
+	`, recentFailedCutoff, recentCompletedCutoff)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query active list: "+err.Error())
 		return
