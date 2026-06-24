@@ -1718,38 +1718,52 @@ func triggerAutoSendToContacts(matchedFolder, subPath, filename string, targets 
 		return
 	}
 
-	client, conn, ctx, err := getCoreClient()
-	if err != nil {
-		return
+	type task struct {
+		transferID string
+		target     AutoSendTarget
 	}
-	defer conn.Close()
+	var tasks []task
 
 	for _, t := range targets {
 		transferID := uuid.NewString()
 		_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 			transferID, filename, relDestDir, t.ContactID, t.ContactName, "sending", time.Now().Format(time.RFC3339))
-		if dbErr != nil {
+		if dbErr == nil {
+			tasks = append(tasks, task{transferID: transferID, target: t})
+		} else {
 			log.Printf("Warning: failed to record auto-send transfer state: %v", dbErr)
 		}
+	}
 
-		log.Printf("triggerAutoSendToContacts: delivering %q to contact %s (%s)", filename, t.ContactName, t.ContactID)
+	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		log.Printf("triggerAutoSendToContacts error: failed to get core gRPC client: %v", err)
+		for _, tk := range tasks {
+			_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
+		}
+		return
+	}
+	defer conn.Close()
+
+	for _, tk := range tasks {
+		log.Printf("triggerAutoSendToContacts: delivering %q to contact %s (%s)", filename, tk.target.ContactName, tk.target.ContactID)
 		sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
-			ContactId: t.ContactID,
+			ContactId: tk.target.ContactID,
 			AppId:     appID,
 			Payload:   payload,
 		})
 
 		newStatus := "completed"
 		if err != nil {
-			log.Printf("triggerAutoSendToContacts: delivery to %s failed: %v", t.ContactName, err)
+			log.Printf("triggerAutoSendToContacts: delivery to %s failed: %v", tk.target.ContactName, err)
 			newStatus = "failed"
 		} else if !sendResp.Success {
-			log.Printf("triggerAutoSendToContacts: delivery to %s rejected: %s", t.ContactName, sendResp.StatusMessage)
+			log.Printf("triggerAutoSendToContacts: delivery to %s rejected: %s", tk.target.ContactName, sendResp.StatusMessage)
 			newStatus = "failed"
 		}
 
 		_, _ = dbConn.Exec("UPDATE sent_history SET status = ?, sent_at = ? WHERE id = ?",
-			newStatus, time.Now().Format(time.RFC3339), transferID)
+			newStatus, time.Now().Format(time.RFC3339), tk.transferID)
 	}
 }
 
@@ -1775,7 +1789,8 @@ func sendExistingFiles(folderPath string, contactIDs []string) {
 	}
 
 	type task struct {
-		subDir     string
+		srcSubDir  string
+		destSubDir string
 		filename   string
 		transferID string
 		target     AutoSendTarget
@@ -1789,19 +1804,27 @@ func sendExistingFiles(folderPath string, contactIDs []string) {
 
 	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
-			rel, err := filepath.Rel(parentDir, path)
-			if err == nil {
-				subDir := filepath.Dir(rel)
-				if subDir == "." {
-					subDir = ""
+			relSrc, errSrc := filepath.Rel(volumes["storage"], path)
+			relDest, errDest := filepath.Rel(parentDir, path)
+
+			if errSrc == nil && errDest == nil {
+				srcFolder := filepath.Dir(relSrc)
+				if srcFolder == "." {
+					srcFolder = ""
 				}
+				destFolder := filepath.Dir(relDest)
+				if destFolder == "." {
+					destFolder = ""
+				}
+
 				for _, t := range targets {
 					transferID := uuid.NewString()
 					_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-						transferID, info.Name(), subDir, t.ContactID, t.ContactName, "sending", time.Now().Format(time.RFC3339))
+						transferID, info.Name(), destFolder, t.ContactID, t.ContactName, "sending", time.Now().Format(time.RFC3339))
 					if dbErr == nil {
 						tasks = append(tasks, task{
-							subDir:     subDir,
+							srcSubDir:  srcFolder,
+							destSubDir: destFolder,
 							filename:   info.Name(),
 							transferID: transferID,
 							target:     t,
@@ -1825,7 +1848,7 @@ func sendExistingFiles(folderPath string, contactIDs []string) {
 		defer conn.Close()
 
 		for _, tk := range todo {
-			dir, err := resolvePath("storage", tk.subDir)
+			dir, err := resolvePath("storage", tk.srcSubDir)
 			if err != nil {
 				_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
 				continue
@@ -1839,7 +1862,7 @@ func sendExistingFiles(folderPath string, contactIDs []string) {
 			transferMsg := TransferMessage{
 				Filename: tk.filename,
 				Content:  content,
-				DestPath: tk.subDir,
+				DestPath: tk.destSubDir,
 			}
 			payload, err := json.Marshal(transferMsg)
 			if err != nil {
