@@ -13,7 +13,9 @@ import {
   emptyTrash,
   fetchTransfers,
   fetchFileTransfers,
-  fetchAutoSendConfig
+  fetchAutoSendConfig,
+  fetchRecentTransfers,
+  fetchActiveTransfers
 } from './utils/api';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -22,6 +24,7 @@ import DropZone from './components/DropZone';
 import FileGrid from './components/FileGrid';
 import EmptyState from './components/EmptyState';
 import AutoSendModal from './components/AutoSendModal';
+import TransfersDrawer from './components/TransfersDrawer';
 
 export default function App() {
   const [userID, setUserID] = useState('');
@@ -56,6 +59,8 @@ export default function App() {
   const [autoSendTarget, setAutoSendTarget] = useState(null);
   const [autoSendConfig, setAutoSendConfig] = useState(null);
   const [activeTransfersCount, setActiveTransfersCount] = useState(0);
+  const [recentTransfers, setRecentTransfers] = useState([]);
+  const [errorModalMsg, setErrorModalMsg] = useState('');
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -69,20 +74,46 @@ export default function App() {
 
   useEffect(() => {
     let timer;
-    async function checkActiveTransfers() {
+    async function loadTransfers() {
       try {
-        const res = await fetch(`${window.location.origin}/api/transfers/active`);
-        if (res.ok) {
-          const data = await res.json();
-          setActiveTransfersCount(data.active_count || 0);
-        }
+        const polledList = await fetchActiveTransfers();
+        
+        setRecentTransfers(prev => {
+          const next = [...prev];
+          
+          // 1. Update existing items in next, or add new ones
+          (polledList || []).forEach(p => {
+            const idx = next.findIndex(item => item.id === p.id);
+            if (idx !== -1) {
+              next[idx] = { ...next[idx], ...p };
+            } else {
+              next.push(p);
+            }
+          });
+
+          // 2. Identify items that were 'sending' in next but are ABSENT in polledList
+          next.forEach((item, idx) => {
+            if (item.status === 'sending') {
+              const isStillActive = (polledList || []).some(p => p.id === item.id);
+              if (!isStillActive) {
+                // It completed!
+                next[idx] = { ...item, status: 'completed' };
+              }
+            }
+          });
+
+          return next;
+        });
+
+        const activeCount = (polledList || []).filter(t => t.status === 'sending').length;
+        setActiveTransfersCount(activeCount);
       } catch (err) {
-        console.error('Failed to query active transfers:', err);
+        console.error('Failed to query active transfers list:', err);
       }
     }
 
-    checkActiveTransfers();
-    timer = setInterval(checkActiveTransfers, 2000);
+    loadTransfers();
+    timer = setInterval(loadTransfers, 2000);
     return () => clearInterval(timer);
   }, []);
 
@@ -230,25 +261,38 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [emptyTrashConfirmOpen]);
 
+  useEffect(() => {
+    if (!errorModalMsg) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setErrorModalMsg('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [errorModalMsg]);
+
   const handleConfirmSend = async () => {
     if (!selectedContactId) {
       setSendError('Please select a contact to send to.');
       return;
     }
-    setSharing(true);
+    const targetFile = sendTarget;
+    const targetContactId = selectedContactId;
+    
+    // Close modal immediately!
+    setSendTarget(null);
+    setSelectedContactId('');
     setSendError('');
-    setSendSuccess(false);
+    setSharing(false);
+
     try {
-      await sendFile(activeVolume, currentPath, sendTarget.name, selectedContactId);
-      setSendSuccess(true);
-      setTimeout(() => {
-        setSendTarget(null);
-        setSendSuccess(false);
-      }, 1500);
+      await sendFile(activeVolume, currentPath, targetFile.name, targetContactId);
+      // Trigger a quick reload to refresh any active states
+      loadFiles(activeVolume, currentPath, false);
     } catch (err) {
-      setSendError(err.message || 'Failed to send file.');
-    } finally {
-      setSharing(false);
+      console.error('Failed to start sending:', err);
+      setErrorModalMsg('Failed to send file: ' + err.message);
     }
   };
   const loadFiles = useCallback(async (volume, path, showSpinner = true) => {
@@ -338,7 +382,7 @@ export default function App() {
       setDeleteTarget(null);
       handleRefresh();
     } catch (err) {
-      window.alert('Failed to delete file/folder: ' + err.message);
+      setErrorModalMsg('Failed to delete file/folder: ' + err.message);
     }
   };
 
@@ -348,7 +392,7 @@ export default function App() {
       await restoreTrashFile(item.name);
       handleRefresh();
     } catch (err) {
-      window.alert('Failed to restore file: ' + err.message);
+      setErrorModalMsg('Failed to restore file: ' + err.message);
     }
   };
 
@@ -362,7 +406,7 @@ export default function App() {
       await emptyTrash();
       handleRefresh();
     } catch (err) {
-      window.alert('Failed to empty trash: ' + err.message);
+      setErrorModalMsg('Failed to empty trash: ' + err.message);
     }
   };
 
@@ -376,7 +420,7 @@ export default function App() {
       setRenameTarget(null);
       handleRefresh();
     } catch (err) {
-      window.alert('Failed to rename file/folder: ' + err.message);
+      setErrorModalMsg('Failed to rename file/folder: ' + err.message);
     }
   };
 
@@ -385,7 +429,7 @@ export default function App() {
     try {
       const plan = await getDownloadPlan(activeVolume, currentPath, item.name);
       if (!plan || !plan.volumes || plan.volumes.length === 0) {
-        window.alert('No files to download.');
+        setErrorModalMsg('No files to download.');
         return;
       }
       
@@ -400,7 +444,7 @@ export default function App() {
         await new Promise(r => setTimeout(r, 600));
       }
     } catch (err) {
-      window.alert('Failed to initiate download: ' + err.message);
+      setErrorModalMsg('Failed to initiate download: ' + err.message);
     }
   };
 
@@ -413,7 +457,7 @@ export default function App() {
       setSelectedFileNames([]);
       handleRefresh();
     } catch (err) {
-      window.alert('Failed to move files: ' + err.message);
+      setErrorModalMsg('Failed to move files: ' + err.message);
     }
   };
 
@@ -605,7 +649,7 @@ export default function App() {
                       setFolderPromptOpen(false);
                       handleRefresh();
                     } catch (err) {
-                      window.alert('Failed to create folder');
+                      setErrorModalMsg('Failed to create folder: ' + err.message);
                     }
                   }
                 }
@@ -622,7 +666,7 @@ export default function App() {
                     setFolderPromptOpen(false);
                     handleRefresh();
                   } catch (err) {
-                    window.alert('Failed to create folder');
+                    setErrorModalMsg('Failed to create folder: ' + err.message);
                   }
                 }
               }}>Create</button>
@@ -1022,6 +1066,49 @@ export default function App() {
           onClose={() => setAutoSendTarget(null)}
           onSaveSuccess={handleRefresh}
         />
+      )}
+      <TransfersDrawer transfers={recentTransfers} />
+      {errorModalMsg && (
+        <div 
+          className="modal-overlay" 
+          onClick={() => setErrorModalMsg('')}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10000,
+          }}
+        >
+          <div 
+            className="card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              background: 'var(--bg-secondary)', 
+              border: '1px solid var(--border-color)', 
+              borderRadius: 'var(--radius-lg)', 
+              padding: '24px', 
+              maxWidth: '400px', 
+              width: '90%',
+              textAlign: 'center',
+              boxShadow: 'var(--shadow-premium)',
+            }}
+          >
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '12px', color: 'var(--danger-color)' }}>⚠️ Error</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: 1.4 }}>
+              {errorModalMsg}
+            </p>
+            <button className="btn btn-secondary" onClick={() => setErrorModalMsg('')} style={{ fontSize: '0.85rem', padding: '6px 16px' }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

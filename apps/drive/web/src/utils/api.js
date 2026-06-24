@@ -208,3 +208,15 @@ export async function disableAutoSend(path) {
   return res.json();
 }
 
+export async function fetchRecentTransfers(limit = 15) {
+  const res = await fetch(`${API_BASE}/transfers?limit=${limit}`);
+  if (!res.ok) throw new Error(`Failed to fetch recent transfers: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchActiveTransfers() {
+  const res = await fetch(`${API_BASE}/transfers/active-list`);
+  if (!res.ok) throw new Error(`Failed to fetch active transfers: ${res.statusText}`);
+  return res.json();
+}
+
