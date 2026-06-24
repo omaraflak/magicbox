@@ -65,6 +65,7 @@ func initDB() {
 			path TEXT NOT NULL,
 			contact_id TEXT NOT NULL,
 			contact_name TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'completed',
 			sent_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS trash (
@@ -74,6 +75,17 @@ func initDB() {
 			trash_name TEXT NOT NULL,
 			deleted_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS auto_send_folders (
+			id TEXT PRIMARY KEY,
+			path TEXT UNIQUE NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS auto_send_targets (
+			folder_id TEXT NOT NULL,
+			contact_id TEXT NOT NULL,
+			contact_name TEXT NOT NULL,
+			PRIMARY KEY (folder_id, contact_id)
+		)`,
 	}
 
 	for _, q := range queries {
@@ -81,6 +93,9 @@ func initDB() {
 			log.Fatalf("Failed to run schema queries: %v", err)
 		}
 	}
+
+	// Safe DB column migration
+	_, _ = dbConn.Exec("ALTER TABLE sent_history ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'")
 }
 
 func startTrashCleaner() {
@@ -198,6 +213,7 @@ type FileInfo struct {
 	IsDir        bool      `json:"is_dir"`
 	OriginalPath string    `json:"original_path,omitempty"`
 	DeletedAt    *string   `json:"deleted_at,omitempty"`
+	IsAutoSend   bool      `json:"is_auto_send,omitempty"`
 }
 
 func handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -305,12 +321,25 @@ func handleListFiles(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+
+		isAutoSend := false
+		if entry.IsDir() && volumeName == "storage" {
+			relPath := entry.Name()
+			if subPath != "" {
+				relPath = subPath + "/" + entry.Name()
+			}
+			var count int
+			_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = ?", relPath).Scan(&count)
+			isAutoSend = (count > 0)
+		}
+
 		files = append(files, FileInfo{
 			Name:        entry.Name(),
 			DisplayName: entry.Name(),
 			Size:        info.Size(),
 			ModifiedAt:  info.ModTime().UTC(),
 			IsDir:       entry.IsDir(),
+			IsAutoSend:  isAutoSend,
 		})
 	}
 
@@ -371,6 +400,8 @@ func handleUploadFiles(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to write file: "+err.Error())
 			return
 		}
+
+		checkAndTriggerAutoSend(volumeName, subPath, safeName)
 
 		uploaded++
 	}
@@ -719,6 +750,7 @@ func handleFolders(w http.ResponseWriter, r *http.Request) {
 type TransferMessage struct {
 	Filename string `json:"filename"`
 	Content  []byte `json:"content"`
+	DestPath string `json:"dest_path,omitempty"`
 }
 
 func getCoreClient() (pb.MagicboxOSClient, *grpc.ClientConn, context.Context, error) {
@@ -864,8 +896,8 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	transferID := uuid.NewString()
-	_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, sent_at) VALUES (?, ?, ?, ?, ?, ?)",
-		transferID, safeName, subPath, contactID, contactName, time.Now().Format(time.RFC3339))
+	_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		transferID, safeName, subPath, contactID, contactName, "completed", time.Now().Format(time.RFC3339))
 	if dbErr != nil {
 		log.Printf("Warning: failed to record sent metadata: %v", dbErr)
 	}
@@ -904,16 +936,28 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create Incoming directory if it doesn't exist under user's storage
-	incomingDir := filepath.Join(volumes["storage"], "Incoming")
-	if err := os.MkdirAll(incomingDir, 0755); err != nil {
-		log.Printf("Failed to create Incoming directory: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to create Incoming folder")
-		return
-	}
-
 	safeName := filepath.Base(msg.Filename)
-	destPath := filepath.Join(incomingDir, safeName)
+	var destPath string
+
+	if msg.DestPath != "" {
+		// Resolve target directory under primary storage
+		targetDir := filepath.Join(volumes["storage"], msg.DestPath)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			log.Printf("Failed to create Auto-Send target directory: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to create destination folder")
+			return
+		}
+		destPath = filepath.Join(targetDir, safeName)
+	} else {
+		// Create Incoming directory if it doesn't exist under user's storage
+		incomingDir := filepath.Join(volumes["storage"], "Incoming")
+		if err := os.MkdirAll(incomingDir, 0755); err != nil {
+			log.Printf("Failed to create Incoming directory: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to create Incoming folder")
+			return
+		}
+		destPath = filepath.Join(incomingDir, safeName)
+	}
 
 	if err := os.WriteFile(destPath, msg.Content, 0644); err != nil {
 		log.Printf("Failed to write incoming file %q: %v", safeName, err)
@@ -963,6 +1007,9 @@ func main() {
 	mux.HandleFunc("/api/trash/empty", handleEmptyTrash)
 	mux.HandleFunc("/api/transfers", handleListTransfers)
 	mux.HandleFunc("/api/transfers/file", handleListFileTransfers)
+	mux.HandleFunc("/api/auto-send", handleAutoSend)
+	mux.HandleFunc("/api/auto-send/all", handleListAutoSendFolders)
+	mux.HandleFunc("/api/transfers/active", handleActiveTransfers)
 
 	// Internal webhook
 	mux.HandleFunc("/internal/magicbox-webhook", handleWebhook)
@@ -1056,6 +1103,31 @@ func handleMoveFile(w http.ResponseWriter, r *http.Request) {
 	if err := os.Rename(srcFullPath, destFullPath); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to move file/folder: "+err.Error())
 		return
+	}
+
+	if volumeName == "storage" {
+		isDir := false
+		if fi, err := os.Stat(destFullPath); err == nil {
+			isDir = fi.IsDir()
+		}
+
+		if isDir {
+			filepath.Walk(destFullPath, func(path string, info os.FileInfo, err error) error {
+				if err == nil && !info.IsDir() {
+					rel, err := filepath.Rel(volumes["storage"], path)
+					if err == nil {
+						subDir := filepath.Dir(rel)
+						if subDir == "." {
+							subDir = ""
+						}
+						checkAndTriggerAutoSend("storage", subDir, info.Name())
+					}
+				}
+				return nil
+			})
+		} else {
+			checkAndTriggerAutoSend(volumeName, destPath, targetName)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"moved": safeName})
@@ -1202,5 +1274,345 @@ func handleListFileTransfers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, records)
+}
+
+type AutoSendTarget struct {
+	ContactID   string `json:"contact_id"`
+	ContactName string `json:"contact_name"`
+}
+
+type AutoSendFolderInfo struct {
+	ID        string           `json:"id"`
+	Path      string           `json:"path"`
+	Targets   []AutoSendTarget `json:"targets"`
+	CreatedAt string           `json:"created_at"`
+}
+
+func handleListAutoSendFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	rows, err := dbConn.Query("SELECT id, path, created_at FROM auto_send_folders")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query auto-send folders: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var folders []AutoSendFolderInfo
+	for rows.Next() {
+		var f AutoSendFolderInfo
+		if err := rows.Scan(&f.ID, &f.Path, &f.CreatedAt); err == nil {
+			f.Targets = getAutoSendTargets(f.ID)
+			folders = append(folders, f)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, folders)
+}
+
+func getAutoSendTargets(folderID string) []AutoSendTarget {
+	rows, err := dbConn.Query("SELECT contact_id, contact_name FROM auto_send_targets WHERE folder_id = ?", folderID)
+	if err != nil {
+		return []AutoSendTarget{}
+	}
+	defer rows.Close()
+
+	var targets []AutoSendTarget
+	for rows.Next() {
+		var t AutoSendTarget
+		if err := rows.Scan(&t.ContactID, &t.ContactName); err == nil {
+			targets = append(targets, t)
+		}
+	}
+	return targets
+}
+
+func handleAutoSend(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		if _, ok := r.URL.Query()["path"]; !ok {
+			writeError(w, http.StatusBadRequest, "missing path parameter")
+			return
+		}
+		path := r.URL.Query().Get("path")
+
+		var id, createdAt string
+		err := dbConn.QueryRow("SELECT id, created_at FROM auto_send_folders WHERE path = ?", path).Scan(&id, &createdAt)
+		if err == sql.ErrNoRows {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"is_auto_send": false})
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "database error: "+err.Error())
+			return
+		}
+
+		targets := getAutoSendTargets(id)
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"is_auto_send": true,
+			"id":           id,
+			"path":         path,
+			"targets":      targets,
+			"created_at":   createdAt,
+		})
+
+	case http.MethodPost:
+		var body struct {
+			Path       string   `json:"path"`
+			ContactIDs []string `json:"contact_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		// First resolve contact names from the core
+		client, conn, ctx, err := getCoreClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to contact core OS: "+err.Error())
+			return
+		}
+		defer conn.Close()
+
+		contactsResp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to fetch contacts list: "+err.Error())
+			return
+		}
+
+		contactMap := make(map[string]string)
+		for _, c := range contactsResp.Contacts {
+			contactMap[c.Id] = c.DisplayName
+		}
+
+		tx, err := dbConn.Begin()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to start transaction: "+err.Error())
+			return
+		}
+		defer tx.Rollback()
+
+		var folderID string
+		err = tx.QueryRow("SELECT id FROM auto_send_folders WHERE path = ?", body.Path).Scan(&folderID)
+		if err == sql.ErrNoRows {
+			folderID = uuid.NewString()
+			_, err = tx.Exec("INSERT INTO auto_send_folders (id, path, created_at) VALUES (?, ?, ?)",
+				folderID, body.Path, time.Now().Format(time.RFC3339))
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to register folder: "+err.Error())
+				return
+			}
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "database error: "+err.Error())
+			return
+		}
+
+		// Delete existing targets
+		_, err = tx.Exec("DELETE FROM auto_send_targets WHERE folder_id = ?", folderID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to reset targets: "+err.Error())
+			return
+		}
+
+		// Insert new targets
+		for _, cid := range body.ContactIDs {
+			cname, ok := contactMap[cid]
+			if !ok {
+				cname = cid // Fallback to ID
+			}
+			_, err = tx.Exec("INSERT INTO auto_send_targets (folder_id, contact_id, contact_name) VALUES (?, ?, ?)",
+				folderID, cid, cname)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to insert target: "+err.Error())
+				return
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to commit: "+err.Error())
+			return
+		}
+
+		go sendExistingFiles(body.Path, body.ContactIDs)
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{"status": "success", "folder_id": folderID})
+
+	case http.MethodDelete:
+		if _, ok := r.URL.Query()["path"]; !ok {
+			writeError(w, http.StatusBadRequest, "missing path parameter")
+			return
+		}
+		path := r.URL.Query().Get("path")
+
+		var folderID string
+		err := dbConn.QueryRow("SELECT id FROM auto_send_folders WHERE path = ?", path).Scan(&folderID)
+		if err == sql.ErrNoRows {
+			writeJSON(w, http.StatusOK, map[string]string{"message": "already disabled"})
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "database error: "+err.Error())
+			return
+		}
+
+		tx, err := dbConn.Begin()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to start transaction: "+err.Error())
+			return
+		}
+		defer tx.Rollback()
+
+		_, _ = tx.Exec("DELETE FROM auto_send_targets WHERE folder_id = ?", folderID)
+		_, _ = tx.Exec("DELETE FROM auto_send_folders WHERE id = ?", folderID)
+
+		if err := tx.Commit(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to commit: "+err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"message": "auto-send disabled"})
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func checkAndTriggerAutoSend(volumeName, subPath, filename string) {
+	if volumeName != "storage" {
+		return
+	}
+
+	current := subPath
+	for {
+		var folderID string
+		err := dbConn.QueryRow("SELECT id FROM auto_send_folders WHERE path = ?", current).Scan(&folderID)
+		if err == nil {
+			targets := getAutoSendTargets(folderID)
+			if len(targets) > 0 {
+				log.Printf("checkAndTriggerAutoSend: found Auto-Send folder at %q for file %q. Syncing to %d contacts...", current, filename, len(targets))
+				go triggerAutoSendToContacts(subPath, filename, targets)
+			}
+			return
+		}
+
+		if current == "" {
+			break
+		}
+		if idx := strings.LastIndex(current, "/"); idx != -1 {
+			current = current[:idx]
+		} else {
+			current = ""
+		}
+	}
+}
+
+func triggerAutoSendToContacts(subPath, filename string, targets []AutoSendTarget) {
+	dirPath, err := resolvePath("storage", subPath)
+	if err != nil {
+		log.Printf("triggerAutoSendToContacts error: resolvePath failed: %v", err)
+		return
+	}
+	fullPath := filepath.Join(dirPath, filename)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		log.Printf("triggerAutoSendToContacts error: read file failed: %v", err)
+		return
+	}
+
+	transferMsg := TransferMessage{
+		Filename: filename,
+		Content:  content,
+		DestPath: subPath,
+	}
+	payload, err := json.Marshal(transferMsg)
+	if err != nil {
+		return
+	}
+
+	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	for _, t := range targets {
+		transferID := uuid.NewString()
+		_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			transferID, filename, subPath, t.ContactID, t.ContactName, "sending", time.Now().Format(time.RFC3339))
+		if dbErr != nil {
+			log.Printf("Warning: failed to record auto-send transfer state: %v", dbErr)
+		}
+
+		log.Printf("triggerAutoSendToContacts: delivering %q to contact %s (%s)", filename, t.ContactName, t.ContactID)
+		sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
+			ContactId: t.ContactID,
+			AppId:     appID,
+			Payload:   payload,
+		})
+
+		newStatus := "completed"
+		if err != nil {
+			log.Printf("triggerAutoSendToContacts: delivery to %s failed: %v", t.ContactName, err)
+			newStatus = "failed"
+		} else if !sendResp.Success {
+			log.Printf("triggerAutoSendToContacts: delivery to %s rejected: %s", t.ContactName, sendResp.StatusMessage)
+			newStatus = "failed"
+		}
+
+		_, _ = dbConn.Exec("UPDATE sent_history SET status = ?, sent_at = ? WHERE id = ?",
+			newStatus, time.Now().Format(time.RFC3339), transferID)
+	}
+}
+
+func sendExistingFiles(folderPath string, contactIDs []string) {
+	dirPath, err := resolvePath("storage", folderPath)
+	if err != nil {
+		log.Printf("sendExistingFiles error: resolvePath failed: %v", err)
+		return
+	}
+
+	targets := make([]AutoSendTarget, 0, len(contactIDs))
+	for _, cid := range contactIDs {
+		var name string
+		_ = dbConn.QueryRow("SELECT contact_name FROM auto_send_targets WHERE contact_id = ?", cid).Scan(&name)
+		if name == "" {
+			name = cid
+		}
+		targets = append(targets, AutoSendTarget{ContactID: cid, ContactName: name})
+	}
+
+	if len(targets) == 0 {
+		return
+	}
+
+	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			rel, err := filepath.Rel(volumes["storage"], path)
+			if err == nil {
+				subDir := filepath.Dir(rel)
+				if subDir == "." {
+					subDir = ""
+				}
+				log.Printf("sendExistingFiles: triggering sync for existing file %q under %q", info.Name(), subDir)
+				triggerAutoSendToContacts(subDir, info.Name(), targets)
+			}
+		}
+		return nil
+	})
+}
+
+func handleActiveTransfers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var count int
+	err := dbConn.QueryRow("SELECT COUNT(*) FROM sent_history WHERE status = 'sending'").Scan(&count)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query active transfers: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"active_count": count})
 }
 

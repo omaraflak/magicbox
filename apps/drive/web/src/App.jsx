@@ -12,7 +12,8 @@ import {
   restoreTrashFile,
   emptyTrash,
   fetchTransfers,
-  fetchFileTransfers
+  fetchFileTransfers,
+  fetchAutoSendConfig
 } from './utils/api';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -20,6 +21,7 @@ import Toolbar from './components/Toolbar';
 import DropZone from './components/DropZone';
 import FileGrid from './components/FileGrid';
 import EmptyState from './components/EmptyState';
+import AutoSendModal from './components/AutoSendModal';
 
 export default function App() {
   const [userID, setUserID] = useState('');
@@ -51,6 +53,9 @@ export default function App() {
   const [sendError, setSendError] = useState('');
   const [sendSuccess, setSendSuccess] = useState(false);
   const [emptyTrashConfirmOpen, setEmptyTrashConfirmOpen] = useState(false);
+  const [autoSendTarget, setAutoSendTarget] = useState(null);
+  const [autoSendConfig, setAutoSendConfig] = useState(null);
+  const [activeTransfersCount, setActiveTransfersCount] = useState(0);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -60,6 +65,25 @@ export default function App() {
         setUsername(info.username || info.user_id);
       })
       .catch((err) => console.error('Failed to fetch info:', err));
+  }, []);
+
+  useEffect(() => {
+    let timer;
+    async function checkActiveTransfers() {
+      try {
+        const res = await fetch(`${window.location.origin}/api/transfers/active`);
+        if (res.ok) {
+          const data = await res.json();
+          setActiveTransfersCount(data.active_count || 0);
+        }
+      } catch (err) {
+        console.error('Failed to query active transfers:', err);
+      }
+    }
+
+    checkActiveTransfers();
+    timer = setInterval(checkActiveTransfers, 2000);
+    return () => clearInterval(timer);
   }, []);
 
   // Synchronize currentPath and activeVolume state changes with the URL query params
@@ -240,9 +264,21 @@ export default function App() {
       setFiles(data || []);
       setSelectedFileNames([]);
       setFileCounts((prev) => ({ ...prev, [volume]: (data || []).length }));
+
+      if (volume === 'storage') {
+        try {
+          const config = await fetchAutoSendConfig(path);
+          setAutoSendConfig(config.is_auto_send ? config : null);
+        } catch (err) {
+          setAutoSendConfig(null);
+        }
+      } else {
+        setAutoSendConfig(null);
+      }
     } catch (err) {
       console.error('Failed to list files:', err);
       setFiles([]);
+      setAutoSendConfig(null);
     } finally {
       if (showSpinner) setLoading(false);
     }
@@ -387,6 +423,7 @@ export default function App() {
         username={username}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        activeTransfersCount={activeTransfersCount}
       />
 
       <div className="app-body">
@@ -419,6 +456,41 @@ export default function App() {
             activeVolume={activeVolume}
             onEmptyTrashClick={handleEmptyTrashClick}
           />
+
+          {autoSendConfig && (
+            <div 
+              className="auto-send-banner" 
+              style={{ 
+                background: 'rgba(52, 152, 219, 0.08)', 
+                border: '1px solid rgba(52, 152, 219, 0.25)', 
+                padding: '12px 16px', 
+                borderRadius: '8px', 
+                margin: '16px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                color: 'var(--text-primary)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.4rem' }}>📤</span>
+                <div>
+                  <strong style={{ display: 'block', fontSize: '0.875rem', marginBottom: '2px' }}>Auto-Send Folder</strong>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Anything dropped or created in this folder is automatically sent to: <strong>{autoSendConfig.targets.map(t => t.contact_name).join(', ')}</strong>.
+                    {activeTransfersCount > 0 && <span style={{ marginLeft: '8px', color: 'var(--primary-color)', fontWeight: 500 }}> (🔄 Syncing...)</span>}
+                  </span>
+                </div>
+              </div>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+                onClick={() => setAutoSendTarget({ path: currentPath })}
+              >
+                ⚙ Settings
+              </button>
+            </div>
+          )}
 
           <DropZone
             volume={activeVolume}
@@ -603,6 +675,17 @@ export default function App() {
                         🕒 History
                       </button>
                     </>
+                  )}
+                  {contextMenu.item.is_dir && (
+                    <button 
+                      className="menu-item" 
+                      onClick={() => {
+                        const targetPath = currentPath ? `${currentPath}/${contextMenu.item.name}` : contextMenu.item.name;
+                        setAutoSendTarget({ path: targetPath });
+                      }}
+                    >
+                      📤 Auto-Send Settings
+                    </button>
                   )}
                   <button className="menu-item" onClick={() => setRenameTarget(contextMenu.item)}>
                     ✏️ Rename
@@ -932,6 +1015,13 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+      {autoSendTarget && (
+        <AutoSendModal
+          folderPath={autoSendTarget.path}
+          onClose={() => setAutoSendTarget(null)}
+          onSaveSuccess={handleRefresh}
+        />
       )}
     </div>
   );

@@ -39,8 +39,11 @@ export default function FileCard({
           {getFileIcon(file.name, file.is_dir)}
         </div>
         <div className="file-card-info">
-          <div className="file-card-name" title={file.display_name || file.name}>
-            {file.display_name || file.name}
+          <div className="file-card-name" title={file.display_name || file.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {file.display_name || file.name}
+            </span>
+            {file.is_dir && file.is_auto_send && <span title="Auto-Send Folder" style={{ fontSize: '0.85rem', flexShrink: 0, marginLeft: '8px' }}>📤</span>}
           </div>
           <div className="file-card-meta">
             {file.original_path && (
@@ -82,8 +85,11 @@ export default function FileCard({
         style={{ cursor: 'pointer' }}
       >
         <div className="folder-icon" style={{ fontSize: '1.5rem', marginRight: '8px' }}>📁</div>
-        <div className="folder-name" title={file.display_name || file.name} style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-          {file.display_name || file.name}
+        <div className="folder-name" title={file.display_name || file.name} style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {file.display_name || file.name}
+          </span>
+          {file.is_auto_send && <span title="Auto-Send Folder" style={{ fontSize: '0.85rem', flexShrink: 0, marginLeft: '8px' }}>📤</span>}
         </div>
       </div>
     );

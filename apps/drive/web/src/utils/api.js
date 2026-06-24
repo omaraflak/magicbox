@@ -170,3 +170,41 @@ export async function fetchFileTransfers(filename, path = '') {
   return res.json();
 }
 
+export async function fetchAutoSendFolders() {
+  const res = await fetch(`${API_BASE}/auto-send/all`);
+  if (!res.ok) throw new Error(`Failed to fetch auto-send folders list: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchAutoSendConfig(path) {
+  const res = await fetch(`${API_BASE}/auto-send?path=${encodeURIComponent(path)}`);
+  if (!res.ok) throw new Error(`Failed to fetch auto-send folder config: ${res.statusText}`);
+  return res.json();
+}
+
+export async function saveAutoSendConfig(path, contactIDs) {
+  const res = await fetch(`${API_BASE}/auto-send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ path, contact_ids: contactIDs }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to save config: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function disableAutoSend(path) {
+  const res = await fetch(`${API_BASE}/auto-send?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to disable auto-send: ${res.statusText}`);
+  }
+  return res.json();
+}
+
