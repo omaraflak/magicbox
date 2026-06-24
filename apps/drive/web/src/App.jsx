@@ -798,11 +798,9 @@ export default function App() {
                     <button className="menu-item" onClick={() => handleDownloadMultiple(selectedItems)}>
                       ⬇ Download All ({selectedCount})
                     </button>
-                    {allFiles && (
-                      <button className="menu-item" onClick={() => handleSendMultiple(selectedItems)}>
-                        📤 Send All ({selectedCount})
-                      </button>
-                    )}
+                    <button className="menu-item" onClick={() => handleSendMultiple(selectedItems)}>
+                      📤 Send All ({selectedCount})
+                    </button>
                     <button className="menu-item menu-item-danger" onClick={() => handleTriggerDeleteMultiple(selectedItems)}>
                       🗑 Delete All ({selectedCount})
                     </button>
@@ -825,15 +823,13 @@ export default function App() {
                   <button className="menu-item" onClick={() => handleDownloadItem(contextMenu.item)}>
                     ⬇ Download
                   </button>
+                  <button className="menu-item" onClick={() => setSendTarget(contextMenu.item)}>
+                    📤 Send
+                  </button>
                   {!contextMenu.item.is_dir && (
-                    <>
-                      <button className="menu-item" onClick={() => setSendTarget(contextMenu.item)}>
-                        📤 Send
-                      </button>
-                      <button className="menu-item" onClick={() => setFileTransfersTarget(contextMenu.item)}>
-                        🕒 History
-                      </button>
-                    </>
+                    <button className="menu-item" onClick={() => setFileTransfersTarget(contextMenu.item)}>
+                      🕒 History
+                    </button>
                   )}
                   {contextMenu.item.is_dir && (
                     <button 

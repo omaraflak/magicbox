@@ -894,7 +894,7 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 	safeName := filepath.Base(filename)
 	fullPath := filepath.Join(dirPath, safeName)
 
-	content, err := os.ReadFile(fullPath)
+	fi, err := os.Stat(fullPath)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "file not found: "+err.Error())
 		return
@@ -915,56 +915,111 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	transferID := uuid.NewString()
-	_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		transferID, safeName, subPath, contactID, contactName, "sending", time.Now().Format(time.RFC3339))
-	if dbErr != nil {
-		log.Printf("Warning: failed to record sent metadata: %v", dbErr)
+	type task struct {
+		subDir     string
+		filename   string
+		transferID string
+	}
+	var tasks []task
+
+	if !fi.IsDir() {
+		// Single file send
+		transferID := uuid.NewString()
+		_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			transferID, safeName, subPath, contactID, contactName, "sending", time.Now().Format(time.RFC3339))
+		if dbErr != nil {
+			log.Printf("Warning: failed to record sent metadata: %v", dbErr)
+		}
+		tasks = append(tasks, task{
+			subDir:     subPath,
+			filename:   safeName,
+			transferID: transferID,
+		})
+	} else {
+		// Folder send: walk and queue all files
+		filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() {
+				rel, err := filepath.Rel(volumes["storage"], path)
+				if err == nil {
+					fileSubDir := filepath.Dir(rel)
+					if fileSubDir == "." {
+						fileSubDir = ""
+					}
+					transferID := uuid.NewString()
+					_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+						transferID, info.Name(), fileSubDir, contactID, contactName, "sending", time.Now().Format(time.RFC3339))
+					if dbErr == nil {
+						tasks = append(tasks, task{
+							subDir:     fileSubDir,
+							filename:   info.Name(),
+							transferID: transferID,
+						})
+					}
+				}
+			}
+			return nil
+		})
 	}
 
-	go func(tID, cID, name, sub, path string, contentBytes []byte) {
-		transferMsg := TransferMessage{
-			Filename: name,
-			Content:  contentBytes,
-		}
-		payload, err := json.Marshal(transferMsg)
-		if err != nil {
-			log.Printf("async send: marshal failed: %v", err)
-			_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tID)
-			return
-		}
-
+	// Process tasks in background sequentially
+	go func(todo []task, cID, cName string) {
 		client, conn, ctx, err := getCoreClient()
 		if err != nil {
-			log.Printf("async send: grpc client connection failed: %v", err)
-			_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tID)
+			log.Printf("async multi-send: failed to get core client: %v", err)
+			for _, tk := range todo {
+				_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
+			}
 			return
 		}
 		defer conn.Close()
 
-		sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
-			ContactId: cID,
-			AppId:     appID,
-			Payload:   payload,
-		})
+		for _, tk := range todo {
+			dir, err := resolvePath("storage", tk.subDir)
+			if err != nil {
+				_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
+				continue
+			}
+			content, err := os.ReadFile(filepath.Join(dir, tk.filename))
+			if err != nil {
+				_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
+				continue
+			}
 
-		newStatus := "completed"
-		if err != nil {
-			log.Printf("async send to %s failed: %v", cID, err)
-			newStatus = "failed"
-		} else if !sendResp.Success {
-			log.Printf("async send to %s rejected: %s", cID, sendResp.StatusMessage)
-			newStatus = "failed"
+			transferMsg := TransferMessage{
+				Filename: tk.filename,
+				Content:  content,
+				DestPath: tk.subDir,
+			}
+			payload, err := json.Marshal(transferMsg)
+			if err != nil {
+				_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
+				continue
+			}
+
+			log.Printf("async multi-send: delivering %q to contact %s", tk.filename, cName)
+			sendResp, err := client.SendToContact(ctx, &pb.SendToContactRequest{
+				ContactId: cID,
+				AppId:     appID,
+				Payload:   payload,
+			})
+
+			newStatus := "completed"
+			if err != nil {
+				log.Printf("async multi-send delivery to %s failed: %v", cName, err)
+				newStatus = "failed"
+			} else if !sendResp.Success {
+				log.Printf("async multi-send delivery to %s rejected: %s", cName, sendResp.StatusMessage)
+				newStatus = "failed"
+			}
+
+			_, _ = dbConn.Exec("UPDATE sent_history SET status = ?, sent_at = ? WHERE id = ?",
+				newStatus, time.Now().Format(time.RFC3339), tk.transferID)
 		}
-
-		_, _ = dbConn.Exec("UPDATE sent_history SET status = ?, sent_at = ? WHERE id = ?",
-			newStatus, time.Now().Format(time.RFC3339), tID)
-	}(transferID, contactID, safeName, subPath, fullPath, content)
+	}(tasks, contactID, contactName)
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"status":      "sending",
-		"transfer_id": transferID,
-		"filename":    safeName,
+		"status":   "sending",
+		"filename": safeName,
 	})
 }
 func resolveUniqueFilename(dirPath, filename string) string {
@@ -1803,7 +1858,8 @@ func handleActiveListTransfers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, status, sent_at FROM sent_history WHERE status = 'sending' OR status = 'failed'")
+	recentCompletedCutoff := time.Now().Add(-10 * time.Second).Format(time.RFC3339)
+	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, status, sent_at FROM sent_history WHERE status = 'sending' OR status = 'failed' OR (status = 'completed' AND sent_at > ?)", recentCompletedCutoff)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query active list: "+err.Error())
 		return
