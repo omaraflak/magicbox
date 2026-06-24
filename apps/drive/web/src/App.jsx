@@ -77,6 +77,7 @@ export default function App() {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
       setCurrentPath(params.get('path') || '');
+      setFiles([]);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -238,9 +239,11 @@ export default function App() {
 
   const handleFolderClick = (folderName) => {
     setCurrentPath((prev) => (prev ? `${prev}/${folderName}` : folderName));
+    setFiles([]);
   };
 
   const handleBreadcrumbClick = (index) => {
+    setFiles([]);
     if (index === -1) {
       setCurrentPath('');
       return;
