@@ -8,6 +8,7 @@ export default function AutoSendModal({ folderPath, onClose, onSaveSuccess }) {
   const [saving, setSaving] = useState(false);
   const [isAlreadyEnabled, setIsAlreadyEnabled] = useState(false);
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -38,16 +39,17 @@ export default function AutoSendModal({ folderPath, onClose, onSaveSuccess }) {
 
   const handleSave = async () => {
     if (selectedIDs.length === 0) {
-      window.alert('Please select at least one contact, or click "Disable" to turn off.');
+      setError('Please select at least one contact, or click "Disable" to turn off.');
       return;
     }
     setSaving(true);
+    setError('');
     try {
       await saveAutoSendConfig(folderPath, selectedIDs);
       onSaveSuccess();
       onClose();
     } catch (err) {
-      window.alert('Failed to save configuration: ' + err.message);
+      setError('Failed to save configuration: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -59,12 +61,13 @@ export default function AutoSendModal({ folderPath, onClose, onSaveSuccess }) {
 
   const handleConfirmDisable = async () => {
     setSaving(true);
+    setError('');
     try {
       await disableAutoSend(folderPath);
       onSaveSuccess();
       onClose();
     } catch (err) {
-      window.alert('Failed to disable: ' + err.message);
+      setError('Failed to disable: ' + err.message);
     } finally {
       setSaving(false);
       setConfirmDisableOpen(false);
@@ -205,6 +208,20 @@ export default function AutoSendModal({ folderPath, onClose, onSaveSuccess }) {
 
         {/* Body */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {error && (
+            <div style={{ 
+              background: 'rgba(231, 76, 60, 0.1)', 
+              color: 'var(--danger-color)', 
+              padding: '10px 12px', 
+              borderRadius: '8px', 
+              fontSize: '0.8rem', 
+              border: '1px solid rgba(231, 76, 60, 0.2)', 
+              lineHeight: 1.4,
+              textAlign: 'left'
+            }}>
+              ⚠️ {error}
+            </div>
+          )}
           <div style={{ 
             background: 'rgba(255,255,255,0.02)', 
             padding: '12px', 
