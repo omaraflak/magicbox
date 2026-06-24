@@ -577,7 +577,7 @@ export default function App() {
                 border: '1px solid rgba(52, 152, 219, 0.25)', 
                 padding: '12px 16px', 
                 borderRadius: '8px', 
-                margin: '16px', 
+                margin: '16px 24px 0 24px', 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'space-between',

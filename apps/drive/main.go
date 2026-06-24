@@ -916,41 +916,54 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type task struct {
-		subDir     string
+		srcSubDir  string
+		destSubDir string
 		filename   string
 		transferID string
 	}
 	var tasks []task
 
 	if !fi.IsDir() {
-		// Single file send
+		// Single file send: destination is root of Received ("")
 		transferID := uuid.NewString()
 		_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			transferID, safeName, subPath, contactID, contactName, "sending", time.Now().Format(time.RFC3339))
+			transferID, safeName, "", contactID, contactName, "sending", time.Now().Format(time.RFC3339))
 		if dbErr != nil {
 			log.Printf("Warning: failed to record sent metadata: %v", dbErr)
 		}
 		tasks = append(tasks, task{
-			subDir:     subPath,
+			srcSubDir:  subPath,
+			destSubDir: "",
 			filename:   safeName,
 			transferID: transferID,
 		})
 	} else {
-		// Folder send: walk and queue all files
+		// Folder send: walk and queue all files relative to parent of the sent folder
+		parentDir := filepath.Dir(fullPath)
 		filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() {
-				rel, err := filepath.Rel(volumes["storage"], path)
-				if err == nil {
-					fileSubDir := filepath.Dir(rel)
-					if fileSubDir == "." {
-						fileSubDir = ""
+				// Calculate source subDir on disk (relative to storage volumes)
+				relSrc, errSrc := filepath.Rel(volumes["storage"], path)
+				// Calculate destination subDir relative to parent of the folder being sent
+				relDest, errDest := filepath.Rel(parentDir, path)
+
+				if errSrc == nil && errDest == nil {
+					srcFolder := filepath.Dir(relSrc)
+					if srcFolder == "." {
+						srcFolder = ""
 					}
+					destFolder := filepath.Dir(relDest)
+					if destFolder == "." {
+						destFolder = ""
+					}
+
 					transferID := uuid.NewString()
 					_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-						transferID, info.Name(), fileSubDir, contactID, contactName, "sending", time.Now().Format(time.RFC3339))
+						transferID, info.Name(), destFolder, contactID, contactName, "sending", time.Now().Format(time.RFC3339))
 					if dbErr == nil {
 						tasks = append(tasks, task{
-							subDir:     fileSubDir,
+							srcSubDir:  srcFolder,
+							destSubDir: destFolder,
 							filename:   info.Name(),
 							transferID: transferID,
 						})
@@ -974,7 +987,7 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 		defer conn.Close()
 
 		for _, tk := range todo {
-			dir, err := resolvePath("storage", tk.subDir)
+			dir, err := resolvePath("storage", tk.srcSubDir)
 			if err != nil {
 				_, _ = dbConn.Exec("UPDATE sent_history SET status = 'failed' WHERE id = ?", tk.transferID)
 				continue
@@ -988,7 +1001,7 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 			transferMsg := TransferMessage{
 				Filename: tk.filename,
 				Content:  content,
-				DestPath: tk.subDir,
+				DestPath: tk.destSubDir,
 			}
 			payload, err := json.Marshal(transferMsg)
 			if err != nil {
@@ -1653,7 +1666,7 @@ func checkAndTriggerAutoSend(volumeName, subPath, filename string) {
 			targets := getAutoSendTargets(folderID)
 			if len(targets) > 0 {
 				log.Printf("checkAndTriggerAutoSend: found Auto-Send folder at %q for file %q. Syncing to %d contacts...", current, filename, len(targets))
-				go triggerAutoSendToContacts(subPath, filename, targets)
+				go triggerAutoSendToContacts(current, subPath, filename, targets)
 			}
 			return
 		}
@@ -1669,7 +1682,7 @@ func checkAndTriggerAutoSend(volumeName, subPath, filename string) {
 	}
 }
 
-func triggerAutoSendToContacts(subPath, filename string, targets []AutoSendTarget) {
+func triggerAutoSendToContacts(matchedFolder, subPath, filename string, targets []AutoSendTarget) {
 	dirPath, err := resolvePath("storage", subPath)
 	if err != nil {
 		log.Printf("triggerAutoSendToContacts error: resolvePath failed: %v", err)
@@ -1682,10 +1695,23 @@ func triggerAutoSendToContacts(subPath, filename string, targets []AutoSendTarge
 		return
 	}
 
+	parentDir := filepath.Dir(matchedFolder)
+	if matchedFolder == "" || matchedFolder == "." {
+		parentDir = ""
+	}
+
+	relDestDir := subPath
+	if parentDir != "" && parentDir != "." {
+		rel, err := filepath.Rel(parentDir, subPath)
+		if err == nil {
+			relDestDir = rel
+		}
+	}
+
 	transferMsg := TransferMessage{
 		Filename: filename,
 		Content:  content,
-		DestPath: subPath,
+		DestPath: relDestDir,
 	}
 	payload, err := json.Marshal(transferMsg)
 	if err != nil {
@@ -1701,7 +1727,7 @@ func triggerAutoSendToContacts(subPath, filename string, targets []AutoSendTarge
 	for _, t := range targets {
 		transferID := uuid.NewString()
 		_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			transferID, filename, subPath, t.ContactID, t.ContactName, "sending", time.Now().Format(time.RFC3339))
+			transferID, filename, relDestDir, t.ContactID, t.ContactName, "sending", time.Now().Format(time.RFC3339))
 		if dbErr != nil {
 			log.Printf("Warning: failed to record auto-send transfer state: %v", dbErr)
 		}
@@ -1756,9 +1782,14 @@ func sendExistingFiles(folderPath string, contactIDs []string) {
 	}
 	var tasks []task
 
+	parentDir := filepath.Dir(dirPath)
+	if dirPath == volumes["storage"] {
+		parentDir = volumes["storage"]
+	}
+
 	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
-			rel, err := filepath.Rel(volumes["storage"], path)
+			rel, err := filepath.Rel(parentDir, path)
 			if err == nil {
 				subDir := filepath.Dir(rel)
 				if subDir == "." {
