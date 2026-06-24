@@ -16,7 +16,7 @@
      ```bash
      docker compose up -d
      ```
-    * **macOS**:
+   * **macOS**:
      ```bash
      MAGICBOX_HOST_ROOT=/tmp/magicbox docker compose up -d
      ```
