@@ -12,13 +12,16 @@
    ```
 
 2. **Start Stack**:
-   * **Linux**:
-     ```bash
-     docker compose up -d
-     ```
-   * **macOS**:
-     ```bash
-     MAGICBOX_HOST_ROOT=/tmp/magicbox docker compose up -d
-     ```
+
+**Linux**:
+
+```bash
+docker compose up -d
+```
+
+**macOS**:
+```bash
+MAGICBOX_HOST_ROOT=/tmp/magicbox docker compose up -d
+```
 
 Open `http://localhost:8081` once the containers are running.
