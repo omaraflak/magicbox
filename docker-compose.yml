@@ -7,7 +7,7 @@ services:
     networks:
       - magicbox_net
     ports:
-      - "8081:80"
+      - "8080:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${MAGICBOX_HOST_ROOT:-/opt/magicbox}:/opt/magicbox
