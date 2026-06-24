@@ -1,7 +1,10 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"database/sql"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -286,3 +289,252 @@ func TestGenerateMultiItemPlan(t *testing.T) {
 		t.Errorf("unexpected zip item ordering: %v", items)
 	}
 }
+
+func TestDeleteFileSoft(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+	
+	err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("important notes"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/files/delete?volume=storage&path=&file=notes.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handleDeleteFile(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify original file no longer exists
+	if _, err := os.Stat(filepath.Join(dir, "notes.txt")); !os.IsNotExist(err) {
+		t.Error("expected original file to be gone, but it still exists")
+	}
+
+	// Verify row in database trash table
+	var count int
+	err = dbConn.QueryRow("SELECT COUNT(*) FROM trash WHERE original_name = 'notes.txt'").Scan(&count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 trash record in db, got %d", count)
+	}
+}
+
+func TestDeleteFolderSoft(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	targetFolder := filepath.Join(dir, "docs")
+	os.MkdirAll(targetFolder, 0755)
+	err := os.WriteFile(filepath.Join(targetFolder, "info.txt"), []byte("info"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/files/delete?volume=storage&path=&file=docs", nil)
+	rr := httptest.NewRecorder()
+
+	handleDeleteFile(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify original folder no longer exists
+	if _, err := os.Stat(targetFolder); !os.IsNotExist(err) {
+		t.Error("expected original folder to be gone, but it still exists")
+	}
+
+	// Verify row in database trash table
+	var trashName string
+	err = dbConn.QueryRow("SELECT trash_name FROM trash WHERE original_name = 'docs'").Scan(&trashName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify trash directory contains renamed folder
+	trashPath := filepath.Join(volumes["trash"], trashName)
+	if _, err := os.Stat(trashPath); os.IsNotExist(err) {
+		t.Error("expected folder to exist in trash folder, but it was not found")
+	}
+}
+
+func TestDeleteTrashPermanent(t *testing.T) {
+	setupTestDB(t)
+	trashDir := volumes["trash"]
+
+	// Create dummy file inside trash folder
+	trashName := "dummy_123456"
+	err := os.WriteFile(filepath.Join(trashDir, trashName), []byte("to be permanently deleted"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add trash database record
+	_, err = dbConn.Exec("INSERT INTO trash (id, original_name, original_path, trash_name, deleted_at) VALUES (?, ?, ?, ?, ?)",
+		"trash-id-xyz", "dummy.txt", "", trashName, time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/files/delete?volume=trash&path=&file="+trashName, nil)
+	rr := httptest.NewRecorder()
+
+	handleDeleteFile(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify trash file is permanently gone from filesystem
+	if _, err := os.Stat(filepath.Join(trashDir, trashName)); !os.IsNotExist(err) {
+		t.Error("expected trash file to be permanently deleted, but it still exists")
+	}
+
+	// Verify database record has been pruned
+	var count int
+	err = dbConn.QueryRow("SELECT COUNT(*) FROM trash WHERE trash_name = ?", trashName).Scan(&count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("expected trash record to be deleted, but count is %d", count)
+	}
+}
+
+func TestDownloadSingleFile(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	err := os.WriteFile(filepath.Join(dir, "photo.jpg"), []byte("image-bytes-data"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/files/download?volume=storage&path=&file=photo.jpg", nil)
+	rr := httptest.NewRecorder()
+
+	handleDownload(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Check download header
+	dispHeader := rr.Header().Get("Content-Disposition")
+	expectedHeader := `attachment; filename="photo.jpg"`
+	if dispHeader != expectedHeader {
+		t.Errorf("expected header %q, got %q", expectedHeader, dispHeader)
+	}
+
+	// Check body bytes
+	if rr.Body.String() != "image-bytes-data" {
+		t.Errorf("expected body 'image-bytes-data', got %q", rr.Body.String())
+	}
+}
+
+func TestDownloadFolderZipped(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	// Create subfolder and files
+	subDir := filepath.Join(dir, "vacation")
+	os.MkdirAll(subDir, 0755)
+	err := os.WriteFile(filepath.Join(subDir, "lake.jpg"), []byte("lake-data"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/files/download?volume=storage&path=&file=vacation", nil)
+	rr := httptest.NewRecorder()
+
+	handleDownload(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Check zip header
+	dispHeader := rr.Header().Get("Content-Disposition")
+	expectedHeader := `attachment; filename="vacation.zip"`
+	if dispHeader != expectedHeader {
+		t.Errorf("expected header %q, got %q", expectedHeader, dispHeader)
+	}
+
+	// Unpack ZIP archive to verify contents
+	zipReader, err := zip.NewReader(bytes.NewReader(rr.Body.Bytes()), int64(rr.Body.Len()))
+	if err != nil {
+		t.Fatalf("failed to read response as ZIP: %v", err)
+	}
+
+	if len(zipReader.File) != 1 {
+		t.Fatalf("expected 1 file in zip, got %d", len(zipReader.File))
+	}
+
+	f := zipReader.File[0]
+	if f.Name != "vacation/lake.jpg" {
+		t.Errorf("expected zip file name 'vacation/lake.jpg', got %q", f.Name)
+	}
+
+	rc, err := f.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+
+	buf := new(bytes.Buffer)
+	_, _ = io.Copy(buf, rc)
+	if buf.String() != "lake-data" {
+		t.Errorf("expected unzipped content 'lake-data', got %q", buf.String())
+	}
+}
+
+func TestDownloadMultipleFilesZipped(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	err := os.WriteFile(filepath.Join(dir, "f1.txt"), []byte("file1"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "f2.txt"), []byte("file2"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/files/download?volume=storage&path=&file=f1.txt&file=f2.txt", nil)
+	rr := httptest.NewRecorder()
+
+	handleDownload(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Unpack ZIP archive to verify contents
+	zipReader, err := zip.NewReader(bytes.NewReader(rr.Body.Bytes()), int64(rr.Body.Len()))
+	if err != nil {
+		t.Fatalf("failed to read response as ZIP: %v", err)
+	}
+
+	if len(zipReader.File) != 2 {
+		t.Fatalf("expected 2 files in zip, got %d", len(zipReader.File))
+	}
+
+	// Verify f1.txt content
+	f1 := zipReader.File[0]
+	if f1.Name != "f1.txt" {
+		t.Errorf("expected first zip file name 'f1.txt', got %q", f1.Name)
+	}
+
+	// Verify f2.txt content
+	f2 := zipReader.File[1]
+	if f2.Name != "f2.txt" {
+		t.Errorf("expected second zip file name 'f2.txt', got %q", f2.Name)
+	}
+}
+
