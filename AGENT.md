@@ -57,3 +57,33 @@ Magicbox OS runs decentralized containerized applications (like Drive) locally p
    * Every component must have a corresponding test suite (`*_test.go`).
    * **Individual Test Functions**: Avoid wrapping multiple independent validation scenarios inside a single large flow test. Create separate, focused test functions (e.g. `TestGrpcGetProfile`, `TestGrpcListContacts`) to isolate failures.
    * **Mock External Services**: Mock network and external components (e.g. using `bufconn` for gRPC tests, mock interfaces for P2P transport) to keep unit tests fast and deterministic.
+
+## Docker & Deployment Commands
+When making backend, frontend, or config changes, you must rebuild the image and recreate the container stack. Running `docker compose restart` only restarts cached containers and will **not** load updated image layers.
+
+```bash
+# 1. Rebuild the core docker image with updated code changes
+docker build -t docker.io/magicbox/core:latest .
+
+# 2. Recreate and restart the docker compose container stack to apply the new image
+docker compose down && docker compose up -d
+```
+
+## Testing Commands
+Run unit and integration tests from the workspace root:
+
+```bash
+# Run all tests in the project
+go test ./...
+
+# Run all tests in the project with verbose output
+go test -v ./...
+
+# Run tests under a specific package (e.g. internal/rest)
+go test -v ./internal/rest
+
+# Run a specific test case (e.g. TestGrpcGetProfile)
+go test -v ./internal/rpc -run TestGrpcGetProfile
+```
+
+
