@@ -135,3 +135,38 @@ export async function shareFile(volume, path, filename, contactID) {
   }
   return res.json();
 }
+
+export async function restoreTrashFile(filename) {
+  const url = `${API_BASE}/trash/restore?file=${encodeURIComponent(filename)}`;
+  const res = await fetch(url, { method: 'POST' });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to restore file: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function emptyTrash() {
+  const url = `${API_BASE}/trash/empty`;
+  const res = await fetch(url, { method: 'POST' });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to empty trash: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchShares() {
+  const res = await fetch(`${API_BASE}/shares`);
+  if (!res.ok) throw new Error(`Failed to fetch shares history: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchFileShares(filename, path = '') {
+  const res = await fetch(
+    `${API_BASE}/shares/file?file=${encodeURIComponent(filename)}&path=${encodeURIComponent(path)}`
+  );
+  if (!res.ok) throw new Error(`Failed to fetch file shares history: ${res.statusText}`);
+  return res.json();
+}
+

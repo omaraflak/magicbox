@@ -59,7 +59,7 @@ Magicbox OS runs decentralized containerized applications (like Drive) locally p
    * **Mock External Services**: Mock network and external components (e.g. using `bufconn` for gRPC tests, mock interfaces for P2P transport) to keep unit tests fast and deterministic.
 
 ## Docker & Deployment Commands
-When making backend, frontend, or config changes, you must rebuild the image and recreate the container stack. Running `docker compose restart` only restarts cached containers and will **not** load updated image layers.
+When making Core OS changes, you must rebuild the image and recreate the container stack:
 
 ```bash
 # 1. Rebuild the core docker image with updated code changes
@@ -68,6 +68,15 @@ docker build -t docker.io/magicbox/core:latest .
 # 2. Recreate and restart the docker compose container stack to apply the new image
 docker compose down && docker compose up -d
 ```
+
+### Refreshing Dynamic App Containers
+Do **not** manually delete or restart user app containers (e.g., `magicbox_app_omar_com.magicbox.drive`) using raw Docker CLI commands. This will desynchronize the Core database state and break reverse proxy routing.
+
+Instead, trigger a clean rebuild and recreate action via the Core REST API:
+```bash
+POST /api/apps/{app_id}/rebuild
+```
+
 
 ## Testing Commands
 Run unit and integration tests from the workspace root:

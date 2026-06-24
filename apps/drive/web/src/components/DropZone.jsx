@@ -66,6 +66,7 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
   }, [volume, path, onUploadComplete]);
 
   const handleDragEnter = useCallback((e) => {
+    if (volume !== 'storage') return;
     const isFileDrag = e.dataTransfer.types && e.dataTransfer.types.includes('Files');
     if (!isFileDrag) return;
 
@@ -75,9 +76,10 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
     if (dragCounter.current === 1) {
       setIsDragging(true);
     }
-  }, []);
+  }, [volume]);
 
   const handleDragLeave = useCallback((e) => {
+    if (volume !== 'storage') return;
     const isFileDrag = e.dataTransfer.types && e.dataTransfer.types.includes('Files');
     if (!isFileDrag) return;
 
@@ -87,17 +89,19 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
     if (dragCounter.current === 0) {
       setIsDragging(false);
     }
-  }, []);
+  }, [volume]);
 
   const handleDragOver = useCallback((e) => {
+    if (volume !== 'storage') return;
     const isFileDrag = e.dataTransfer.types && e.dataTransfer.types.includes('Files');
     if (!isFileDrag) return;
 
     e.preventDefault();
     e.stopPropagation();
-  }, []);
+  }, [volume]);
 
   const handleDrop = useCallback((e) => {
+    if (volume !== 'storage') return;
     const isFileDrag = e.dataTransfer.types && e.dataTransfer.types.includes('Files');
     if (!isFileDrag) return;
 
@@ -107,7 +111,7 @@ export default function DropZone({ volume, path, onUploadComplete, children, upl
     setIsDragging(false);
     const files = e.dataTransfer.files;
     handleUpload(files);
-  }, [handleUpload]);
+  }, [volume, handleUpload]);
 
   const handleFileSelect = useCallback((e) => {
     handleUpload(e.target.files);

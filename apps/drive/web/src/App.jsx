@@ -1,14 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchInfo, listFiles, createFolder, deleteFile, getDownloadPlan, getFileUrl, moveFile, fetchContacts, shareFile } from './utils/api';
+import { 
+  fetchInfo, 
+  listFiles, 
+  createFolder, 
+  deleteFile, 
+  getDownloadPlan, 
+  getFileUrl, 
+  moveFile, 
+  fetchContacts, 
+  shareFile,
+  restoreTrashFile,
+  emptyTrash,
+  fetchShares,
+  fetchFileShares
+} from './utils/api';
 import Header from './components/Header';
+import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import DropZone from './components/DropZone';
 import FileGrid from './components/FileGrid';
 import EmptyState from './components/EmptyState';
-
-const VOLUMES = [
-  { id: 'storage', name: 'My Storage', icon: '💾' },
-];
 
 export default function App() {
   const [userID, setUserID] = useState('');
@@ -29,6 +40,8 @@ export default function App() {
   const [renameTarget, setRenameTarget] = useState(null);
   const [selectedFileNames, setSelectedFileNames] = useState([]);
   const [shareTarget, setShareTarget] = useState(null);
+  const [fileSharesTarget, setFileSharesTarget] = useState(null);
+  const [fileShares, setFileShares] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [sharing, setSharing] = useState(false);
@@ -121,6 +134,26 @@ export default function App() {
       });
   }, [shareTarget]);
 
+  // Fetch file shares history when file shares dialog is opened
+  useEffect(() => {
+    if (!fileSharesTarget) return;
+    fetchFileShares(fileSharesTarget.name, currentPath)
+      .then(setFileShares)
+      .catch((err) => console.error('Failed to fetch file shares:', err));
+  }, [fileSharesTarget, currentPath]);
+
+  // Listen to Escape key to close the file shares history dialog
+  useEffect(() => {
+    if (!fileSharesTarget) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setFileSharesTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fileSharesTarget]);
+
   // Listen to Escape key to close the share dialog
   useEffect(() => {
     if (!shareTarget) return;
@@ -158,8 +191,14 @@ export default function App() {
   };
   const loadFiles = useCallback(async (volume, path, showSpinner = true) => {
     if (showSpinner) setLoading(true);
+    setFiles([]); // Reset files array immediately to prevent schema crashes from stale data
     try {
-      const data = await listFiles(volume, path);
+      let data;
+      if (volume === 'shares') {
+        data = await fetchShares();
+      } else {
+        data = await listFiles(volume, path);
+      }
       setFiles(data || []);
       setSelectedFileNames([]);
       setFileCounts((prev) => ({ ...prev, [volume]: (data || []).length }));
@@ -173,13 +212,16 @@ export default function App() {
 
   // Load all volume counts on mount
   useEffect(() => {
-    VOLUMES.forEach((vol) => {
-      listFiles(vol.id, '')
-        .then((data) => {
-          setFileCounts((prev) => ({ ...prev, [vol.id]: (data || []).length }));
-        })
-        .catch(() => {});
-    });
+    listFiles('storage', '')
+      .then((data) => {
+        setFileCounts((prev) => ({ ...prev, storage: (data || []).length }));
+      })
+      .catch(() => {});
+    listFiles('trash', '')
+      .then((data) => {
+        setFileCounts((prev) => ({ ...prev, trash: (data || []).length }));
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -221,6 +263,28 @@ export default function App() {
       handleRefresh();
     } catch (err) {
       window.alert('Failed to delete file/folder: ' + err.message);
+    }
+  };
+
+  const handleRestoreTrashFile = async (item) => {
+    setContextMenu(null);
+    try {
+      await restoreTrashFile(item.name);
+      handleRefresh();
+    } catch (err) {
+      window.alert('Failed to restore file: ' + err.message);
+    }
+  };
+
+  const handleEmptyTrashClick = async () => {
+    if (!window.confirm('Are you sure you want to empty the Trash? All files will be permanently deleted.')) {
+      return;
+    }
+    try {
+      await emptyTrash();
+      handleRefresh();
+    } catch (err) {
+      window.alert('Failed to empty trash: ' + err.message);
     }
   };
 
@@ -284,7 +348,16 @@ export default function App() {
       />
 
       <div className="app-body">
-        <main className="main-content" style={{ padding: '0 24px' }}>
+        <Sidebar
+          activeVolume={activeVolume}
+          onVolumeChange={(vol) => {
+            setActiveVolume(vol);
+            setCurrentPath('');
+            setFiles([]);
+          }}
+        />
+
+        <main className="main-content">
           <Toolbar
             currentPath={currentPath}
             onBreadcrumbClick={handleBreadcrumbClick}
@@ -301,6 +374,8 @@ export default function App() {
                 setSelectedFileNames(files.map(f => f.name));
               }
             }}
+            activeVolume={activeVolume}
+            onEmptyTrashClick={handleEmptyTrashClick}
           />
 
           <DropZone
@@ -309,7 +384,7 @@ export default function App() {
             onUploadComplete={handleRefresh}
             uploadRef={uploadRef}
             onContextMenu={(e) => {
-              if (!e.target.closest('.file-card')) {
+              if (!e.target.closest('.file-card') && activeVolume !== 'shares') {
                 e.preventDefault();
                 setContextMenu({ x: e.clientX, y: e.clientY, item: null });
               }
@@ -320,8 +395,39 @@ export default function App() {
                 <div className="loading-spinner" />
                 <p>Loading files...</p>
               </div>
+            ) : activeVolume === 'shares' ? (
+              <div className="shares-history" style={{ padding: '0 8px' }}>
+                {files.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
+                    No sharing records found.
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        <th style={{ padding: '12px' }}>File Name</th>
+                        <th style={{ padding: '12px' }}>Original Path</th>
+                        <th style={{ padding: '12px' }}>Shared With</th>
+                        <th style={{ padding: '12px' }}>Shared At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {files.map((rec) => (
+                        <tr key={rec.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.9rem' }}>
+                          <td style={{ padding: '12px', fontWeight: 500 }}>{rec.filename}</td>
+                          <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{rec.path || '/'}</td>
+                          <td style={{ padding: '12px' }}>{rec.contact_name}</td>
+                          <td style={{ padding: '12px', color: 'var(--text-muted)' }}>
+                            {new Date(rec.shared_at).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             ) : files.length === 0 ? (
-              <EmptyState volumeName={currentPath ? currentPath.split('/').pop() : 'My Storage'} />
+              <EmptyState volumeName={activeVolume === 'trash' ? 'Trash' : (currentPath ? currentPath.split('/').pop() : 'My Storage')} />
             ) : (
               <FileGrid
                 files={files}
@@ -432,26 +538,44 @@ export default function App() {
             onClick={() => setContextMenu(null)}
           >
             {contextMenu.item ? (
-              <>
-                 <button className="menu-item" onClick={() => handleDownloadItem(contextMenu.item)}>
-                  ⬇ Download
-                </button>
-                {!contextMenu.item.is_dir && (
-                  <button className="menu-item" onClick={() => setShareTarget(contextMenu.item)}>
-                    📤 Share
+              activeVolume === 'trash' ? (
+                <>
+                  <button className="menu-item" onClick={() => handleRestoreTrashFile(contextMenu.item)}>
+                    🔄 Restore
                   </button>
-                )}
-                <button className="menu-item" onClick={() => setRenameTarget(contextMenu.item)}>
-                  ✏️ Rename
-                </button>
-                <button className="menu-item menu-item-danger" onClick={() => handleTriggerDelete(contextMenu.item)}>
-                  🗑 Delete
-                </button>
-              </>
+                  <button className="menu-item menu-item-danger" onClick={() => handleTriggerDelete(contextMenu.item)}>
+                    🗑 Delete Permanently
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="menu-item" onClick={() => handleDownloadItem(contextMenu.item)}>
+                    ⬇ Download
+                  </button>
+                  {!contextMenu.item.is_dir && (
+                    <>
+                      <button className="menu-item" onClick={() => setShareTarget(contextMenu.item)}>
+                        📤 Share
+                      </button>
+                      <button className="menu-item" onClick={() => setFileSharesTarget(contextMenu.item)}>
+                        🔗 Shares History
+                      </button>
+                    </>
+                  )}
+                  <button className="menu-item" onClick={() => setRenameTarget(contextMenu.item)}>
+                    ✏️ Rename
+                  </button>
+                  <button className="menu-item menu-item-danger" onClick={() => handleTriggerDelete(contextMenu.item)}>
+                    🗑 Delete
+                  </button>
+                </>
+              )
             ) : (
-              <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
-                📁 New Folder
-              </button>
+              activeVolume === 'storage' && (
+                <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
+                  📁 New Folder
+                </button>
+              )
             )}
           </div>
         </>
@@ -485,10 +609,12 @@ export default function App() {
           }}>
             <h3 style={{ marginBottom: '12px', fontSize: '1.1rem', fontWeight: 600 }}>Confirm Deletion</h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
-              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+              Are you sure you want to delete <strong>{deleteTarget.display_name || deleteTarget.name}</strong>?
             </p>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
-              This action is permanent and cannot be undone.
+              {activeVolume === 'trash' 
+                ? 'This action is permanent and cannot be undone.'
+                : 'This item will be moved to the Trash, where it will be kept for 30 days.'}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
@@ -658,6 +784,68 @@ export default function App() {
                   {sharing ? 'Sharing...' : 'Share'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fileSharesTarget && (
+        <div 
+          onClick={() => setFileSharesTarget(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ 
+            background: 'var(--bg-secondary)', 
+            border: '1px solid var(--border-color)', 
+            borderRadius: 'var(--radius-lg)', 
+            padding: '24px', 
+            maxWidth: '500px', 
+            width: '90%',
+            boxShadow: 'var(--shadow-premium)',
+          }}>
+            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Shares History: {fileSharesTarget.name}</h3>
+            
+            <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '24px' }}>
+              {fileShares.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  This file hasn't been shared with anyone yet.
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      <th style={{ padding: '8px 12px' }}>Shared With</th>
+                      <th style={{ padding: '8px 12px' }}>Date & Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fileShares.map((s) => (
+                      <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
+                        <td style={{ padding: '8px 12px', fontWeight: 500 }}>{s.contact_name}</td>
+                        <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
+                          {new Date(s.shared_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setFileSharesTarget(null)}>Close</button>
             </div>
           </div>
         </div>

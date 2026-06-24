@@ -7,7 +7,8 @@ COPY apps/drive/web/ ./
 RUN npm run build
 
 # Stage 2: Build Go binary
-FROM golang:1.23-alpine AS builder
+FROM golang:alpine AS builder
+RUN apk add --no-cache gcc musl-dev
 WORKDIR /magicbox/apps/drive
 # Create a stub go.mod for the replaced core module to avoid downloading unused core dependencies
 RUN mkdir -p /magicbox && echo -e "module github.com/magicbox/core\n\ngo 1.23.0" > /magicbox/go.mod
@@ -18,7 +19,7 @@ COPY apps/drive/go.mod apps/drive/go.sum ./
 RUN go mod download
 # Copy local source file
 COPY apps/drive/main.go .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o drive main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o drive main.go
 
 # Stage 3: Runtime
 FROM alpine:3.19

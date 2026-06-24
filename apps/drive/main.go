@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -25,6 +28,7 @@ import (
 // Volume mapping: logical name → filesystem path
 var volumes = map[string]string{
 	"storage": "/data/shared/storage",
+	"trash":   "/data/shared/storage/.trash",
 }
 
 // Environment variables injected by MagicBox
@@ -42,6 +46,80 @@ const (
 )
 
 var cachedUsername string
+var dbConn *sql.DB
+
+func initDB() {
+	dbPath := "/data/app_state/drive.db"
+	os.MkdirAll("/data/app_state", 0755)
+
+	var err error
+	dbConn, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		log.Fatalf("Failed to open sqlite database: %v", err)
+	}
+
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS shares (
+			id TEXT PRIMARY KEY,
+			filename TEXT NOT NULL,
+			path TEXT NOT NULL,
+			contact_id TEXT NOT NULL,
+			contact_name TEXT NOT NULL,
+			shared_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS trash (
+			id TEXT PRIMARY KEY,
+			original_name TEXT NOT NULL,
+			original_path TEXT NOT NULL,
+			trash_name TEXT NOT NULL,
+			deleted_at TEXT NOT NULL
+		)`,
+	}
+
+	for _, q := range queries {
+		if _, err := dbConn.Exec(q); err != nil {
+			log.Fatalf("Failed to run schema queries: %v", err)
+		}
+	}
+}
+
+func startTrashCleaner() {
+	ticker := time.NewTicker(12 * time.Hour)
+	go func() {
+		for range ticker.C {
+			cleanExpiredTrash()
+		}
+	}()
+}
+
+func cleanExpiredTrash() {
+	if dbConn == nil {
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -30).Format(time.RFC3339)
+	rows, err := dbConn.Query("SELECT trash_name FROM trash WHERE deleted_at < ?", cutoff)
+	if err != nil {
+		log.Printf("cleanExpiredTrash: failed to query: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var trashNames []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil {
+			trashNames = append(trashNames, name)
+		}
+	}
+
+	for _, name := range trashNames {
+		path := filepath.Join(volumes["trash"], name)
+		if err := os.RemoveAll(path); err != nil && !os.IsNotExist(err) {
+			log.Printf("cleanExpiredTrash: failed to remove %s: %v", path, err)
+		}
+		dbConn.Exec("DELETE FROM trash WHERE trash_name = ?", name)
+	}
+}
 
 // --- JSON helpers ---
 
@@ -110,10 +188,13 @@ func getUsernameFromCore() (string, error) {
 // --- Handlers ---
 
 type FileInfo struct {
-	Name       string    `json:"name"`
-	Size       int64     `json:"size"`
-	ModifiedAt time.Time `json:"modified_at"`
-	IsDir      bool      `json:"is_dir"`
+	Name         string    `json:"name"`
+	DisplayName  string    `json:"display_name"`
+	Size         int64     `json:"size"`
+	ModifiedAt   time.Time `json:"modified_at"`
+	IsDir        bool      `json:"is_dir"`
+	OriginalPath string    `json:"original_path,omitempty"`
+	DeletedAt    *string   `json:"deleted_at,omitempty"`
 }
 
 func handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -170,17 +251,63 @@ func handleListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if volumeName == "trash" {
+		rows, err := dbConn.Query("SELECT original_name, original_path, trash_name, deleted_at FROM trash")
+		var dbTrash = make(map[string]FileInfo)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var origName, origPath, trashName, delAt string
+				if err := rows.Scan(&origName, &origPath, &trashName, &delAt); err == nil {
+					dbTrash[trashName] = FileInfo{
+						Name:         trashName,
+						DisplayName:  origName,
+						OriginalPath: origPath,
+						DeletedAt:    &delAt,
+					}
+				}
+			}
+		}
+
+		files := make([]FileInfo, 0, len(entries))
+		for _, entry := range entries {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			item, ok := dbTrash[entry.Name()]
+			if !ok {
+				item = FileInfo{
+					Name:        entry.Name(),
+					DisplayName: entry.Name(),
+				}
+			}
+			item.Size = info.Size()
+			item.ModifiedAt = info.ModTime().UTC()
+			item.IsDir = entry.IsDir()
+
+			files = append(files, item)
+		}
+
+		writeJSON(w, http.StatusOK, files)
+		return
+	}
+
 	files := make([]FileInfo, 0, len(entries))
 	for _, entry := range entries {
+		if entry.Name() == ".trash" || entry.Name() == ".drive.db" {
+			continue
+		}
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
 		files = append(files, FileInfo{
-			Name:       entry.Name(),
-			Size:       info.Size(),
-			ModifiedAt: info.ModTime().UTC(),
-			IsDir:      entry.IsDir(),
+			Name:        entry.Name(),
+			DisplayName: entry.Name(),
+			Size:        info.Size(),
+			ModifiedAt:  info.ModTime().UTC(),
+			IsDir:       entry.IsDir(),
 		})
 	}
 
@@ -267,16 +394,47 @@ func handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	safeName := filepath.Base(filename)
 	fullPath := filepath.Join(dirPath, safeName)
 
-	if err := os.RemoveAll(fullPath); err != nil {
+	if volumeName == "trash" {
+		if err := os.RemoveAll(fullPath); err != nil {
+			if os.IsNotExist(err) {
+				writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
+			} else {
+				writeError(w, http.StatusInternalServerError, "failed to delete file/folder: "+err.Error())
+			}
+			return
+		}
+		dbConn.Exec("DELETE FROM trash WHERE trash_name = ?", safeName)
+		writeJSON(w, http.StatusOK, map[string]string{"deleted": safeName})
+		return
+	}
+
+	// Soft delete: move to trash volume
+	trashDir := volumes["trash"]
+	if err := os.MkdirAll(trashDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize trash folder: "+err.Error())
+		return
+	}
+
+	trashName := safeName + "_" + strconv.FormatInt(time.Now().Unix(), 10)
+	destPath := filepath.Join(trashDir, trashName)
+
+	if err := os.Rename(fullPath, destPath); err != nil {
 		if os.IsNotExist(err) {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
 		} else {
-			writeError(w, http.StatusInternalServerError, "failed to delete file/folder: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "failed to move file/folder to trash: "+err.Error())
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"deleted": safeName})
+	trashID := uuid.NewString()
+	_, dbErr := dbConn.Exec("INSERT INTO trash (id, original_name, original_path, trash_name, deleted_at) VALUES (?, ?, ?, ?, ?)",
+		trashID, safeName, subPath, trashName, time.Now().Format(time.RFC3339))
+	if dbErr != nil {
+		log.Printf("Warning: failed to record trash metadata: %v", dbErr)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": safeName, "trash_name": trashName})
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -691,6 +849,24 @@ func handleShareFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	contactName := contactID
+	contactsResp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
+	if err == nil {
+		for _, c := range contactsResp.Contacts {
+			if c.Id == contactID {
+				contactName = c.DisplayName
+				break
+			}
+		}
+	}
+
+	shareID := uuid.NewString()
+	_, dbErr := dbConn.Exec("INSERT INTO shares (id, filename, path, contact_id, contact_name, shared_at) VALUES (?, ?, ?, ?, ?, ?)",
+		shareID, safeName, subPath, contactID, contactName, time.Now().Format(time.RFC3339))
+	if dbErr != nil {
+		log.Printf("Warning: failed to record share metadata: %v", dbErr)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"shared": safeName})
 }
 
@@ -765,6 +941,10 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	log.Println("Starting Magic Drive API on port 8080...")
 
+	initDB()
+	defer dbConn.Close()
+	startTrashCleaner()
+
 	mux := http.NewServeMux()
 
 	// API routes
@@ -776,6 +956,10 @@ func main() {
 	mux.HandleFunc("/api/folders", handleFolders)
 	mux.HandleFunc("/api/contacts", handleListContacts)
 	mux.HandleFunc("/api/files/share", handleShareFile)
+	mux.HandleFunc("/api/trash/restore", handleRestoreTrash)
+	mux.HandleFunc("/api/trash/empty", handleEmptyTrash)
+	mux.HandleFunc("/api/shares", handleListShares)
+	mux.HandleFunc("/api/shares/file", handleListFileShares)
 
 	// Internal webhook
 	mux.HandleFunc("/internal/magicbox-webhook", handleWebhook)
@@ -873,3 +1057,147 @@ func handleMoveFile(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"moved": safeName})
 }
+
+func handleRestoreTrash(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	filename := r.URL.Query().Get("file")
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
+		return
+	}
+
+	var origName, origPath string
+	err := dbConn.QueryRow("SELECT original_name, original_path FROM trash WHERE trash_name = ?", filename).Scan(&origName, &origPath)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeError(w, http.StatusNotFound, "trash file not found in database")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error: "+err.Error())
+		}
+		return
+	}
+
+	destDir, err := resolvePath("storage", origPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid original path: "+err.Error())
+		return
+	}
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create destination folders: "+err.Error())
+		return
+	}
+
+	srcFullPath := filepath.Join(volumes["trash"], filename)
+	destFullPath := filepath.Join(destDir, origName)
+
+	if _, err := os.Stat(destFullPath); !os.IsNotExist(err) {
+		writeError(w, http.StatusConflict, "file/folder already exists in restored destination")
+		return
+	}
+
+	if err := os.Rename(srcFullPath, destFullPath); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to restore file: "+err.Error())
+		return
+	}
+
+	dbConn.Exec("DELETE FROM trash WHERE trash_name = ?", filename)
+
+	writeJSON(w, http.StatusOK, map[string]string{"restored": origName})
+}
+
+func handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	trashDir := volumes["trash"]
+	entries, err := os.ReadDir(trashDir)
+	if err == nil {
+		for _, entry := range entries {
+			fullPath := filepath.Join(trashDir, entry.Name())
+			if err := os.RemoveAll(fullPath); err != nil {
+				log.Printf("handleEmptyTrash: failed to remove %s: %v", fullPath, err)
+			}
+		}
+	}
+
+	_, dbErr := dbConn.Exec("DELETE FROM trash")
+	if dbErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to clear database records: "+dbErr.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "trash emptied successfully"})
+}
+
+type ShareRecord struct {
+	ID          string `json:"id"`
+	Filename    string `json:"filename"`
+	Path        string `json:"path"`
+	ContactID   string `json:"contact_id"`
+	ContactName string `json:"contact_name"`
+	SharedAt    string `json:"shared_at"`
+}
+
+func handleListShares(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, shared_at FROM shares ORDER BY shared_at DESC")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query shares: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	records := []ShareRecord{}
+	for rows.Next() {
+		var rec ShareRecord
+		if err := rows.Scan(&rec.ID, &rec.Filename, &rec.Path, &rec.ContactID, &rec.ContactName, &rec.SharedAt); err == nil {
+			records = append(records, rec)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, records)
+}
+
+func handleListFileShares(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	filename := r.URL.Query().Get("file")
+	subPath := r.URL.Query().Get("path")
+
+	if filename == "" {
+		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
+		return
+	}
+
+	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, shared_at FROM shares WHERE filename = ? AND path = ? ORDER BY shared_at DESC", filename, subPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query file shares: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	records := []ShareRecord{}
+	for rows.Next() {
+		var rec ShareRecord
+		if err := rows.Scan(&rec.ID, &rec.Filename, &rec.Path, &rec.ContactID, &rec.ContactName, &rec.SharedAt); err == nil {
+			records = append(records, rec)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, records)
+}
+

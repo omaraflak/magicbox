@@ -22,12 +22,15 @@ export default function FileGrid({
   const filtered = (files || [])
     .filter((f) => {
       if (!searchQuery) return true;
-      return f.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const targetName = f.display_name || f.name;
+      return targetName.toLowerCase().includes(searchQuery.toLowerCase());
     })
     .sort((a, b) => {
       if (a.is_dir && !b.is_dir) return -1;
       if (!a.is_dir && b.is_dir) return 1;
-      return a.name.localeCompare(b.name);
+      const nameA = a.display_name || a.name;
+      const nameB = b.display_name || b.name;
+      return nameA.localeCompare(nameB);
     });
 
   // Global Ctrl+A / Cmd+A listener

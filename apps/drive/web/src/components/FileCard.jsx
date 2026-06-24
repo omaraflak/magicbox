@@ -39,15 +39,25 @@ export default function FileCard({
           {getFileIcon(file.name, file.is_dir)}
         </div>
         <div className="file-card-info">
-          <div className="file-card-name" title={file.name}>
-            {file.name}
+          <div className="file-card-name" title={file.display_name || file.name}>
+            {file.display_name || file.name}
           </div>
           <div className="file-card-meta">
+            {file.original_path && (
+              <span className="file-card-path" style={{ color: 'var(--text-muted)', marginRight: '8px' }}>
+                Original Path: {file.original_path || '/'}
+              </span>
+            )}
+            {file.deleted_at && (
+              <span className="file-card-deleted" style={{ color: 'var(--text-muted)', marginRight: '8px' }}>
+                Deleted: {new Date(file.deleted_at).toLocaleDateString()}
+              </span>
+            )}
             {!file.is_dir && (
               <span className="file-card-size">{formatFileSize(file.size)}</span>
             )}
             {file.is_dir && <span className="file-card-size">Folder</span>}
-            {file.modified_at && (
+            {!file.deleted_at && file.modified_at && (
               <span className="file-card-date">{formatDate(file.modified_at)}</span>
             )}
           </div>
@@ -72,8 +82,8 @@ export default function FileCard({
         style={{ cursor: 'pointer' }}
       >
         <div className="folder-icon" style={{ fontSize: '1.5rem', marginRight: '8px' }}>📁</div>
-        <div className="folder-name" title={file.name} style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-          {file.name}
+        <div className="folder-name" title={file.display_name || file.name} style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          {file.display_name || file.name}
         </div>
       </div>
     );
@@ -96,7 +106,7 @@ export default function FileCard({
         {isImage(file.name) ? (
           <img 
             src={getFileUrl(volume, path, file.name)} 
-            alt={file.name} 
+            alt={file.display_name || file.name} 
             className="file-preview-image"
             draggable="false"
           />
@@ -109,8 +119,8 @@ export default function FileCard({
 
       {/* Title & Info */}
       <div className="file-card-details">
-        <div className="file-card-name" title={file.name}>
-          {file.name}
+        <div className="file-card-name" title={file.display_name || file.name}>
+          {file.display_name || file.name}
         </div>
         <div className="file-card-meta">
           <span className="file-card-size">{formatFileSize(file.size)}</span>
