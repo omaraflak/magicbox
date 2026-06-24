@@ -82,7 +82,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user directories.
-	userDir := filepath.Join(s.cfg.Root, "users", req.Username)
+	userDir := filepath.Join(s.config.Root, "users", req.Username)
 	for _, sub := range []string{"apps", "shared"} {
 		if err := os.MkdirAll(filepath.Join(userDir, sub), 0750); err != nil {
 			s.logger.Error("admin create user: failed to create directory", logging.F("error", err.Error()))
@@ -115,7 +115,7 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cascade delete via orchestrator.
-	if err := s.orch.CascadeDeleteUser(r.Context(), userID); err != nil {
+	if err := s.orchestrator.CascadeDeleteUser(r.Context(), userID); err != nil {
 		s.logger.Error("admin delete user: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -190,7 +190,7 @@ func (s *Server) handleAdminDeleteRegistry(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleAdminListLogs(w http.ResponseWriter, r *http.Request) {
-	logDir := filepath.Join(s.cfg.Root, "core/logs")
+	logDir := filepath.Join(s.config.Root, "core/logs")
 	files, err := os.ReadDir(logDir)
 	if err != nil {
 		s.logger.Error("admin list logs: failed to read logs dir", logging.F("error", err.Error()))

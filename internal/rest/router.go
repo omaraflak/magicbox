@@ -14,23 +14,23 @@ import (
 
 // Server holds all dependencies needed by the REST API handlers.
 type Server struct {
-	cfg        *config.Config
-	db         *db.DB
-	docker     *docker.Client
-	logger     *logging.Logger
-	orch       *core.Orchestrator
-	p2pService p2p.Service
+	config       *config.Config
+	db           *db.DB
+	docker       *docker.Client
+	logger       *logging.Logger
+	orchestrator *core.Orchestrator
+	p2pService   p2p.Service
 }
 
 // NewServer creates a new REST API server with the given dependencies.
-func NewServer(cfg *config.Config, database *db.DB, dockerClient *docker.Client, logger *logging.Logger, orch *core.Orchestrator, p2pService p2p.Service) *Server {
+func NewServer(config *config.Config, db *db.DB, dockerClient *docker.Client, logger *logging.Logger, orchestrator *core.Orchestrator, p2pService p2p.Service) *Server {
 	return &Server{
-		cfg:        cfg,
-		db:         database,
-		docker:     dockerClient,
-		logger:     logger,
-		orch:       orch,
-		p2pService: p2pService,
+		config:       config,
+		db:           db,
+		docker:       dockerClient,
+		logger:       logger,
+		orchestrator: orchestrator,
+		p2pService:   p2pService,
 	}
 }
 
@@ -46,7 +46,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/auth/csrf", s.handleCSRFToken)
 
 	// Authenticated routes.
-	auth := AuthMiddleware(s.cfg.JWTSecret)
+	auth := AuthMiddleware(s.config.JWTSecret)
 
 	mux.Handle("GET /api/v1/me", auth(http.HandlerFunc(s.handleMe)))
 	mux.Handle("POST /api/v1/me/password", auth(http.HandlerFunc(s.handleUpdatePassword)))
@@ -82,7 +82,7 @@ func (s *Server) Handler() http.Handler {
 	// Static file fallback — serve web UI with SPA fallback.
 	// For client-side routing, serve index.html for any path that doesn't
 	// match a real static file (e.g. /admin/logs → index.html).
-	webDir := s.cfg.Root + "/core/web/"
+	webDir := s.config.Root + "/core/web/"
 	fileServer := http.FileServer(http.Dir(webDir))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if the requested file exists on disk.

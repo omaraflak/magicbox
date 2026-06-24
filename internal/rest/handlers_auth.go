@@ -58,7 +58,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user directories.
-	userDir := filepath.Join(s.cfg.Root, "users", req.Username)
+	userDir := filepath.Join(s.config.Root, "users", req.Username)
 	for _, sub := range []string{"apps", "shared"} {
 		if err := os.MkdirAll(filepath.Join(userDir, sub), 0750); err != nil {
 			s.logger.Error("setup: failed to create user directory", logging.F("error", err.Error()))
@@ -66,7 +66,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Auto-login: generate session token and set cookie.
-	token, err := GenerateSessionToken(s.cfg.JWTSecret, userID, req.Username, true)
+	token, err := GenerateSessionToken(s.config.JWTSecret, userID, req.Username, true)
 	if err != nil {
 		s.logger.Error("setup: failed to generate session token", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -109,7 +109,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := GenerateSessionToken(s.cfg.JWTSecret, user.ID, user.Username, user.IsAdmin)
+	token, err := GenerateSessionToken(s.config.JWTSecret, user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		s.logger.Error("login: failed to generate token", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")

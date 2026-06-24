@@ -85,7 +85,7 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := s.orch.Install(r.Context(), claims.UserID, manifestData)
+	app, err := s.orchestrator.Install(r.Context(), claims.UserID, manifestData)
 	if err != nil {
 		s.logger.Error("install app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -122,7 +122,7 @@ func (s *Server) handleUninstallApp(w http.ResponseWriter, r *http.Request) {
 
 	wipe := (r.URL.Query().Get("wipe") == "true")
 
-	if err := s.orch.Uninstall(r.Context(), appDBID, wipe); err != nil {
+	if err := s.orchestrator.Uninstall(r.Context(), appDBID, wipe); err != nil {
 		s.logger.Error("uninstall app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -145,7 +145,7 @@ func (s *Server) handleStartApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orch.Start(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.Start(r.Context(), appDBID); err != nil {
 		s.logger.Error("start app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -168,7 +168,7 @@ func (s *Server) handleStopApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orch.Stop(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.Stop(r.Context(), appDBID); err != nil {
 		s.logger.Error("stop app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -199,7 +199,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orch.Update(r.Context(), appDBID, manifestData); err != nil {
+	if err := s.orchestrator.Update(r.Context(), appDBID, manifestData); err != nil {
 		s.logger.Error("update app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -222,7 +222,7 @@ func (s *Server) handleRebuildApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orch.Rebuild(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.Rebuild(r.Context(), appDBID); err != nil {
 		s.logger.Error("rebuild app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -245,7 +245,7 @@ func (s *Server) handleRotateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orch.RotateToken(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.RotateToken(r.Context(), appDBID); err != nil {
 		s.logger.Error("rotate token: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
