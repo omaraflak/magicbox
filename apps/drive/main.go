@@ -1163,6 +1163,7 @@ func main() {
 	mux.HandleFunc("/api/files/download", handleDownload)
 	mux.HandleFunc("/api/files/download-plan", handleDownloadPlan)
 	mux.HandleFunc("/api/files/move", handleMoveFile)
+	mux.HandleFunc("/api/files/paste", handlePaste)
 	mux.HandleFunc("/api/folders", handleFolders)
 	mux.HandleFunc("/api/contacts", handleListContacts)
 	mux.HandleFunc("/api/files/send", handleSendFile)
@@ -1963,4 +1964,206 @@ func handleActiveListTransfers(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, records)
 }
+
+type PasteItem struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"is_dir"`
+}
+
+type PasteRequest struct {
+	Action     string      `json:"action"` // "copy" or "cut"
+	SrcVolume  string      `json:"src_volume"`
+	SrcPath    string      `json:"src_path"`
+	DestVolume string      `json:"dest_volume"`
+	DestPath   string      `json:"dest_path"`
+	Items      []PasteItem `json:"items"`
+}
+
+func handlePaste(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req PasteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Action != "copy" && req.Action != "cut" {
+		writeError(w, http.StatusBadRequest, "invalid action (must be 'copy' or 'cut')")
+		return
+	}
+
+	srcBase, srcErr := resolvePath(req.SrcVolume, req.SrcPath)
+	destBase, destErr := resolvePath(req.DestVolume, req.DestPath)
+	if srcErr != nil || destErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid path resolution")
+		return
+	}
+
+	// Query active auto-send folder paths
+	rows, err := dbConn.Query("SELECT path FROM auto_send_folders")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query auto-send folders: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var autoSendPaths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err == nil {
+			autoSendPaths = append(autoSendPaths, p)
+		}
+	}
+
+	// Validate items before any copying/moving begins
+	for _, item := range req.Items {
+		if !item.IsDir {
+			continue
+		}
+
+		srcRel := filepath.Join(req.SrcPath, item.Name)
+		destRel := req.DestPath
+
+		// Recursion check: cannot copy or move a folder inside itself or its children
+		if req.SrcVolume == req.DestVolume {
+			if srcRel == destRel || strings.HasPrefix(destRel, srcRel+"/") {
+				writeError(w, http.StatusBadRequest, "cannot copy/move a folder into itself or its subfolders")
+				return
+			}
+		}
+
+		// Auto-send nesting check
+		srcIsAutoSend := false
+		for _, asp := range autoSendPaths {
+			if asp == srcRel || strings.HasPrefix(asp, srcRel+"/") {
+				srcIsAutoSend = true
+				break
+			}
+		}
+
+		destIsAutoSend := false
+		for _, asp := range autoSendPaths {
+			if asp == destRel || strings.HasPrefix(destRel, asp+"/") {
+				destIsAutoSend = true
+				break
+			}
+		}
+
+		if req.Action == "cut" && srcIsAutoSend && destIsAutoSend {
+			writeError(w, http.StatusBadRequest, "cannot move an auto-send folder into another auto-send folder")
+			return
+		}
+	}
+
+	for _, item := range req.Items {
+		srcPath := filepath.Join(srcBase, item.Name)
+		
+		// Find a unique name in destination directory
+		uniqueName := resolveUniqueFilename(destBase, item.Name)
+		destPath := filepath.Join(destBase, uniqueName)
+
+		if req.Action == "cut" {
+			// Move file or folder
+			if err := os.Rename(srcPath, destPath); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to move item: "+err.Error())
+				return
+			}
+
+			// If it's a directory, update any auto-send folders
+			if item.IsDir {
+				srcRel := filepath.Join(req.SrcPath, item.Name)
+				destRel := filepath.Join(req.DestPath, uniqueName)
+
+				// 1. Update the directory itself
+				_, _ = dbConn.Exec("UPDATE auto_send_folders SET path = ? WHERE path = ?", destRel, srcRel)
+
+				// 2. Update nested directories that match prefix (recursive folder moves)
+				prefix := srcRel + "/%"
+				subQuery := `
+					UPDATE auto_send_folders 
+					SET path = ? || substr(path, ?) 
+					WHERE path LIKE ?
+				`
+				_, _ = dbConn.Exec(subQuery, destRel, len(srcRel)+1, prefix)
+			}
+		} else {
+			// Copy file or folder
+			if item.IsDir {
+				if err := copyDir(srcPath, destPath); err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to copy directory: "+err.Error())
+					return
+				}
+			} else {
+				if err := copyFile(srcPath, destPath); err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to copy file: "+err.Error())
+					return
+				}
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func copyFile(src, dest string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	
+	// Copy file permissions
+	si, err := os.Stat(src)
+	if err == nil {
+		os.Chmod(dest, si.Mode())
+	}
+	return nil
+}
+
+func copyDir(src, dest string) error {
+	si, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dest, si.Mode()); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		destPath := filepath.Join(dest, entry.Name())
+
+		if entry.IsDir() {
+			if err := copyDir(srcPath, destPath); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, destPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 

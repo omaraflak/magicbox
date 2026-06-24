@@ -11,7 +11,8 @@ export default function FileGrid({
   onContextMenu,
   selectedFileNames,
   onSelectionChange,
-  onMoveFiles
+  onMoveFiles,
+  clipboard
 }) {
   const [marquee, setMarquee] = useState(null);
   const containerRef = useRef(null);
@@ -325,6 +326,11 @@ export default function FileGrid({
 
       {filtered.map((file, index) => {
         const isSel = selectedFileNames.includes(file.name);
+        const isCut = clipboard && 
+                      clipboard.action === 'cut' && 
+                      clipboard.volume === volume && 
+                      clipboard.path === path && 
+                      clipboard.items.some(item => item.name === file.name);
         return (
           <div
             key={file.name}
@@ -335,6 +341,7 @@ export default function FileGrid({
               volume={volume} 
               path={path} 
               selected={isSel}
+              isCut={isCut}
               onClick={(e) => handleItemClick(e, file)}
               onDoubleClick={(e) => handleItemDoubleClick(e, file)}
               onContextMenu={(e) => handleItemContextMenu(e, file)}

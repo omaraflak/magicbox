@@ -649,5 +649,353 @@ func TestSendWithRetry(t *testing.T) {
 	}
 }
 
+func TestPasteCopyFile(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	err := os.WriteFile(filepath.Join(dir, "photo.jpg"), []byte("photo-bytes"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "backup"), 0755)
+
+	body := map[string]interface{}{
+		"action":      "copy",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "backup",
+		"items": []map[string]interface{}{
+			{"name": "photo.jpg", "is_dir": false},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+
+	handlePaste(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Source file should still exist
+	if _, err := os.Stat(filepath.Join(dir, "photo.jpg")); err != nil {
+		t.Error("expected source file to still exist, but got error: ", err)
+	}
+
+	// Destination file must exist and have same content
+	content, err := os.ReadFile(filepath.Join(dir, "backup/photo.jpg"))
+	if err != nil {
+		t.Fatal("expected copied file, got error: ", err)
+	}
+	if string(content) != "photo-bytes" {
+		t.Errorf("unexpected content: %q", string(content))
+	}
+}
+
+func TestPasteCutFile(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	err := os.WriteFile(filepath.Join(dir, "document.pdf"), []byte("pdf-bytes"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "archive"), 0755)
+
+	body := map[string]interface{}{
+		"action":      "cut",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "archive",
+		"items": []map[string]interface{}{
+			{"name": "document.pdf", "is_dir": false},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+
+	handlePaste(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Source file must be deleted
+	if _, err := os.Stat(filepath.Join(dir, "document.pdf")); !os.IsNotExist(err) {
+		t.Error("expected source file to be gone, but it still exists")
+	}
+
+	// Destination file must exist
+	content, err := os.ReadFile(filepath.Join(dir, "archive/document.pdf"))
+	if err != nil {
+		t.Fatal("expected moved file, got error: ", err)
+	}
+	if string(content) != "pdf-bytes" {
+		t.Errorf("unexpected content: %q", string(content))
+	}
+}
+
+func TestPasteCopyFolderWithoutAutoSend(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	// Create folder and nested file
+	os.MkdirAll(filepath.Join(dir, "trip"), 0755)
+	err := os.WriteFile(filepath.Join(dir, "trip/flight.pdf"), []byte("flight"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "copies"), 0755)
+
+	// Add auto-send folder config
+	_, err = dbConn.Exec("INSERT INTO auto_send_folders (id, path, created_at) VALUES (?, ?, ?)",
+		"folder-trip-id", "trip", time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := map[string]interface{}{
+		"action":      "copy",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "copies",
+		"items": []map[string]interface{}{
+			{"name": "trip", "is_dir": true},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+
+	handlePaste(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Source folder and file still exist
+	if _, err := os.Stat(filepath.Join(dir, "trip/flight.pdf")); err != nil {
+		t.Error("expected source nested file to still exist, but got: ", err)
+	}
+
+	// Destination folder and file must exist
+	content, err := os.ReadFile(filepath.Join(dir, "copies/trip/flight.pdf"))
+	if err != nil {
+		t.Fatal("expected copied file, got error: ", err)
+	}
+	if string(content) != "flight" {
+		t.Errorf("unexpected content: %q", string(content))
+	}
+
+	// Verify auto-send configs: source kept, copy NOT created
+	var count int
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'trip'").Scan(&count)
+	if count != 1 {
+		t.Errorf("expected original 'trip' auto-send folder to still exist, count is %d", count)
+	}
+
+	var copyCount int
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'copies/trip'").Scan(&copyCount)
+	if copyCount != 0 {
+		t.Errorf("expected copied folder NOT to inherit auto-send config, but it exists: %d", copyCount)
+	}
+}
+
+func TestPasteCutFolderWithAutoSend(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	// Create nested folder structures
+	os.MkdirAll(filepath.Join(dir, "vacation/nested"), 0755)
+	err := os.WriteFile(filepath.Join(dir, "vacation/nested/sunset.jpg"), []byte("sunset"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "archived"), 0755)
+
+	// Configure auto-send for parent folder and nested subfolder
+	_, err = dbConn.Exec("INSERT INTO auto_send_folders (id, path, created_at) VALUES (?, ?, ?)",
+		"folder-vacation-id", "vacation", time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = dbConn.Exec("INSERT INTO auto_send_folders (id, path, created_at) VALUES (?, ?, ?)",
+		"folder-nested-id", "vacation/nested", time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := map[string]interface{}{
+		"action":      "cut",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "archived",
+		"items": []map[string]interface{}{
+			{"name": "vacation", "is_dir": true},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+
+	handlePaste(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Source vacation must be deleted
+	if _, err := os.Stat(filepath.Join(dir, "vacation")); !os.IsNotExist(err) {
+		t.Error("expected source vacation folder to be gone, but it still exists")
+	}
+
+	// Destination files must exist
+	content, err := os.ReadFile(filepath.Join(dir, "archived/vacation/nested/sunset.jpg"))
+	if err != nil {
+		t.Fatal("expected moved file sunset.jpg, got error: ", err)
+	}
+	if string(content) != "sunset" {
+		t.Errorf("unexpected content: %q", string(content))
+	}
+
+	// Verify auto-send configs: paths must be updated to new destination prefix
+	var oldParentCount, oldNestedCount int
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'vacation'").Scan(&oldParentCount)
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'vacation/nested'").Scan(&oldNestedCount)
+	if oldParentCount != 0 || oldNestedCount != 0 {
+		t.Errorf("expected old auto-send configs to be deleted/moved, but found parent=%d nested=%d", oldParentCount, oldNestedCount)
+	}
+
+	var newParentCount, newNestedCount int
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'archived/vacation'").Scan(&newParentCount)
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'archived/vacation/nested'").Scan(&newNestedCount)
+
+	if newParentCount != 1 {
+		t.Errorf("expected archived/vacation auto-send config to exist, got %d", newParentCount)
+	}
+	if newNestedCount != 1 {
+		t.Errorf("expected archived/vacation/nested auto-send config to exist, got %d", newNestedCount)
+	}
+}
+
+func TestPasteFolderRecursionError(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	os.MkdirAll(filepath.Join(dir, "vacation"), 0755)
+
+	body := map[string]interface{}{
+		"action":      "copy",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "vacation/nested",
+		"items": []map[string]interface{}{
+			{"name": "vacation", "is_dir": true},
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+
+	handlePaste(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 Bad Request, got %d. Body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPasteAutoSendFolderNestingError(t *testing.T) {
+	setupTestDB(t)
+	dir := volumes["storage"]
+
+	os.MkdirAll(filepath.Join(dir, "auto1"), 0755)
+	os.MkdirAll(filepath.Join(dir, "auto2"), 0755)
+
+	// Configure both folders as auto-send
+	_, err := dbConn.Exec("INSERT INTO auto_send_folders (id, path, created_at) VALUES (?, ?, ?)",
+		"auto1-id", "auto1", time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = dbConn.Exec("INSERT INTO auto_send_folders (id, path, created_at) VALUES (?, ?, ?)",
+		"auto2-id", "auto2", time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Verify action = "cut" fails (returns 400 Bad Request)
+	bodyCut := map[string]interface{}{
+		"action":      "cut",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "auto2",
+		"items": []map[string]interface{}{
+			{"name": "auto1", "is_dir": true},
+		},
+	}
+	bodyCutBytes, _ := json.Marshal(bodyCut)
+
+	reqCut := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyCutBytes))
+	rrCut := httptest.NewRecorder()
+
+	handlePaste(rrCut, reqCut)
+
+	if rrCut.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 Bad Request, got %d. Body: %s", rrCut.Code, rrCut.Body.String())
+	}
+
+	// 2. Verify action = "copy" succeeds (returns 200 OK)
+	bodyCopy := map[string]interface{}{
+		"action":      "copy",
+		"src_volume":  "storage",
+		"src_path":    "",
+		"dest_volume": "storage",
+		"dest_path":   "auto2",
+		"items": []map[string]interface{}{
+			{"name": "auto1", "is_dir": true},
+		},
+	}
+	bodyCopyBytes, _ := json.Marshal(bodyCopy)
+
+	reqCopy := httptest.NewRequest("POST", "/api/files/paste", bytes.NewReader(bodyCopyBytes))
+	rrCopy := httptest.NewRecorder()
+
+	handlePaste(rrCopy, reqCopy)
+
+	if rrCopy.Code != http.StatusOK {
+		t.Errorf("expected status 200 OK, got %d. Body: %s", rrCopy.Code, rrCopy.Body.String())
+	}
+
+	// The source folder should still exist, and a copy should exist inside auto2
+	if _, err := os.Stat(filepath.Join(dir, "auto1")); err != nil {
+		t.Error("expected source auto1 to still exist")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "auto2/auto1")); err != nil {
+		t.Error("expected copied auto1 folder to exist inside auto2")
+	}
+
+	// Verify that the copied folder did NOT receive an auto-send config inside the DB
+	var copyCount int
+	_ = dbConn.QueryRow("SELECT COUNT(*) FROM auto_send_folders WHERE path = 'auto2/auto1'").Scan(&copyCount)
+	if copyCount != 0 {
+		t.Errorf("expected copied folder NOT to inherit auto-send config in auto2/auto1, but found: %d", copyCount)
+	}
+}
+
+
+
 
 

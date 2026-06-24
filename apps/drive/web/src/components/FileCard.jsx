@@ -6,6 +6,7 @@ export default function FileCard({
   volume, 
   path, 
   selected, 
+  isCut,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -24,7 +25,7 @@ export default function FileCard({
   if (viewMode === 'list') {
     return (
       <div 
-        className={`file-card list-row ${selected ? 'selected' : ''}`}
+        className={`file-card list-row ${selected ? 'selected' : ''} ${isCut ? 'cut' : ''}`}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
@@ -74,7 +75,7 @@ export default function FileCard({
   if (file.is_dir) {
     return (
       <div 
-        className={`file-card folder-card ${selected ? 'selected' : ''}`}
+        className={`file-card folder-card ${selected ? 'selected' : ''} ${isCut ? 'cut' : ''}`}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
@@ -100,7 +101,7 @@ export default function FileCard({
   // 3. Grid View - File Card Layout (with large square preview)
   return (
     <div 
-      className={`file-card grid-file-card ${selected ? 'selected' : ''}`}
+      className={`file-card grid-file-card ${selected ? 'selected' : ''} ${isCut ? 'cut' : ''}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}

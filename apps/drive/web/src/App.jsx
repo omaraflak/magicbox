@@ -15,7 +15,8 @@ import {
   fetchFileTransfers,
   fetchAutoSendConfig,
   fetchRecentTransfers,
-  fetchActiveTransfers
+  fetchActiveTransfers,
+  pasteItems
 } from './utils/api';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -61,6 +62,7 @@ export default function App() {
   const [activeTransfersCount, setActiveTransfersCount] = useState(0);
   const [recentTransfers, setRecentTransfers] = useState([]);
   const [errorModalMsg, setErrorModalMsg] = useState('');
+  const [clipboard, setClipboard] = useState(null);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -366,13 +368,17 @@ export default function App() {
   };
 
   const handleBreadcrumbClick = (index) => {
-    setFiles([]);
-    if (index === -1) {
-      setCurrentPath('');
+    let newPath = '';
+    if (index !== -1) {
+      const segments = currentPath.split('/');
+      newPath = segments.slice(0, index + 1).join('/');
+    }
+
+    if (newPath === currentPath) {
       return;
     }
-    const segments = currentPath.split('/');
-    const newPath = segments.slice(0, index + 1).join('/');
+
+    setFiles([]);
     setCurrentPath(newPath);
   };
 
@@ -449,6 +455,63 @@ export default function App() {
       count: items.length,
       items: items
     });
+  };
+
+  const handleCopyItem = (item) => {
+    setClipboard({
+      action: 'copy',
+      volume: activeVolume,
+      path: currentPath,
+      items: [{ name: item.name, is_dir: item.is_dir }]
+    });
+  };
+
+  const handleCutItem = (item) => {
+    setClipboard({
+      action: 'cut',
+      volume: activeVolume,
+      path: currentPath,
+      items: [{ name: item.name, is_dir: item.is_dir }]
+    });
+  };
+
+  const handleCopyMultiple = (selectedItems) => {
+    setClipboard({
+      action: 'copy',
+      volume: activeVolume,
+      path: currentPath,
+      items: selectedItems.map(item => ({ name: item.name, is_dir: item.is_dir }))
+    });
+  };
+
+  const handleCutMultiple = (selectedItems) => {
+    setClipboard({
+      action: 'cut',
+      volume: activeVolume,
+      path: currentPath,
+      items: selectedItems.map(item => ({ name: item.name, is_dir: item.is_dir }))
+    });
+  };
+
+  const handlePaste = async () => {
+    if (!clipboard) return;
+    setContextMenu(null);
+    try {
+      await pasteItems(
+        clipboard.action,
+        clipboard.volume,
+        clipboard.path,
+        activeVolume,
+        currentPath,
+        clipboard.items
+      );
+      if (clipboard.action === 'cut') {
+        setClipboard(null);
+      }
+      loadFiles(activeVolume, currentPath);
+    } catch (err) {
+      setErrorModalMsg(err.message);
+    }
   };
 
   const handleRestoreTrashFile = async (item) => {
@@ -665,6 +728,7 @@ export default function App() {
                 selectedFileNames={selectedFileNames}
                 onSelectionChange={setSelectedFileNames}
                 onMoveFiles={handleMoveFiles}
+                clipboard={clipboard}
                 onContextMenu={(e, file) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -777,9 +841,16 @@ export default function App() {
 
               if (!contextMenu.item) {
                 return activeVolume === 'storage' && (
-                  <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
-                    📁 New Folder
-                  </button>
+                  <>
+                    <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
+                      📁 New Folder
+                    </button>
+                    {clipboard && (
+                      <button className="menu-item" onClick={handlePaste}>
+                        📋 Paste
+                      </button>
+                    )}
+                  </>
                 );
               }
 
@@ -800,6 +871,12 @@ export default function App() {
                     </button>
                     <button className="menu-item" onClick={() => handleSendMultiple(selectedItems)}>
                       📤 Send All ({selectedCount})
+                    </button>
+                    <button className="menu-item" onClick={() => handleCopyMultiple(selectedItems)}>
+                      📋 Copy All ({selectedCount})
+                    </button>
+                    <button className="menu-item" onClick={() => handleCutMultiple(selectedItems)}>
+                      ✂️ Cut All ({selectedCount})
                     </button>
                     <button className="menu-item menu-item-danger" onClick={() => handleTriggerDeleteMultiple(selectedItems)}>
                       🗑 Delete All ({selectedCount})
@@ -825,6 +902,12 @@ export default function App() {
                   </button>
                   <button className="menu-item" onClick={() => setSendTarget(contextMenu.item)}>
                     📤 Send
+                  </button>
+                  <button className="menu-item" onClick={() => handleCopyItem(contextMenu.item)}>
+                    📋 Copy
+                  </button>
+                  <button className="menu-item" onClick={() => handleCutItem(contextMenu.item)}>
+                    ✂️ Cut
                   </button>
                   {!contextMenu.item.is_dir && (
                     <button className="menu-item" onClick={() => setFileTransfersTarget(contextMenu.item)}>

@@ -233,3 +233,24 @@ export async function fetchActiveTransfers() {
   return res.json();
 }
 
+export async function pasteItems(action, srcVolume, srcPath, destVolume, destPath, items) {
+  const res = await fetch(`${API_BASE}/files/paste`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action,
+      src_volume: srcVolume,
+      src_path: srcPath,
+      dest_volume: destVolume,
+      dest_path: destPath,
+      items
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to paste items');
+  }
+  return res.json();
+}
+
+

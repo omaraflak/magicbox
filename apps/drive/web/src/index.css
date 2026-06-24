@@ -723,6 +723,12 @@ ul {
   pointer-events: none;
 }
 
+.file-card.cut {
+  opacity: 0.55;
+  border: 1px dashed var(--accent-cyan);
+  background: rgba(52, 152, 219, 0.04);
+}
+
 .file-card-icon {
   font-size: 2rem;
   margin-bottom: var(--space-sm);
