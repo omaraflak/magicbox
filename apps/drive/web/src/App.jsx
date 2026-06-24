@@ -539,6 +539,9 @@ export default function App() {
         <Sidebar
           activeVolume={activeVolume}
           onVolumeChange={(vol) => {
+            if (activeVolume === vol && currentPath === '') {
+              return;
+            }
             setActiveVolume(vol);
             setCurrentPath('');
             setFiles([]);
