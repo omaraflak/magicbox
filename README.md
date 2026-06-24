@@ -5,14 +5,14 @@
 
 ## Run
 
-### Build Images
+### 1. Build Images
 
 ```bash
 docker build -t docker.io/magicbox/core:latest .
 docker build -t docker.io/magicbox/drive:latest -f apps/drive/Dockerfile .
 ```
 
-### Start Stack
+### 2. Start Stack
 
 **Linux**:
 ```bash
