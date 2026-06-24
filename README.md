@@ -5,16 +5,16 @@
 
 ## Run
 
-1. **Build Images**:
-   ```bash
-   docker build -t docker.io/magicbox/core:latest .
-   docker build -t docker.io/magicbox/drive:latest -f apps/drive/Dockerfile .
-   ```
+### Build Images
 
-2. **Start Stack**:
+```bash
+docker build -t docker.io/magicbox/core:latest .
+docker build -t docker.io/magicbox/drive:latest -f apps/drive/Dockerfile .
+```
+
+### Start Stack
 
 **Linux**:
-
 ```bash
 docker compose up -d
 ```
