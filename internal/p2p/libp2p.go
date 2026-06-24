@@ -93,9 +93,11 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 
 	// Dial bootstrap peers asynchronously
 	bootstrapPeers := []string{
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnoo2mdwocSfhnF9PRTyGLatC76zpP1WUz17r1267LYX",
-		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGjV7zHeHMbk2CdmDMHbd5LRSc7xVT3KuWBHFgCW",
-		"/ip4/104.248.44.204/tcp/4001/p2p/QmW9m5z6JnBtMnFRHpqx4zMPEbEn4Q9CgNsKa2P2jX8N8v",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 	}
 
 	for _, addrStr := range bootstrapPeers {
