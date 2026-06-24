@@ -20,7 +20,7 @@ export default function Toolbar({
           {activeVolume === 'trash' ? (
             <span style={{ color: 'var(--text-primary)' }}>Trash</span>
           ) : activeVolume === 'shares' ? (
-            <span style={{ color: 'var(--text-primary)' }}>Shares History</span>
+            <span style={{ color: 'var(--text-primary)' }}>History</span>
           ) : (
             <>
               <span 

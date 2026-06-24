@@ -59,13 +59,13 @@ func initDB() {
 	}
 
 	queries := []string{
-		`CREATE TABLE IF NOT EXISTS shares (
+		`CREATE TABLE IF NOT EXISTS sent_history (
 			id TEXT PRIMARY KEY,
 			filename TEXT NOT NULL,
 			path TEXT NOT NULL,
 			contact_id TEXT NOT NULL,
 			contact_name TEXT NOT NULL,
-			shared_at TEXT NOT NULL
+			sent_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS trash (
 			id TEXT PRIMARY KEY,
@@ -84,6 +84,9 @@ func initDB() {
 }
 
 func startTrashCleaner() {
+	// Run once immediately on startup
+	go cleanExpiredTrash()
+
 	ticker := time.NewTicker(12 * time.Hour)
 	go func() {
 		for range ticker.C {
@@ -713,7 +716,7 @@ func handleFolders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"created": body.Name})
 }
 
-type ShareMessage struct {
+type TransferMessage struct {
 	Filename string `json:"filename"`
 	Content  []byte `json:"content"`
 }
@@ -781,7 +784,7 @@ func handleListContacts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, contacts)
 }
 
-func handleShareFile(w http.ResponseWriter, r *http.Request) {
+func handleSendFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -817,11 +820,11 @@ func handleShareFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare payload envelope
-	shareMsg := ShareMessage{
+	transferMsg := TransferMessage{
 		Filename: safeName,
 		Content:  content,
 	}
-	payload, err := json.Marshal(shareMsg)
+	payload, err := json.Marshal(transferMsg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to marshal payload: "+err.Error())
 		return
@@ -860,14 +863,14 @@ func handleShareFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	shareID := uuid.NewString()
-	_, dbErr := dbConn.Exec("INSERT INTO shares (id, filename, path, contact_id, contact_name, shared_at) VALUES (?, ?, ?, ?, ?, ?)",
-		shareID, safeName, subPath, contactID, contactName, time.Now().Format(time.RFC3339))
+	transferID := uuid.NewString()
+	_, dbErr := dbConn.Exec("INSERT INTO sent_history (id, filename, path, contact_id, contact_name, sent_at) VALUES (?, ?, ?, ?, ?, ?)",
+		transferID, safeName, subPath, contactID, contactName, time.Now().Format(time.RFC3339))
 	if dbErr != nil {
-		log.Printf("Warning: failed to record share metadata: %v", dbErr)
+		log.Printf("Warning: failed to record sent metadata: %v", dbErr)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"shared": safeName})
+	writeJSON(w, http.StatusOK, map[string]string{"sent": safeName})
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -878,9 +881,9 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var msg ShareMessage
+	var msg TransferMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
-		log.Printf("Failed to parse incoming ShareMessage: %v", err)
+		log.Printf("Failed to parse incoming TransferMessage: %v", err)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -896,7 +899,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if msg.Filename == "" {
-		log.Println("Incoming ShareMessage has empty filename")
+		log.Println("Incoming TransferMessage has empty filename")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -918,7 +921,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Successfully saved shared file %q to Incoming directory", safeName)
+	log.Printf("Successfully saved sent file %q to Incoming directory", safeName)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -955,11 +958,11 @@ func main() {
 	mux.HandleFunc("/api/files/move", handleMoveFile)
 	mux.HandleFunc("/api/folders", handleFolders)
 	mux.HandleFunc("/api/contacts", handleListContacts)
-	mux.HandleFunc("/api/files/share", handleShareFile)
+	mux.HandleFunc("/api/files/send", handleSendFile)
 	mux.HandleFunc("/api/trash/restore", handleRestoreTrash)
 	mux.HandleFunc("/api/trash/empty", handleEmptyTrash)
-	mux.HandleFunc("/api/shares", handleListShares)
-	mux.HandleFunc("/api/shares/file", handleListFileShares)
+	mux.HandleFunc("/api/transfers", handleListTransfers)
+	mux.HandleFunc("/api/transfers/file", handleListFileTransfers)
 
 	// Internal webhook
 	mux.HandleFunc("/internal/magicbox-webhook", handleWebhook)
@@ -1136,32 +1139,32 @@ func handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "trash emptied successfully"})
 }
 
-type ShareRecord struct {
+type TransferRecord struct {
 	ID          string `json:"id"`
 	Filename    string `json:"filename"`
 	Path        string `json:"path"`
 	ContactID   string `json:"contact_id"`
 	ContactName string `json:"contact_name"`
-	SharedAt    string `json:"shared_at"`
+	SentAt      string `json:"sent_at"`
 }
 
-func handleListShares(w http.ResponseWriter, r *http.Request) {
+func handleListTransfers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, shared_at FROM shares ORDER BY shared_at DESC")
+	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, sent_at FROM sent_history ORDER BY sent_at DESC")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to query shares: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to query sent history: "+err.Error())
 		return
 	}
 	defer rows.Close()
 
-	records := []ShareRecord{}
+	records := []TransferRecord{}
 	for rows.Next() {
-		var rec ShareRecord
-		if err := rows.Scan(&rec.ID, &rec.Filename, &rec.Path, &rec.ContactID, &rec.ContactName, &rec.SharedAt); err == nil {
+		var rec TransferRecord
+		if err := rows.Scan(&rec.ID, &rec.Filename, &rec.Path, &rec.ContactID, &rec.ContactName, &rec.SentAt); err == nil {
 			records = append(records, rec)
 		}
 	}
@@ -1169,7 +1172,7 @@ func handleListShares(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, records)
 }
 
-func handleListFileShares(w http.ResponseWriter, r *http.Request) {
+func handleListFileTransfers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -1183,17 +1186,17 @@ func handleListFileShares(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, shared_at FROM shares WHERE filename = ? AND path = ? ORDER BY shared_at DESC", filename, subPath)
+	rows, err := dbConn.Query("SELECT id, filename, path, contact_id, contact_name, sent_at FROM sent_history WHERE filename = ? AND path = ? ORDER BY sent_at DESC", filename, subPath)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to query file shares: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to query file sent history: "+err.Error())
 		return
 	}
 	defer rows.Close()
 
-	records := []ShareRecord{}
+	records := []TransferRecord{}
 	for rows.Next() {
-		var rec ShareRecord
-		if err := rows.Scan(&rec.ID, &rec.Filename, &rec.Path, &rec.ContactID, &rec.ContactName, &rec.SharedAt); err == nil {
+		var rec TransferRecord
+		if err := rows.Scan(&rec.ID, &rec.Filename, &rec.Path, &rec.ContactID, &rec.ContactName, &rec.SentAt); err == nil {
 			records = append(records, rec)
 		}
 	}

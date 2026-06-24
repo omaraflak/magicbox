@@ -8,11 +8,11 @@ import {
   getFileUrl, 
   moveFile, 
   fetchContacts, 
-  shareFile,
+  sendFile,
   restoreTrashFile,
   emptyTrash,
-  fetchShares,
-  fetchFileShares
+  fetchTransfers,
+  fetchFileTransfers
 } from './utils/api';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -24,7 +24,10 @@ import EmptyState from './components/EmptyState';
 export default function App() {
   const [userID, setUserID] = useState('');
   const [username, setUsername] = useState('');
-  const [activeVolume, setActiveVolume] = useState('storage');
+  const [activeVolume, setActiveVolume] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'storage';
+  });
   const [currentPath, setCurrentPath] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('path') || '';
@@ -39,14 +42,15 @@ export default function App() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [renameTarget, setRenameTarget] = useState(null);
   const [selectedFileNames, setSelectedFileNames] = useState([]);
-  const [shareTarget, setShareTarget] = useState(null);
-  const [fileSharesTarget, setFileSharesTarget] = useState(null);
-  const [fileShares, setFileShares] = useState([]);
+  const [sendTarget, setSendTarget] = useState(null);
+  const [fileTransfersTarget, setFileTransfersTarget] = useState(null);
+  const [fileTransfers, setFileTransfers] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [sharing, setSharing] = useState(false);
-  const [shareError, setShareError] = useState('');
-  const [shareSuccess, setShareSuccess] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [sendSuccess, setSendSuccess] = useState(false);
+  const [emptyTrashConfirmOpen, setEmptyTrashConfirmOpen] = useState(false);
   const uploadRef = useRef(null);
 
   useEffect(() => {
@@ -58,25 +62,46 @@ export default function App() {
       .catch((err) => console.error('Failed to fetch info:', err));
   }, []);
 
-  // Synchronize currentPath state changes with the URL query params
+  // Synchronize currentPath and activeVolume state changes with the URL query params
   useEffect(() => {
     const url = new URL(window.location.href);
     const existingPath = url.searchParams.get('path') || '';
+    const existingTab = url.searchParams.get('tab') || 'storage';
+
+    let updated = false;
+
     if (currentPath !== existingPath) {
       if (currentPath) {
         url.searchParams.set('path', currentPath);
       } else {
         url.searchParams.delete('path');
       }
+      updated = true;
+    }
+
+    if (activeVolume !== existingTab) {
+      if (activeVolume && activeVolume !== 'storage') {
+        url.searchParams.set('tab', activeVolume);
+      } else {
+        url.searchParams.delete('tab');
+      }
+      updated = true;
+    }
+
+    if (updated) {
       window.history.pushState(null, '', url.pathname + url.search);
     }
-  }, [currentPath]);
+  }, [currentPath, activeVolume]);
 
-  // Synchronize browser history navigation (back/forward) with currentPath state
+  // Synchronize browser history navigation (back/forward) with state
   useEffect(() => {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
-      setCurrentPath(params.get('path') || '');
+      const tab = params.get('tab') || 'storage';
+      const path = params.get('path') || '';
+
+      setActiveVolume(tab);
+      setCurrentPath(path);
       setFiles([]);
     };
     window.addEventListener('popstate', handlePopState);
@@ -117,9 +142,9 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [renameTarget]);
-  // Fetch contacts when sharing dialog is opened
+  // Fetch contacts when sending dialog is opened
   useEffect(() => {
-    if (!shareTarget) return;
+    if (!sendTarget) return;
     fetchContacts()
       .then((data) => {
         setContacts(data || []);
@@ -131,61 +156,73 @@ export default function App() {
       })
       .catch((err) => {
         console.error('Failed to fetch contacts:', err);
-        setShareError('Failed to load contacts list.');
+        setSendError('Failed to load contacts list.');
       });
-  }, [shareTarget]);
+  }, [sendTarget]);
 
-  // Fetch file shares history when file shares dialog is opened
+  // Fetch file transfers history when file transfers dialog is opened
   useEffect(() => {
-    if (!fileSharesTarget) return;
-    fetchFileShares(fileSharesTarget.name, currentPath)
-      .then(setFileShares)
-      .catch((err) => console.error('Failed to fetch file shares:', err));
-  }, [fileSharesTarget, currentPath]);
+    if (!fileTransfersTarget) return;
+    fetchFileTransfers(fileTransfersTarget.name, currentPath)
+      .then(setFileTransfers)
+      .catch((err) => console.error('Failed to fetch file sent history:', err));
+  }, [fileTransfersTarget, currentPath]);
 
-  // Listen to Escape key to close the file shares history dialog
+  // Listen to Escape key to close the file sent history dialog
   useEffect(() => {
-    if (!fileSharesTarget) return;
+    if (!fileTransfersTarget) return;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setFileSharesTarget(null);
+        setFileTransfersTarget(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fileSharesTarget]);
+  }, [fileTransfersTarget]);
 
-  // Listen to Escape key to close the share dialog
+  // Listen to Escape key to close the send dialog
   useEffect(() => {
-    if (!shareTarget) return;
+    if (!sendTarget) return;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setShareTarget(null);
-        setShareError('');
-        setShareSuccess(false);
+        setSendTarget(null);
+        setSendError('');
+        setSendSuccess(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shareTarget]);
+  }, [sendTarget]);
 
-  const handleConfirmShare = async () => {
+  // Listen to Escape key to close the empty trash confirmation dialog
+  useEffect(() => {
+    if (!emptyTrashConfirmOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setEmptyTrashConfirmOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [emptyTrashConfirmOpen]);
+
+  const handleConfirmSend = async () => {
     if (!selectedContactId) {
-      setShareError('Please select a contact to share with.');
+      setSendError('Please select a contact to send to.');
       return;
     }
     setSharing(true);
-    setShareError('');
-    setShareSuccess(false);
+    setSendError('');
+    setSendSuccess(false);
     try {
-      await shareFile(activeVolume, currentPath, shareTarget.name, selectedContactId);
-      setShareSuccess(true);
+      await sendFile(activeVolume, currentPath, sendTarget.name, selectedContactId);
+      setSendSuccess(true);
       setTimeout(() => {
-        setShareTarget(null);
-        setShareSuccess(false);
+        setSendTarget(null);
+        setSendSuccess(false);
       }, 1500);
     } catch (err) {
-      setShareError(err.message || 'Failed to share file.');
+      setSendError(err.message || 'Failed to send file.');
     } finally {
       setSharing(false);
     }
@@ -196,7 +233,7 @@ export default function App() {
     try {
       let data;
       if (volume === 'shares') {
-        data = await fetchShares();
+        data = await fetchTransfers();
       } else {
         data = await listFiles(volume, path);
       }
@@ -279,10 +316,12 @@ export default function App() {
     }
   };
 
-  const handleEmptyTrashClick = async () => {
-    if (!window.confirm('Are you sure you want to empty the Trash? All files will be permanently deleted.')) {
-      return;
-    }
+  const handleEmptyTrashClick = () => {
+    setEmptyTrashConfirmOpen(true);
+  };
+
+  const handleConfirmEmptyTrash = async () => {
+    setEmptyTrashConfirmOpen(false);
     try {
       await emptyTrash();
       handleRefresh();
@@ -399,10 +438,10 @@ export default function App() {
                 <p>Loading files...</p>
               </div>
             ) : activeVolume === 'shares' ? (
-              <div className="shares-history" style={{ padding: '0 8px' }}>
+              <div className="transfers-history" style={{ padding: '0 8px' }}>
                 {files.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
-                    No sharing records found.
+                    No sent records found.
                   </div>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8px' }}>
@@ -410,8 +449,8 @@ export default function App() {
                       <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                         <th style={{ padding: '12px' }}>File Name</th>
                         <th style={{ padding: '12px' }}>Original Path</th>
-                        <th style={{ padding: '12px' }}>Shared With</th>
-                        <th style={{ padding: '12px' }}>Shared At</th>
+                        <th style={{ padding: '12px' }}>Sent To</th>
+                        <th style={{ padding: '12px' }}>Sent At</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -421,7 +460,7 @@ export default function App() {
                           <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{rec.path || '/'}</td>
                           <td style={{ padding: '12px' }}>{rec.contact_name}</td>
                           <td style={{ padding: '12px', color: 'var(--text-muted)' }}>
-                            {new Date(rec.shared_at).toLocaleString()}
+                            {new Date(rec.sent_at).toLocaleString()}
                           </td>
                         </tr>
                       ))}
@@ -557,11 +596,11 @@ export default function App() {
                   </button>
                   {!contextMenu.item.is_dir && (
                     <>
-                      <button className="menu-item" onClick={() => setShareTarget(contextMenu.item)}>
-                        📤 Share
+                      <button className="menu-item" onClick={() => setSendTarget(contextMenu.item)}>
+                        📤 Send
                       </button>
-                      <button className="menu-item" onClick={() => setFileSharesTarget(contextMenu.item)}>
-                        🔗 Shares History
+                      <button className="menu-item" onClick={() => setFileTransfersTarget(contextMenu.item)}>
+                        🕒 History
                       </button>
                     </>
                   )}
@@ -627,6 +666,47 @@ export default function App() {
         </div>
       )}
 
+      {emptyTrashConfirmOpen && (
+        <div 
+          onClick={() => setEmptyTrashConfirmOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ 
+            background: 'var(--bg-secondary)', 
+            border: '1px solid var(--border-color)', 
+            borderRadius: 'var(--radius-lg)', 
+            padding: '24px', 
+            maxWidth: '380px', 
+            width: '90%',
+            boxShadow: 'var(--shadow-premium)',
+          }}>
+            <h3 style={{ marginBottom: '12px', fontSize: '1.1rem', fontWeight: 600 }}>Empty Trash</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Are you sure you want to empty the Trash?
+            </p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+              All files in the Trash will be permanently deleted. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={() => setEmptyTrashConfirmOpen(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleConfirmEmptyTrash}>Empty Trash</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {renameTarget && (
         <div 
           onClick={() => setRenameTarget(null)}
@@ -686,13 +766,13 @@ export default function App() {
         </div>
       )}
 
-      {shareTarget && (
+      {sendTarget && (
         <div 
           onClick={() => {
             if (!sharing) {
-              setShareTarget(null);
-              setShareError('');
-              setShareSuccess(false);
+              setSendTarget(null);
+              setSendError('');
+              setSendSuccess(false);
             }
           }}
           style={{
@@ -718,20 +798,20 @@ export default function App() {
             width: '90%',
             boxShadow: 'var(--shadow-premium)',
           }}>
-            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Share File</h3>
+            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Send File</h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              Select a contact to share <strong>{shareTarget.name}</strong> with:
+              Select a contact to send <strong>{sendTarget.name}</strong> to:
             </p>
 
-            {shareError && (
+            {sendError && (
               <div style={{ color: 'var(--status-danger)', fontSize: '0.85rem', marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                ⚠️ {shareError}
+                ⚠️ {sendError}
               </div>
             )}
 
-            {shareSuccess && (
+            {sendSuccess && (
               <div style={{ color: 'var(--status-success)', fontSize: '0.85rem', marginBottom: '16px', background: 'rgba(34, 197, 94, 0.1)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                ✓ File shared successfully!
+                ✓ File sent successfully!
               </div>
             )}
 
@@ -745,7 +825,7 @@ export default function App() {
                 <select
                   value={selectedContactId}
                   onChange={(e) => setSelectedContactId(e.target.value)}
-                  disabled={sharing || shareSuccess}
+                  disabled={sharing || sendSuccess}
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -770,9 +850,9 @@ export default function App() {
               <button 
                 className="btn btn-secondary" 
                 onClick={() => {
-                  setShareTarget(null);
-                  setShareError('');
-                  setShareSuccess(false);
+                  setSendTarget(null);
+                  setSendError('');
+                  setSendSuccess(false);
                 }}
                 disabled={sharing}
               >
@@ -781,10 +861,10 @@ export default function App() {
               {contacts.length > 0 && (
                 <button 
                   className="btn btn-primary" 
-                  onClick={handleConfirmShare}
-                  disabled={sharing || shareSuccess}
+                  onClick={handleConfirmSend}
+                  disabled={sharing || sendSuccess}
                 >
-                  {sharing ? 'Sharing...' : 'Share'}
+                  {sharing ? 'Sending...' : 'Send'}
                 </button>
               )}
             </div>
@@ -792,9 +872,9 @@ export default function App() {
         </div>
       )}
 
-      {fileSharesTarget && (
+      {fileTransfersTarget && (
         <div 
-          onClick={() => setFileSharesTarget(null)}
+          onClick={() => setFileTransfersTarget(null)}
           style={{
             position: 'fixed',
             top: 0,
@@ -818,27 +898,27 @@ export default function App() {
             width: '90%',
             boxShadow: 'var(--shadow-premium)',
           }}>
-            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Shares History: {fileSharesTarget.name}</h3>
+            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>History: {fileTransfersTarget.name}</h3>
             
             <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '24px' }}>
-              {fileShares.length === 0 ? (
+              {fileTransfers.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  This file hasn't been shared with anyone yet.
+                  This file hasn't been sent to anyone yet.
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                      <th style={{ padding: '8px 12px' }}>Shared With</th>
+                      <th style={{ padding: '8px 12px' }}>Sent To</th>
                       <th style={{ padding: '8px 12px' }}>Date & Time</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {fileShares.map((s) => (
+                    {fileTransfers.map((s) => (
                       <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
                         <td style={{ padding: '8px 12px', fontWeight: 500 }}>{s.contact_name}</td>
                         <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
-                          {new Date(s.shared_at).toLocaleString()}
+                          {new Date(s.sent_at).toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -848,7 +928,7 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => setFileSharesTarget(null)}>Close</button>
+              <button className="btn btn-secondary" onClick={() => setFileTransfersTarget(null)}>Close</button>
             </div>
           </div>
         </div>

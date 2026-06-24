@@ -126,12 +126,12 @@ export async function fetchContacts() {
   return res.json();
 }
 
-export async function shareFile(volume, path, filename, contactID) {
-  const url = `${API_BASE}/files/share?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}&contact_id=${encodeURIComponent(contactID)}`;
+export async function sendFile(volume, path, filename, contactID) {
+  const url = `${API_BASE}/files/send?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}&contact_id=${encodeURIComponent(contactID)}`;
   const res = await fetch(url, { method: 'POST' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to share file: ${res.statusText}`);
+    throw new Error(errorData.error || `Failed to send file: ${res.statusText}`);
   }
   return res.json();
 }
@@ -156,17 +156,17 @@ export async function emptyTrash() {
   return res.json();
 }
 
-export async function fetchShares() {
-  const res = await fetch(`${API_BASE}/shares`);
-  if (!res.ok) throw new Error(`Failed to fetch shares history: ${res.statusText}`);
+export async function fetchTransfers() {
+  const res = await fetch(`${API_BASE}/transfers`);
+  if (!res.ok) throw new Error(`Failed to fetch sent history: ${res.statusText}`);
   return res.json();
 }
 
-export async function fetchFileShares(filename, path = '') {
+export async function fetchFileTransfers(filename, path = '') {
   const res = await fetch(
-    `${API_BASE}/shares/file?file=${encodeURIComponent(filename)}&path=${encodeURIComponent(path)}`
+    `${API_BASE}/transfers/file?file=${encodeURIComponent(filename)}&path=${encodeURIComponent(path)}`
   );
-  if (!res.ok) throw new Error(`Failed to fetch file shares history: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to fetch file sent history: ${res.statusText}`);
   return res.json();
 }
 

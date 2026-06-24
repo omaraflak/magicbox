@@ -2,7 +2,7 @@ export default function Sidebar({ activeVolume, onVolumeChange }) {
   const menuItems = [
     { id: 'storage', name: 'My Storage', icon: '💾' },
     { id: 'trash', name: 'Trash', icon: '🗑️' },
-    { id: 'shares', name: 'Shares History', icon: '🔗' },
+    { id: 'shares', name: 'History', icon: '🕒' },
   ];
 
   return (
