@@ -287,7 +287,13 @@ export default function App() {
     setSharing(false);
 
     try {
-      await sendFile(activeVolume, currentPath, targetFile.name, targetContactId);
+      if (targetFile.isMultiple) {
+        for (const item of targetFile.items) {
+          await sendFile(activeVolume, currentPath, item.name, targetContactId);
+        }
+      } else {
+        await sendFile(activeVolume, currentPath, targetFile.name, targetContactId);
+      }
       // Trigger a quick reload to refresh any active states
       loadFiles(activeVolume, currentPath, false);
     } catch (err) {
@@ -378,12 +384,71 @@ export default function App() {
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteFile(activeVolume, currentPath, deleteTarget.name);
+      if (deleteTarget.isMultiple) {
+        for (const item of deleteTarget.items) {
+          await deleteFile(activeVolume, currentPath, item.name);
+        }
+      } else {
+        await deleteFile(activeVolume, currentPath, deleteTarget.name);
+      }
       setDeleteTarget(null);
+      setSelectedFileNames([]);
       handleRefresh();
     } catch (err) {
       setErrorModalMsg('Failed to delete file/folder: ' + err.message);
     }
+  };
+
+  const handleRestoreMultiple = async (items) => {
+    try {
+      for (const item of items) {
+        await restoreTrashFile(item.name);
+      }
+      setSelectedFileNames([]);
+      handleRefresh();
+    } catch (err) {
+      setErrorModalMsg('Failed to restore items: ' + err.message);
+    }
+  };
+
+  const handleTriggerDeleteMultiple = (items) => {
+    setDeleteTarget({
+      isMultiple: true,
+      count: items.length,
+      items: items
+    });
+  };
+
+  const handleDownloadMultiple = async (items) => {
+    try {
+      const names = items.map(i => i.name);
+      const plan = await getDownloadPlan(activeVolume, currentPath, names);
+      if (!plan || !plan.volumes || plan.volumes.length === 0) {
+        setErrorModalMsg('No files to download.');
+        return;
+      }
+      
+      for (const vol of plan.volumes) {
+        const downloadUrl = getFileUrl(activeVolume, currentPath, names, vol.index);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = vol.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        await new Promise(r => setTimeout(r, 600));
+      }
+    } catch (err) {
+      setErrorModalMsg('Failed to initiate download: ' + err.message);
+    }
+  };
+
+  const handleSendMultiple = (items) => {
+    setSendTarget({
+      isMultiple: true,
+      count: items.length,
+      items: items
+    });
   };
 
   const handleRestoreTrashFile = async (item) => {
@@ -600,7 +665,12 @@ export default function App() {
                 onContextMenu={(e, file) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setContextMenu({ x: e.clientX, y: e.clientY, item: file });
+                  if (selectedFileNames.includes(file.name)) {
+                    setContextMenu({ x: e.clientX, y: e.clientY, item: file });
+                  } else {
+                    setSelectedFileNames([file.name]);
+                    setContextMenu({ x: e.clientX, y: e.clientY, item: file });
+                  }
                 }}
               />
             )}
@@ -695,8 +765,50 @@ export default function App() {
             }}
             onClick={() => setContextMenu(null)}
           >
-            {contextMenu.item ? (
-              activeVolume === 'trash' ? (
+            {(() => {
+              const selectedItems = files.filter(f => selectedFileNames.includes(f.name));
+              const allFiles = selectedItems.every(f => !f.is_dir);
+              const allDirs = selectedItems.every(f => f.is_dir);
+              const selectedCount = selectedItems.length;
+              const isMultiMenu = selectedFileNames.length > 1 && selectedFileNames.includes(contextMenu.item?.name);
+
+              if (!contextMenu.item) {
+                return activeVolume === 'storage' && (
+                  <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
+                    📁 New Folder
+                  </button>
+                );
+              }
+
+              if (isMultiMenu) {
+                return activeVolume === 'trash' ? (
+                  <>
+                    <button className="menu-item" onClick={() => handleRestoreMultiple(selectedItems)}>
+                      🔄 Restore All ({selectedCount})
+                    </button>
+                    <button className="menu-item menu-item-danger" onClick={() => handleTriggerDeleteMultiple(selectedItems)}>
+                      🗑 Delete All Permanently ({selectedCount})
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="menu-item" onClick={() => handleDownloadMultiple(selectedItems)}>
+                      ⬇ Download All ({selectedCount})
+                    </button>
+                    {allFiles && (
+                      <button className="menu-item" onClick={() => handleSendMultiple(selectedItems)}>
+                        📤 Send All ({selectedCount})
+                      </button>
+                    )}
+                    <button className="menu-item menu-item-danger" onClick={() => handleTriggerDeleteMultiple(selectedItems)}>
+                      🗑 Delete All ({selectedCount})
+                    </button>
+                  </>
+                );
+              }
+
+              // Single item menu options
+              return activeVolume === 'trash' ? (
                 <>
                   <button className="menu-item" onClick={() => handleRestoreTrashFile(contextMenu.item)}>
                     🔄 Restore
@@ -738,14 +850,8 @@ export default function App() {
                     🗑 Delete
                   </button>
                 </>
-              )
-            ) : (
-              activeVolume === 'storage' && (
-                <button className="menu-item" onClick={() => setFolderPromptOpen(true)}>
-                  📁 New Folder
-                </button>
-              )
-            )}
+              );
+            })()}
           </div>
         </>
       )}
@@ -778,12 +884,12 @@ export default function App() {
           }}>
             <h3 style={{ marginBottom: '12px', fontSize: '1.1rem', fontWeight: 600 }}>Confirm Deletion</h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
-              Are you sure you want to delete <strong>{deleteTarget.display_name || deleteTarget.name}</strong>?
+              Are you sure you want to delete <strong>{deleteTarget.isMultiple ? `${deleteTarget.count} items` : (deleteTarget.display_name || deleteTarget.name)}</strong>?
             </p>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
               {activeVolume === 'trash' 
-                ? 'This action is permanent and cannot be undone.'
-                : 'This item will be moved to the Trash, where it will be kept for 30 days.'}
+                ? (deleteTarget.isMultiple ? 'All selected items will be permanently deleted and cannot be undone.' : 'This action is permanent and cannot be undone.')
+                : (deleteTarget.isMultiple ? 'All selected items will be moved to the Trash, where they will be kept for 30 days.' : 'This item will be moved to the Trash, where it will be kept for 30 days.')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
@@ -925,9 +1031,11 @@ export default function App() {
             width: '90%',
             boxShadow: 'var(--shadow-premium)',
           }}>
-            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Send File</h3>
+            <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>
+              {sendTarget.isMultiple ? `Send ${sendTarget.count} Files` : 'Send File'}
+            </h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              Select a contact to send <strong>{sendTarget.name}</strong> to:
+              Select a contact to send <strong>{sendTarget.isMultiple ? `${sendTarget.count} selected files` : sendTarget.name}</strong> to:
             </p>
 
             {sendError && (

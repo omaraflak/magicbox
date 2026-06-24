@@ -479,10 +479,10 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	volumeName := r.URL.Query().Get("volume")
 	subPath := r.URL.Query().Get("path")
-	filename := r.URL.Query().Get("file")
+	filenames := r.URL.Query()["file"]
 	volIndexStr := r.URL.Query().Get("vol_index")
 
-	if filename == "" {
+	if len(filenames) == 0 {
 		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
 		return
 	}
@@ -493,27 +493,19 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	safeName := filepath.Base(filename)
-	fullPath := filepath.Join(dirPath, safeName)
-
-	fi, err := os.Stat(fullPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("file not found: %q", safeName))
-		} else {
-			writeError(w, http.StatusInternalServerError, err.Error())
+	// 1. Single File Download (No zipping)
+	if len(filenames) == 1 {
+		safeName := filepath.Base(filenames[0])
+		fullPath := filepath.Join(dirPath, safeName)
+		fi, err := os.Stat(fullPath)
+		if err == nil && !fi.IsDir() {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeName))
+			http.ServeFile(w, r, fullPath)
+			return
 		}
-		return
 	}
 
-	// 1. Single File Download
-	if !fi.IsDir() {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeName))
-		http.ServeFile(w, r, fullPath)
-		return
-	}
-
-	// 2. Folder Download (zipped on the fly)
+	// 2. Folder or Multi-item download (zipped on the fly)
 	volIndex := 0
 	if volIndexStr != "" {
 		volIndex, err = strconv.Atoi(volIndexStr)
@@ -523,7 +515,12 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	plan, err := generateDownloadPlan(fullPath, safeName)
+	defaultZipName := "archive"
+	if len(filenames) == 1 {
+		defaultZipName = filepath.Base(filenames[0])
+	}
+
+	plan, items, err := generateMultiItemPlan(dirPath, filenames, defaultZipName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate plan: "+err.Error())
 		return
@@ -542,16 +539,28 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
-	for _, relPath := range targetVolume.Files {
-		fileOnDisk := filepath.Join(fullPath, relPath)
-		src, err := os.Open(fileOnDisk)
+	for _, zipPath := range targetVolume.Files {
+		// Find corresponding zipItem
+		var diskPath string
+		for _, item := range items {
+			if item.ZipPath == zipPath {
+				diskPath = item.DiskPath
+				break
+			}
+		}
+
+		if diskPath == "" {
+			continue
+		}
+
+		src, err := os.Open(diskPath)
 		if err != nil {
-			log.Printf("Failed to open file %s for zipping: %v", fileOnDisk, err)
+			log.Printf("Failed to open file %s for zipping: %v", diskPath, err)
 			continue
 		}
 
 		header := &zip.FileHeader{
-			Name:   filepath.ToSlash(relPath),
+			Name:   filepath.ToSlash(zipPath),
 			Method: zip.Deflate,
 		}
 		header.Modified = time.Now()
@@ -559,14 +568,14 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		writer, err := zw.CreateHeader(header)
 		if err != nil {
 			src.Close()
-			log.Printf("Failed to create zip header for %s: %v", relPath, err)
+			log.Printf("Failed to create zip header for %s: %v", zipPath, err)
 			continue
 		}
 
 		_, err = io.Copy(writer, src)
 		src.Close()
 		if err != nil {
-			log.Printf("Failed to copy file %s content to zip: %v", fileOnDisk, err)
+			log.Printf("Failed to copy file %s content to zip: %v", diskPath, err)
 			continue
 		}
 	}
@@ -609,43 +618,76 @@ func walkDirectory(fullPath string) ([]string, map[string]int64, error) {
 	return files, sizes, nil
 }
 
-func generateDownloadPlan(fullPath string, folderName string) (DownloadPlan, error) {
-	files, sizes, err := walkDirectory(fullPath)
-	if err != nil {
-		return DownloadPlan{}, err
+type zipItem struct {
+	DiskPath string
+	ZipPath  string
+	Size     int64
+}
+
+func generateMultiItemPlan(baseDir string, filenames []string, defaultZipName string) (DownloadPlan, []zipItem, error) {
+	var items []zipItem
+	for _, name := range filenames {
+		safeName := filepath.Base(name)
+		fullPath := filepath.Join(baseDir, safeName)
+		fi, err := os.Stat(fullPath)
+		if err != nil {
+			return DownloadPlan{}, nil, err
+		}
+		if fi.IsDir() {
+			nestedFiles, sizes, err := walkDirectory(fullPath)
+			if err != nil {
+				return DownloadPlan{}, nil, err
+			}
+			for _, rel := range nestedFiles {
+				items = append(items, zipItem{
+					DiskPath: filepath.Join(fullPath, rel),
+					ZipPath:  filepath.Join(safeName, rel),
+					Size:     sizes[rel],
+				})
+			}
+		} else {
+			items = append(items, zipItem{
+				DiskPath: fullPath,
+				ZipPath:  safeName,
+				Size:     fi.Size(),
+			})
+		}
 	}
 
+	// Sort items by ZipPath for deterministic volume contents
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ZipPath < items[j].ZipPath
+	})
+
 	plan := DownloadPlan{Volumes: []ZipVolume{}}
-	if len(files) == 0 {
-		return plan, nil
+	if len(items) == 0 {
+		return plan, items, nil
 	}
 
 	var currentVol ZipVolume
 	currentVol.Index = 0
-	currentVol.Name = fmt.Sprintf("%s.part%d.zip", folderName, currentVol.Index+1)
+	currentVol.Name = fmt.Sprintf("%s.part%d.zip", defaultZipName, currentVol.Index+1)
 	currentVol.Files = []string{}
 	currentVol.Size = 0
 
-	for _, file := range files {
-		fileSize := sizes[file]
-		if currentVol.Size+fileSize > maxZipVolumeSize && len(currentVol.Files) > 0 {
+	for _, item := range items {
+		if currentVol.Size+item.Size > maxZipVolumeSize && len(currentVol.Files) > 0 {
 			plan.Volumes = append(plan.Volumes, currentVol)
 			currentVol.Index++
-			currentVol.Name = fmt.Sprintf("%s.part%d.zip", folderName, currentVol.Index+1)
+			currentVol.Name = fmt.Sprintf("%s.part%d.zip", defaultZipName, currentVol.Index+1)
 			currentVol.Files = []string{}
 			currentVol.Size = 0
 		}
-		currentVol.Files = append(currentVol.Files, file)
-		currentVol.Size += fileSize
+		currentVol.Files = append(currentVol.Files, item.ZipPath)
+		currentVol.Size += item.Size
 	}
-
 	plan.Volumes = append(plan.Volumes, currentVol)
 
 	if len(plan.Volumes) == 1 {
-		plan.Volumes[0].Name = folderName + ".zip"
+		plan.Volumes[0].Name = defaultZipName + ".zip"
 	}
 
-	return plan, nil
+	return plan, items, nil
 }
 
 func handleDownloadPlan(w http.ResponseWriter, r *http.Request) {
@@ -656,9 +698,9 @@ func handleDownloadPlan(w http.ResponseWriter, r *http.Request) {
 
 	volumeName := r.URL.Query().Get("volume")
 	subPath := r.URL.Query().Get("path")
-	filename := r.URL.Query().Get("file")
+	filenames := r.URL.Query()["file"]
 
-	if filename == "" {
+	if len(filenames) == 0 {
 		writeError(w, http.StatusBadRequest, "missing 'file' parameter")
 		return
 	}
@@ -669,34 +711,41 @@ func handleDownloadPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	safeName := filepath.Base(filename)
-	fullPath := filepath.Join(dirPath, safeName)
-
-	fi, err := os.Stat(fullPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			writeError(w, http.StatusNotFound, "file not found")
-		} else {
-			writeError(w, http.StatusInternalServerError, err.Error())
+	// Single item file download plan (direct download, no zip)
+	if len(filenames) == 1 {
+		safeName := filepath.Base(filenames[0])
+		fullPath := filepath.Join(dirPath, safeName)
+		fi, err := os.Stat(fullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				writeError(w, http.StatusNotFound, "file not found")
+			} else {
+				writeError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
 		}
-		return
-	}
-
-	if !fi.IsDir() {
-		writeJSON(w, http.StatusOK, DownloadPlan{
-			Volumes: []ZipVolume{
-				{
-					Index: 0,
-					Name:  safeName,
-					Files: []string{safeName},
-					Size:  fi.Size(),
+		if !fi.IsDir() {
+			writeJSON(w, http.StatusOK, DownloadPlan{
+				Volumes: []ZipVolume{
+					{
+						Index: 0,
+						Name:  safeName,
+						Files: []string{safeName},
+						Size:  fi.Size(),
+					},
 				},
-			},
-		})
-		return
+			})
+			return
+		}
 	}
 
-	plan, err := generateDownloadPlan(fullPath, safeName)
+	// Multiple items or single folder (needs zip plan)
+	defaultZipName := "archive"
+	if len(filenames) == 1 {
+		defaultZipName = filepath.Base(filenames[0])
+	}
+
+	plan, _, err := generateMultiItemPlan(dirPath, filenames, defaultZipName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate download plan: "+err.Error())
 		return

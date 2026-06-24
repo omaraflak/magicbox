@@ -52,7 +52,14 @@ export async function uploadFiles(volume, path, files, onProgress) {
 }
 
 export function getFileUrl(volume, path, filename, volIndex = null) {
-  let url = `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`;
+  let url = `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}`;
+  if (Array.isArray(filename)) {
+    filename.forEach(name => {
+      url += `&file=${encodeURIComponent(name)}`;
+    });
+  } else {
+    url += `&file=${encodeURIComponent(filename)}`;
+  }
   if (volIndex !== null) {
     url += `&vol_index=${volIndex}`;
   }
@@ -60,9 +67,15 @@ export function getFileUrl(volume, path, filename, volIndex = null) {
 }
 
 export async function getDownloadPlan(volume, path, filename) {
-  const res = await fetch(
-    `${API_BASE}/files/download-plan?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`
-  );
+  let url = `${API_BASE}/files/download-plan?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}`;
+  if (Array.isArray(filename)) {
+    filename.forEach(name => {
+      url += `&file=${encodeURIComponent(name)}`;
+    });
+  } else {
+    url += `&file=${encodeURIComponent(filename)}`;
+  }
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch download plan: ${res.statusText}`);
   return res.json();
 }
