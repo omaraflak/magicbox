@@ -44,6 +44,7 @@ export default function FileCard({
               {file.display_name || file.name}
             </span>
             {file.is_dir && file.is_auto_send && <span title="Auto-Send Folder" style={{ fontSize: '0.85rem', flexShrink: 0, marginLeft: '8px' }}>📤</span>}
+            {file.is_dir && file.name === 'Received' && <span title="Received Folder" style={{ fontSize: '0.85rem', flexShrink: 0, marginLeft: '8px' }}>✉️</span>}
           </div>
           <div className="file-card-meta">
             {file.original_path && (
@@ -90,6 +91,7 @@ export default function FileCard({
             {file.display_name || file.name}
           </span>
           {file.is_auto_send && <span title="Auto-Send Folder" style={{ fontSize: '0.85rem', flexShrink: 0, marginLeft: '8px' }}>📤</span>}
+          {file.name === 'Received' && <span title="Received Folder" style={{ fontSize: '0.85rem', flexShrink: 0, marginLeft: '8px' }}>✉️</span>}
         </div>
       </div>
     );

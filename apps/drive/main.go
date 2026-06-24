@@ -967,6 +967,23 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 		"filename":    safeName,
 	})
 }
+func resolveUniqueFilename(dirPath, filename string) string {
+	candidatePath := filepath.Join(dirPath, filename)
+	if _, err := os.Stat(candidatePath); os.IsNotExist(err) {
+		return filename
+	}
+
+	ext := filepath.Ext(filename)
+	base := filename[:len(filename)-len(ext)]
+
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s (%d)%s", base, i, ext)
+		if _, err := os.Stat(filepath.Join(dirPath, candidate)); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+}
+
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
@@ -1000,35 +1017,24 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	safeName := filepath.Base(msg.Filename)
-	var destPath string
 
-	if msg.DestPath != "" {
-		// Resolve target directory under primary storage
-		targetDir := filepath.Join(volumes["storage"], msg.DestPath)
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			log.Printf("Failed to create Auto-Send target directory: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to create destination folder")
-			return
-		}
-		destPath = filepath.Join(targetDir, safeName)
-	} else {
-		// Create Incoming directory if it doesn't exist under user's storage
-		incomingDir := filepath.Join(volumes["storage"], "Incoming")
-		if err := os.MkdirAll(incomingDir, 0755); err != nil {
-			log.Printf("Failed to create Incoming directory: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to create Incoming folder")
-			return
-		}
-		destPath = filepath.Join(incomingDir, safeName)
+	targetDir := filepath.Join(volumes["storage"], "Received", msg.DestPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		log.Printf("Failed to create Received target directory: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create Received folder")
+		return
 	}
 
+	uniqueName := resolveUniqueFilename(targetDir, safeName)
+	destPath := filepath.Join(targetDir, uniqueName)
+
 	if err := os.WriteFile(destPath, msg.Content, 0644); err != nil {
-		log.Printf("Failed to write incoming file %q: %v", safeName, err)
+		log.Printf("Failed to write incoming file %q: %v", uniqueName, err)
 		writeError(w, http.StatusInternalServerError, "failed to save file")
 		return
 	}
 
-	log.Printf("Successfully saved sent file %q to Incoming directory", safeName)
+	log.Printf("Successfully saved sent file %q to Received directory", uniqueName)
 	w.WriteHeader(http.StatusOK)
 }
 
