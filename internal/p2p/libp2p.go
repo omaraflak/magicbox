@@ -48,7 +48,7 @@ func NewLibp2pService(privKey crypto.PrivKey, listenAddrs []string, logger *logg
 // Start boots the libp2p host.
 func (s *Libp2pService) Start(ctx context.Context) error {
 	bootstrapPeers := []string{
-		"/dns4/magicbox-relay-626811923438.europe-west2.run.app/tcp/443/wss/p2p/12D3KooWB9NpjhNXDQK1GTWWftN7ZBSuWZ3XePSuLvPaATQnYTfE",
+		"/dns4/magicbox-626811923438.europe-west2.run.app/tcp/443/wss/p2p/12D3KooWRAFEfJLzwr4Zaba73gLAJn9kw5wsSMM2pSvPU8DUSp97",
 	}
 
 	var staticRelays []peer.AddrInfo
