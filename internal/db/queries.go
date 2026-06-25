@@ -445,7 +445,7 @@ func scanApp(row rowScanner) (*App, error) {
 	if entryPort.Valid {
 		a.EntryPort = int(entryPort.Int64)
 	} else {
-		a.EntryPort = 8080
+		a.EntryPort = 9090
 	}
 	if webhookPath.Valid && webhookPath.String != "" {
 		a.WebhookPath = webhookPath.String

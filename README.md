@@ -24,4 +24,4 @@ docker compose up -d
 MAGICBOX_HOST_ROOT=/tmp/magicbox docker compose up -d
 ```
 
-Open `http://localhost:8080` once the containers are running.
+Open `http://localhost:9090` once the containers are running.

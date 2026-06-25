@@ -3,7 +3,7 @@
   "name": "Magic Drive",
   "version": "1.0.0",
   "image": "docker.io/magicbox/drive:latest",
-  "entry_port": 8080,
+  "entry_port": 9090,
   "route_slug": "drive",
   "webhook_path": "/internal/magicbox-webhook",
   "required_scopes": [

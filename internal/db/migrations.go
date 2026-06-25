@@ -76,7 +76,7 @@ func (d *DB) Migrate() error {
 	// Incremental schema updates: add columns if they don't exist.
 	// Ignored if column already exists (SQLite silently errors on duplicate ALTER).
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN host TEXT`)
-	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN entry_port INTEGER DEFAULT 8080`)
+	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN entry_port INTEGER DEFAULT 9090`)
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN webhook_path TEXT DEFAULT '/internal/magicbox-webhook'`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN target_user_id TEXT NOT NULL DEFAULT ''`)
 

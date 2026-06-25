@@ -1149,7 +1149,7 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 // --- Main ---
 
 func main() {
-	log.Println("Starting Magic Drive API on port 8080...")
+	log.Println("Starting Magic Drive API on port 9090...")
 
 	initDB()
 	defer dbConn.Close()
@@ -1196,7 +1196,7 @@ func main() {
 		spaHandler(w, r)
 	})
 
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(http.ListenAndServe(":9090", mux))
 }
 
 func handleMoveFile(w http.ResponseWriter, r *http.Request) {

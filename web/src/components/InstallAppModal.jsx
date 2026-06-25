@@ -69,7 +69,7 @@ export default function InstallAppModal({ isOpen, onClose, onInstall, error, loa
   "name": "Magic Drive",
   "version": "1.0.0",
   "image": "docker.io/magicbox/drive:latest",
-  "entry_port": 8080,
+  "entry_port": 9090,
   "route_slug": "drive",
   "required_scopes": ["profile:read"],
   "volume_mounts": []

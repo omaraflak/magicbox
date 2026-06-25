@@ -28,5 +28,5 @@ WORKDIR /
 COPY --from=builder /magicbox/apps/drive/drive /drive
 COPY --from=frontend-builder /app/web/dist/ /web/
 RUN mkdir -p /data/app_state /data/transit /data/shared/photos /data/shared/documents
-EXPOSE 8080
+EXPOSE 9090
 ENTRYPOINT ["/drive"]

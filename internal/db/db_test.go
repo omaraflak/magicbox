@@ -49,7 +49,7 @@ func TestDatabaseQueries(t *testing.T) {
 		ImageDigest: "sha256:123",
 		Version:     "1.0.0",
 		ContainerID: "cont-123",
-		EntryPort:   8080,
+		EntryPort:   9090,
 	}
 
 	if err := database.InsertApp(app); err != nil {
