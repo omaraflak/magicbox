@@ -48,7 +48,7 @@ func NewLibp2pService(privKey crypto.PrivKey, listenAddrs []string, logger *logg
 // Start boots the libp2p host.
 func (s *Libp2pService) Start(ctx context.Context) error {
 	bootstrapPeers := []string{
-		"/dns4/magicbox-626811923438.europe-west2.run.app/tcp/443/wss/p2p/12D3KooWRAFEfJLzwr4Zaba73gLAJn9kw5wsSMM2pSvPU8DUSp97",
+		"/ip4/35.197.199.183/tcp/4001/ws/p2p/12D3KooWCpWVnUkkBKwu4gGUBtww7URbswPgVc86yTGkpqnAnH4f",
 	}
 
 	var staticRelays []peer.AddrInfo
@@ -69,6 +69,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		libp2p.EnableRelay(),
 		libp2p.EnableAutoRelayWithStaticRelays(staticRelays),
 		libp2p.EnableHolePunching(),
+		libp2p.ForceReachabilityPrivate(),
 	}
 
 	if len(s.listenAddrs) > 0 {
@@ -88,6 +89,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 			libp2p.EnableRelay(),
 			libp2p.EnableAutoRelayWithStaticRelays(staticRelays),
 			libp2p.EnableHolePunching(),
+			libp2p.ForceReachabilityPrivate(),
 			libp2p.ListenAddrStrings(
 				"/ip4/0.0.0.0/tcp/0",
 				"/ip4/0.0.0.0/udp/0/quic-v1",
