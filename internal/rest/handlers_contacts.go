@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -102,7 +103,16 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inviteLink := fmt.Sprintf("magicbox://invite/%s?user_id=%s", peerID, claims.UserID)
+	// Use relay multiaddress (p2p-circuit) if available to support NAT traversal over the internet
+	targetAddr := peerID
+	for _, addr := range s.p2pService.Multiaddrs() {
+		if strings.Contains(addr, "/p2p-circuit") {
+			targetAddr = addr
+			break
+		}
+	}
+
+	inviteLink := fmt.Sprintf("magicbox://invite/%s?user_id=%s", targetAddr, claims.UserID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"peer_id":      peerID,
