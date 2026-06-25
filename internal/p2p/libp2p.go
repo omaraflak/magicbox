@@ -48,11 +48,7 @@ func NewLibp2pService(privKey crypto.PrivKey, listenAddrs []string, logger *logg
 // Start boots the libp2p host.
 func (s *Libp2pService) Start(ctx context.Context) error {
 	bootstrapPeers := []string{
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+		"/dns4/magicbox-relay-626811923438.europe-west2.run.app/tcp/443/wss/p2p/12D3KooWB9NpjhNXDQK1GTWWftN7ZBSuWZ3XePSuLvPaATQnYTfE",
 	}
 
 	var staticRelays []peer.AddrInfo
