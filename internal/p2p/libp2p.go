@@ -47,8 +47,32 @@ func NewLibp2pService(privKey crypto.PrivKey, listenAddrs []string, logger *logg
 
 // Start boots the libp2p host.
 func (s *Libp2pService) Start(ctx context.Context) error {
+	bootstrapPeers := []string{
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+	}
+
+	var staticRelays []peer.AddrInfo
+	for _, addrStr := range bootstrapPeers {
+		addr, err := multiaddr.NewMultiaddr(addrStr)
+		if err != nil {
+			continue
+		}
+		pi, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			continue
+		}
+		staticRelays = append(staticRelays, *pi)
+	}
+
 	opts := []libp2p.Option{
 		libp2p.Identity(s.privKey),
+		libp2p.EnableRelay(),
+		libp2p.EnableAutoRelayWithStaticRelays(staticRelays),
+		libp2p.EnableHolePunching(),
 	}
 
 	if len(s.listenAddrs) > 0 {
@@ -65,6 +89,9 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		// Fallback to random ports if defaults are bound
 		fallbackOpts := []libp2p.Option{
 			libp2p.Identity(s.privKey),
+			libp2p.EnableRelay(),
+			libp2p.EnableAutoRelayWithStaticRelays(staticRelays),
+			libp2p.EnableHolePunching(),
 			libp2p.ListenAddrStrings(
 				"/ip4/0.0.0.0/tcp/0",
 				"/ip4/0.0.0.0/udp/0/quic-v1",
@@ -92,23 +119,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 	}
 
 	// Dial bootstrap peers asynchronously
-	bootstrapPeers := []string{
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-		"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-	}
-
-	for _, addrStr := range bootstrapPeers {
-		addr, err := multiaddr.NewMultiaddr(addrStr)
-		if err != nil {
-			continue
-		}
-		pi, err := peer.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			continue
-		}
+	for _, info := range staticRelays {
 		go func(info peer.AddrInfo) {
 			dialCtx, dialCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer dialCancel()
@@ -122,7 +133,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 					logging.F("peer", info.ID.String()),
 				)
 			}
-		}(*pi)
+		}(info)
 	}
 
 	s.logger.Info("P2P libp2p host started",
