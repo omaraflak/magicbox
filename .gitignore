@@ -1,5 +1,10 @@
 # Compiled binaries
 magicbox
+server
+apps/ai/ai
+apps/drive/drive
+apps/ai/ai.db
+apps/drive/drive.db
 
 # scratch
 scratch/
@@ -25,3 +30,4 @@ ehthumbs.db
 Thumbs.db
 
 bin/
+node_modules/

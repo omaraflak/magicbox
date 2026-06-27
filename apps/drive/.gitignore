@@ -1,0 +1,13 @@
+# Go built binary
+drive
+
+# Local SQLite database
+drive.db
+drive.db-journal
+
+# Frontend build output
+web/dist/
+web/node_modules/
+
+# Env vars
+.env

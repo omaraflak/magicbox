@@ -21,7 +21,23 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.ServeFile(w, r, "/web/index.html")
+	// Inject <base> tag so relative asset paths resolve through the proxy prefix.
+	html, err := os.ReadFile("/web/index.html")
+	if err != nil {
+		http.Error(w, "index.html not found", http.StatusInternalServerError)
+		return
+	}
+
+	basePath := "/"
+	if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
+		basePath = "/" + strings.Trim(prefix, "/") + "/"
+	}
+
+	baseTag := `<base href="` + basePath + `">`
+	modified := strings.Replace(string(html), "<head>", "<head>\n    "+baseTag, 1)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(modified))
 }
 
 // --- Main ---
@@ -60,10 +76,6 @@ func main() {
 	// SPA fallback
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			writeError(w, http.StatusNotFound, "unknown API endpoint")
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/api/folders") {
 			writeError(w, http.StatusNotFound, "unknown API endpoint")
 			return
 		}

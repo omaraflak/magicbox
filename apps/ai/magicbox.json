@@ -1,0 +1,16 @@
+{
+  "app_id": "com.magicbox.ai",
+  "name": "Magic AI",
+  "version": "1.0.0",
+  "image": "docker.io/magicbox/ai:latest",
+  "entry_port": 9090,
+  "route_slug": "ai",
+  "webhook_path": "/internal/magicbox-webhook",
+  "required_scopes": [
+    "profile:read"
+  ],
+  "resource_limits": {
+    "memory_mb": 256,
+    "cpu_cores": 0.5
+  }
+}

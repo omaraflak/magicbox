@@ -62,6 +62,7 @@ func appResponse(a interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"id":         app.ID,
 		"app_id":     app.AppID,
+		"name":       app.Name,
 		"status":     app.Status,
 		"image":      app.Image,
 		"version":    app.Version,
@@ -321,6 +322,8 @@ func (s *Server) handleAppProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Strip prefix /u/{username}/{routeSlug} before sending to the app container.
 	prefix := fmt.Sprintf("/u/%s/%s", username, routeSlug)
+	r.Header.Set("X-Forwarded-Prefix", prefix)
+	r.Header.Set("X-Original-URI", r.URL.Path)
 	r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
 	if r.URL.Path == "" {
 		r.URL.Path = "/"

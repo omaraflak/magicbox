@@ -1,0 +1,13 @@
+# Go built binary
+ai
+
+# Local SQLite database
+ai.db
+ai.db-journal
+
+# Frontend build output
+web/dist/
+web/node_modules/
+
+# Env vars
+.env

@@ -106,6 +106,7 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 	app := &db.App{
 		ID:          appDBID,
 		AppID:       manifest.AppID,
+		Name:        manifest.Name,
 		UserID:      userID,
 		Status:      "installing",
 		RouteSlug:   manifest.RouteSlug,

@@ -37,7 +37,7 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
         return () => document.removeEventListener('mousedown', handleOutsideClick);
     }, [menuOpen]);
 
-    const appTitle = app.app_id.split('.').pop();
+    const appTitle = app.name || app.app_id.split('.').pop();
     const appUrl = app.host 
         ? `${window.location.protocol}//${app.host}/` 
         : `/u/${user?.username}/${app.route_slug}/`;

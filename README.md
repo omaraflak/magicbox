@@ -10,6 +10,7 @@
 ```bash
 docker build -t docker.io/magicbox/core:latest .
 docker build -t docker.io/magicbox/drive:latest -f apps/drive/Dockerfile .
+docker build -t docker.io/magicbox/ai:latest -f apps/ai/Dockerfile .
 ```
 
 ### 2. Start Stack
@@ -24,4 +25,4 @@ docker compose up -d
 MAGICBOX_HOST_ROOT=/tmp/magicbox docker compose up -d
 ```
 
-Open `http://localhost:9090` once the containers are running.
+Open `http://localhost:9090` (Core Dashboard), `http://localhost:9090/drive` (Drive) or `http://localhost:9090/ai` (AI) once the containers are running.

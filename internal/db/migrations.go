@@ -21,6 +21,7 @@ func (d *DB) Migrate() error {
 		`CREATE TABLE IF NOT EXISTS apps (
 			id TEXT PRIMARY KEY,
 			app_id TEXT NOT NULL,
+			name TEXT NOT NULL DEFAULT '',
 			user_id TEXT NOT NULL REFERENCES users(id),
 			status TEXT NOT NULL DEFAULT 'stopped',
 			route_slug TEXT NOT NULL,
@@ -72,6 +73,9 @@ func (d *DB) Migrate() error {
 			return fmt.Errorf("migration failed: %w", err)
 		}
 	}
+
+	// Try to add 'name' column for existing installations
+	_, _ = d.conn.Exec("ALTER TABLE apps ADD COLUMN name TEXT NOT NULL DEFAULT ''")
 
 	// Incremental schema updates: add columns if they don't exist.
 	// Ignored if column already exists (SQLite silently errors on duplicate ALTER).
