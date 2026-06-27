@@ -18,8 +18,8 @@ COPY api/proto/v1/ /magicbox/api/proto/v1/
 COPY apps/drive/go.mod apps/drive/go.sum ./
 RUN go mod download
 # Copy local source file
-COPY apps/drive/main.go .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o drive main.go
+COPY apps/drive/*.go ./
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o drive .
 
 # Stage 3: Runtime
 FROM alpine:3.19
