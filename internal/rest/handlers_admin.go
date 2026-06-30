@@ -272,7 +272,7 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	targetImage := req.Image
 	if targetImage == "" {
-		targetImage = "magicbox/core:latest"
+		targetImage = "docker.io/magicbox/core:latest"
 	}
 
 	if s.docker == nil {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 export default function AdminUpgradeTab({ onUpgrade, error, loading }) {
-    const [image, setImage] = useState('magicbox/core:latest');
+    const [image, setImage] = useState('docker.io/magicbox/core:latest');
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -30,12 +30,12 @@ export default function AdminUpgradeTab({ onUpgrade, error, loading }) {
                         className="form-control" 
                         value={image}
                         onChange={(e) => setImage(e.target.value)}
-                        placeholder="magicbox/core:latest"
+                        placeholder="docker.io/magicbox/core:latest"
                         required
                         disabled={loading}
                     />
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                        e.g. <code>magicbox/core:latest</code> or <code>magicbox/core:v1.2.0</code>
+                        e.g. <code>docker.io/magicbox/core:latest</code> or <code>docker.io/magicbox/core:v1.2.0</code>
                     </span>
                 </div>
 
