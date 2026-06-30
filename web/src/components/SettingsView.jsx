@@ -5,6 +5,7 @@ import ContactsTab from './ContactsTab';
 import AdminUsersTab from './AdminUsersTab';
 import AdminRegistriesTab from './AdminRegistriesTab';
 import AdminLogsTab from './AdminLogsTab';
+import AdminUpgradeTab from './AdminUpgradeTab';
 
 export default function SettingsView({ 
     user, 
@@ -30,7 +31,10 @@ export default function SettingsView({
     contacts = [],
     invitationInfo = null,
     onAddContact,
-    onDeleteContact
+    onDeleteContact,
+    onUpgradeCore,
+    upgradeError,
+    upgradeLoading
 }) {
     return (
         <div className="admin-layout animate-fade-in">
@@ -122,12 +126,19 @@ export default function SettingsView({
                             >
                                 Registries
                             </button>
-                            <button 
+                             <button 
                                 className={`btn ${adminTab === 'logs' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => onAdminTabChange('logs')}
                                 style={{ padding: '6px 16px', fontSize: '0.85rem' }}
                             >
                                 Kernel Logs
+                            </button>
+                            <button 
+                                className={`btn ${adminTab === 'upgrade' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => onAdminTabChange('upgrade')}
+                                style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+                            >
+                                System Upgrade
                             </button>
                         </div>
 
@@ -153,6 +164,13 @@ export default function SettingsView({
                                 logLevel={logLevel} 
                                 onLevelChange={onLogLevelChange} 
                                 onRefresh={onRefreshLogs}
+                            />
+                        )}
+                        {adminTab === 'upgrade' && (
+                            <AdminUpgradeTab 
+                                onUpgrade={onUpgradeCore} 
+                                error={upgradeError} 
+                                loading={upgradeLoading}
                             />
                         )}
                     </div>

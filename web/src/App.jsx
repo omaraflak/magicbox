@@ -41,6 +41,8 @@ export default function App() {
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState('');
+    const [upgradeLoading, setUpgradeLoading] = useState(false);
+    const [upgradeError, setUpgradeError] = useState('');
     const [rebuildingAppId, setRebuildingAppId] = useState(null);
     const [uninstallingAppId, setUninstallingAppId] = useState(null);
     const [startingAppId, setStartingAppId] = useState(null);
@@ -460,6 +462,36 @@ export default function App() {
         loadLogs(level);
     };
 
+    // Core Self-Upgrade
+    const handleUpgradeCore = async (image) => {
+        showConfirm(`Are you sure you want to upgrade the core system to image "${image}"? This will restart the container.`, async () => {
+            setUpgradeLoading(true);
+            setUpgradeError('');
+            
+            const { status, data } = await callAPI('POST', '/admin/upgrade', { image });
+            if (status === 200) {
+                // Show a blocking modal that polls health until the container comes back
+                showAlert("System upgrade triggered successfully. Re-connecting to Magicbox Core...", "Upgrading System");
+                
+                // Poll health endpoint every 2 seconds until it responds
+                const interval = setInterval(async () => {
+                    try {
+                        const res = await fetch('/health');
+                        if (res.status === 200) {
+                            clearInterval(interval);
+                            window.location.reload();
+                        }
+                    } catch (e) {
+                        // ignore network errors while container is offline
+                    }
+                }, 2000);
+            } else {
+                setUpgradeError(data?.error || "Upgrade failed");
+                setUpgradeLoading(false);
+            }
+        }, "Confirm System Upgrade");
+    };
+
     // Rendering Helper
     if (booting) {
         return (
@@ -545,6 +577,9 @@ export default function App() {
                         invitationInfo={invitationInfo}
                         onAddContact={handleAddContact}
                         onDeleteContact={handleDeleteContact}
+                        onUpgradeCore={handleUpgradeCore}
+                        upgradeError={upgradeError}
+                        upgradeLoading={upgradeLoading}
                     />
                 )}
             </div>
