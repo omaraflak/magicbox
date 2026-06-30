@@ -12,6 +12,7 @@ import (
 )
 
 type Params struct {
+	Model        string  `json:"model"`
 	SystemPrompt string  `json:"system_prompt"`
 	Temperature  float32 `json:"temperature"`
 	TopK         int32   `json:"top_k"`
@@ -27,7 +28,11 @@ func getGeminiClient(ctx context.Context) (*genai.Client, error) {
 }
 
 func getGeminiModel(client *genai.Client, params Params) *genai.GenerativeModel {
-	model := client.GenerativeModel("gemini-3.1-flash-lite")
+	modelName := params.Model
+	if modelName == "" {
+		modelName = "gemini-3.1-flash-lite"
+	}
+	model := client.GenerativeModel(modelName)
 	
 	if params.Temperature != 0 {
 		model.SetTemperature(params.Temperature)

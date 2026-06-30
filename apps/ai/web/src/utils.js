@@ -22,6 +22,7 @@ export function parseParams(raw) {
 
 // Default AI params
 export const DEFAULT_PARAMS = {
+  model: '',
   system_prompt: '',
   temperature: 1.0,
   top_k: 40,

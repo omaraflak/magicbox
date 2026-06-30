@@ -1034,18 +1034,117 @@ body {
 }
 
 .btn-preset-save {
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
+  background: var(--accent);
+  border: none;
   padding: 8px 16px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
-  transition: background 0.2s, color 0.2s;
+  color: white;
+  transition: background 0.2s;
 }
 
 .btn-preset-save:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--accent-hover);
+}
+
+/* Model Selector */
+.model-selector-wrapper {
+  position: relative;
+}
+
+.model-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.04);
   color: var(--text-primary);
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2352525b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.model-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.model-details {
+  margin-top: 6px;
+}
+
+.model-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.model-details-toggle:hover .help-text {
+  color: var(--text-primary);
+}
+
+.model-details-arrow {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.model-info-card {
+  margin-top: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-info-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 13px;
+}
+
+.model-info-label {
+  color: var(--text-muted);
+  font-weight: 500;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.model-info-value {
+  color: var(--text-primary);
+  word-break: break-word;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.model-info-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.model-method-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'SFMono-Regular', Consolas, monospace;
 }

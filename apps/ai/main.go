@@ -60,6 +60,7 @@ func main() {
 
 	// Settings
 	mux.HandleFunc("/api/settings", handleSettings)
+	mux.HandleFunc("/api/models", handleModels)
 
 	// Conversations
 	mux.HandleFunc("/api/conversations", handleConversations)

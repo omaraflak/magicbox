@@ -1,12 +1,61 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { getModels } from '../api';
+import ModelCard from './ModelCard';
 
 export default function ParamsEditor({ params, onChange, onSave }) {
+  const [models, setModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [expandedModel, setExpandedModel] = useState(null);
+
+  useEffect(() => {
+    setLoadingModels(true);
+    getModels()
+      .then(res => setModels(Array.isArray(res) ? res : []))
+      .catch(() => setModels([]))
+      .finally(() => setLoadingModels(false));
+  }, []);
+
   const handleChange = (key, value) => {
     onChange({ ...params, [key]: value });
   };
 
+  const selectedModel = models.find(m => m.name === params.model);
+
   return (
     <div className="params-editor">
+      <div className="param-group">
+        <label>Model</label>
+        <div className="model-selector-wrapper">
+          <select
+            className="model-select"
+            value={params.model || ''}
+            onChange={e => {
+              handleChange('model', e.target.value);
+              setTimeout(onSave, 0);
+            }}
+          >
+            <option value="">Default (gemini-3.1-flash-lite)</option>
+            {loadingModels && <option disabled>Loading models...</option>}
+            {models.map(m => (
+              <option key={m.name} value={m.name}>
+                {m.display_name || m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedModel && (
+          <div className="model-details">
+            <div className="model-details-toggle" onClick={() => setExpandedModel(expandedModel ? null : selectedModel.name)}>
+              <span className="model-details-arrow">{expandedModel ? '▾' : '▸'}</span>
+              <span className="help-text">Model details</span>
+            </div>
+            {expandedModel && <ModelCard model={selectedModel} />}
+          </div>
+        )}
+        <span className="help-text">The AI model to use for this conversation.</span>
+      </div>
+
+
       <div className="param-group">
         <label>System Prompt</label>
         <textarea 

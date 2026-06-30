@@ -55,4 +55,5 @@ export const forkConversation = (id, messageId) => fetch(`${API_BASE}/conversati
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ message_id: messageId })
 }).then(r => r.json());
+export const getModels = () => fetch(`${API_BASE}/models`).then(r => r.json());
 
