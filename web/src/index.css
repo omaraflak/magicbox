@@ -669,6 +669,7 @@ textarea {
 
 .admin-main {
     flex: 1;
+    min-width: 0;
     padding: 40px 60px;
     background: var(--bg-primary);
 }
@@ -677,6 +678,7 @@ textarea {
     display: none;
     flex-direction: column;
     gap: 24px;
+    min-width: 0;
 }
 .admin-tab-content.active {
     display: flex;
@@ -752,6 +754,7 @@ tr:last-child td {
     border-color: rgba(255, 255, 255, 0.04);
     height: calc(100vh - 280px);
     overflow: hidden;
+    min-width: 0;
 }
 
 .logs-console pre {
