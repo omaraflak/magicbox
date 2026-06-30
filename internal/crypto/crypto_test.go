@@ -5,14 +5,22 @@ import (
 	"testing"
 )
 
-func TestCryptoFlow(t *testing.T) {
-	// 1. Generate key pair
+func TestGenerateKeyPair_Success(t *testing.T) {
 	priv, err := GenerateKeyPair()
 	if err != nil {
 		t.Fatalf("failed to generate key pair: %v", err)
 	}
+	if priv == nil {
+		t.Fatal("expected private key to be generated, got nil")
+	}
+	if priv.Validate() != nil {
+		t.Errorf("generated private key is invalid")
+	}
+}
 
-	// 2. PEM Serialization/Deserialization
+func TestPEMSerialization_Success(t *testing.T) {
+	priv, _ := GenerateKeyPair()
+
 	privPEM := EncodePrivateKeyToPEM(priv)
 	pubPEM, err := EncodePublicKeyToPEM(&priv.PublicKey)
 	if err != nil {
@@ -23,38 +31,56 @@ func TestCryptoFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to parse private key from PEM: %v", err)
 	}
+	if parsedPriv.D.Cmp(priv.D) != 0 {
+		t.Errorf("parsed private key D value does not match original D value")
+	}
 
 	parsedPub, err := ParsePublicKeyFromPEM(pubPEM)
 	if err != nil {
 		t.Fatalf("failed to parse public key from PEM: %v", err)
 	}
+	if parsedPub.N.Cmp(priv.PublicKey.N) != 0 {
+		t.Errorf("parsed public key N value does not match original N value")
+	}
+}
 
-	// 3. Test Signing & Verification
+func TestSignAndVerify_Success(t *testing.T) {
+	priv, _ := GenerateKeyPair()
 	message := []byte("Hello, Magicbox P2P!")
-	signature, err := Sign(parsedPriv, message)
+
+	signature, err := Sign(priv, message)
 	if err != nil {
 		t.Fatalf("failed to sign message: %v", err)
 	}
 
-	err = Verify(parsedPub, message, signature)
+	err = Verify(&priv.PublicKey, message, signature)
 	if err != nil {
 		t.Errorf("failed to verify valid signature: %v", err)
 	}
+}
 
-	// Test invalid message verification
-	err = Verify(parsedPub, []byte("Wrong message"), signature)
+func TestSignAndVerify_InvalidMessageFails(t *testing.T) {
+	priv, _ := GenerateKeyPair()
+	message := []byte("Hello, Magicbox P2P!")
+
+	signature, _ := Sign(priv, message)
+
+	err := Verify(&priv.PublicKey, []byte("Wrong message"), signature)
 	if err == nil {
 		t.Errorf("expected verification to fail for invalid message")
 	}
+}
 
-	// 4. Test Encryption & Decryption
+func TestEncryptAndDecrypt_Success(t *testing.T) {
+	priv, _ := GenerateKeyPair()
 	secretPayload := []byte("This is a secret federated message.")
-	ciphertext, err := Encrypt(parsedPub, secretPayload)
+
+	ciphertext, err := Encrypt(&priv.PublicKey, secretPayload)
 	if err != nil {
 		t.Fatalf("failed to encrypt payload: %v", err)
 	}
 
-	decrypted, err := Decrypt(parsedPriv, ciphertext)
+	decrypted, err := Decrypt(priv, ciphertext)
 	if err != nil {
 		t.Fatalf("failed to decrypt payload: %v", err)
 	}

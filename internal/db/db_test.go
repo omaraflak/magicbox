@@ -5,29 +5,33 @@ import (
 	"testing"
 )
 
-func TestDatabaseQueries(t *testing.T) {
+func setupTestDB(t *testing.T) *DB {
 	tempDB := filepath.Join(t.TempDir(), "test.db")
 	database, err := Open(tempDB)
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}
-	defer database.conn.Close()
-
 	if err := database.Migrate(); err != nil {
+		database.conn.Close()
 		t.Fatalf("Migrate failed: %v", err)
 	}
+	return database
+}
 
-	// 1. Test Users
+func TestCreateAndGetUser_Success(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
 	userID := "user-123"
 	username := "omar"
 	passwordHash := "$2a$12$somehashedpasswordhere"
 	isAdmin := true
 
-	if err := database.CreateUser(userID, username, passwordHash, isAdmin); err != nil {
+	if err := db.CreateUser(userID, username, passwordHash, isAdmin); err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
 
-	user, err := database.GetUserByUsername(username)
+	user, err := db.GetUserByUsername(username)
 	if err != nil {
 		t.Fatalf("GetUserByUsername failed: %v", err)
 	}
@@ -37,8 +41,31 @@ func TestDatabaseQueries(t *testing.T) {
 	if user.ID != userID || user.Username != username || user.IsAdmin != isAdmin {
 		t.Errorf("GetUserByUsername returned unexpected user details: %+v", user)
 	}
+}
 
-	// 2. Test Apps
+func TestGetUserByUsername_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	user, err := db.GetUserByUsername("nonexistent")
+	if err != nil {
+		t.Fatalf("GetUserByUsername failed: %v", err)
+	}
+	if user != nil {
+		t.Errorf("expected nil user, got %+v", user)
+	}
+}
+
+func TestInsertAndGetApp_Success(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	userID := "user-123"
+	// Insert user first to satisfy foreign key constraints
+	if err := db.CreateUser(userID, "omar", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
 	app := &App{
 		ID:          "app-db-id",
 		AppID:       "com.example.drive",
@@ -52,11 +79,11 @@ func TestDatabaseQueries(t *testing.T) {
 		EntryPort:   9090,
 	}
 
-	if err := database.InsertApp(app); err != nil {
+	if err := db.InsertApp(app); err != nil {
 		t.Fatalf("InsertApp failed: %v", err)
 	}
 
-	fetchedApp, err := database.GetAppByRouteSlugAndUserID(app.RouteSlug, userID)
+	fetchedApp, err := db.GetAppByRouteSlugAndUserID(app.RouteSlug, userID)
 	if err != nil {
 		t.Fatalf("GetAppByRouteSlugAndUserID failed: %v", err)
 	}
@@ -66,18 +93,41 @@ func TestDatabaseQueries(t *testing.T) {
 	if fetchedApp.AppID != app.AppID || fetchedApp.ContainerID != app.ContainerID {
 		t.Errorf("fetched app mismatch: expected %+v, got %+v", app, fetchedApp)
 	}
+}
 
-	// 3. Test Contacts
+func TestGetAppByRouteSlugAndUserID_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	fetchedApp, err := db.GetAppByRouteSlugAndUserID("missing-slug", "user-123")
+	if err != nil {
+		t.Fatalf("GetAppByRouteSlugAndUserID failed: %v", err)
+	}
+	if fetchedApp != nil {
+		t.Errorf("expected nil app, got %+v", fetchedApp)
+	}
+}
+
+func TestAddAndGetContact_Success(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	userID := "user-123"
+	// Insert user first to satisfy foreign key constraints
+	if err := db.CreateUser(userID, "omar", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
 	contactID := "contact-456"
 	contactName := "Alice"
 	multiaddr := "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H?user_id=alice-id"
 	targetUserID := "alice-id"
 
-	if err := database.AddContact(contactID, userID, contactName, multiaddr, targetUserID); err != nil {
+	if err := db.AddContact(contactID, userID, contactName, multiaddr, targetUserID); err != nil {
 		t.Fatalf("AddContact failed: %v", err)
 	}
 
-	contacts, err := database.GetContacts(userID)
+	contacts, err := db.GetContacts(userID)
 	if err != nil {
 		t.Fatalf("GetContacts failed: %v", err)
 	}
