@@ -325,9 +325,9 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. Recreate and start the new container using the original config and name
-	s.logger.Info("admin upgrade: creating and starting new container version")
-	newID, err := s.docker.CreateAndStartCoreContainer(r.Context(), targetImage, &selfInspect)
+	// 5. Recreate the new container using the original config and name
+	s.logger.Info("admin upgrade: creating new container version")
+	newID, err := s.docker.CreateCoreContainer(r.Context(), targetImage, &selfInspect)
 	if err != nil {
 		s.logger.Error("admin upgrade: failed to recreate core container", logging.F("error", err.Error()))
 		
@@ -339,7 +339,22 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Info("admin upgrade: new core container spawned successfully, scheduling old container termination", logging.F("new_id", newID))
+	// 6. Spawn the updater container to stop the old one and start the new one
+	originalName := strings.TrimPrefix(selfInspect.Name, "/")
+	s.logger.Info("admin upgrade: starting updater helper container", logging.F("old_name", oldName), logging.F("new_name", originalName))
+	err = s.docker.StartUpdaterContainer(r.Context(), oldName, originalName)
+	if err != nil {
+		s.logger.Error("admin upgrade: failed to start updater container", logging.F("error", err.Error()))
+		
+		// Attempt rollback: delete recreated container and rename old one back
+		_ = s.docker.RemoveContainer(r.Context(), newID)
+		_ = s.docker.RenameContainer(r.Context(), selfInspect.ID, originalName)
+
+		writeError(w, http.StatusInternalServerError, "failed to start updater container: "+err.Error())
+		return
+	}
+
+	s.logger.Info("admin upgrade: updater container spawned successfully, core container will restart shortly", logging.F("new_id", newID))
 
 	// Return a success JSON response to frontend client so the HTTP connection can close nicely
 	writeJSON(w, http.StatusOK, map[string]string{

@@ -262,8 +262,8 @@ func (c *Client) InspectRawContainer(ctx context.Context, containerID string) (t
 	return c.cli.ContainerInspect(ctx, containerID)
 }
 
-// CreateAndStartCoreContainer creates and starts a new core container cloned from the old container config but with a new image.
-func (c *Client) CreateAndStartCoreContainer(ctx context.Context, newImage string, old *types.ContainerJSON) (string, error) {
+// CreateCoreContainer creates a new core container cloned from the old container config but with a new image.
+func (c *Client) CreateCoreContainer(ctx context.Context, newImage string, old *types.ContainerJSON) (string, error) {
 	// Reconstruct PortBindings
 	portBindings := old.HostConfig.PortBindings
 
@@ -315,12 +315,61 @@ func (c *Client) CreateAndStartCoreContainer(ctx context.Context, newImage strin
 		}
 	}
 
-	// Start the container
-	if err := c.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return "", fmt.Errorf("docker: failed to start recreated core container %s: %w", name, err)
+	return resp.ID, nil
+}
+
+// StartUpdaterContainer spawns a temporary docker:cli container to stop the old core container and start the new one.
+func (c *Client) StartUpdaterContainer(ctx context.Context, oldName, newName string) error {
+	// Pull docker:cli first to make sure it's available
+	_, err := c.PullImage(ctx, "docker:cli", true)
+	if err != nil {
+		return fmt.Errorf("docker: failed to pull docker:cli image: %w", err)
 	}
 
-	return resp.ID, nil
+	config := &container.Config{
+		Image: "docker:cli",
+		Cmd: []string{
+			"sh",
+			"-c",
+			fmt.Sprintf("sleep 2 && docker stop %s && docker rm %s && docker start %s", oldName, oldName, newName),
+		},
+	}
+
+	hostConfig := &container.HostConfig{
+		Binds: []string{
+			"/var/run/docker.sock:/var/run/docker.sock",
+		},
+		AutoRemove: true,
+	}
+
+	resp, err := c.cli.ContainerCreate(ctx,
+		config,
+		hostConfig,
+		nil,
+		nil,
+		"magicbox_updater",
+	)
+	if err != nil {
+		// If magicbox_updater already exists, remove it and retry
+		_ = c.cli.ContainerRemove(ctx, "magicbox_updater", container.RemoveOptions{Force: true})
+		resp, err = c.cli.ContainerCreate(ctx,
+			config,
+			hostConfig,
+			nil,
+			nil,
+			"magicbox_updater",
+		)
+		if err != nil {
+			return fmt.Errorf("docker: failed to create magicbox_updater: %w", err)
+		}
+	}
+
+	err = c.cli.ContainerStart(ctx, resp.ID, container.StartOptions{})
+	if err != nil {
+		return fmt.Errorf("docker: failed to start magicbox_updater: %w", err)
+	}
+
+	return nil
 }
 
 // CleanupOldCore stops and removes the old core container (ending with "_old") if it exists.
