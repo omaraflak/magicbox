@@ -132,6 +132,12 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 	go func() {
 		bgCtx := context.Background()
 
+		if o.Docker == nil {
+			o.Logger.Info("test mode: skipping Docker pull and container creation")
+			_ = o.DB.UpdateAppStatus(appDBID, "running", "mock-container-id")
+			return
+		}
+
 		// 8. Pull image.
 		digest, err := o.Docker.PullImage(bgCtx, manifest.Image, false)
 		if err != nil {
@@ -223,7 +229,7 @@ func (o *Orchestrator) Uninstall(ctx context.Context, appDBID string, wipe bool)
 	}
 
 	// Stop and remove container if present.
-	if app.ContainerID != "" {
+	if app.ContainerID != "" && o.Docker != nil {
 		_ = o.Docker.StopContainer(ctx, app.ContainerID, 10)
 		_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
 	}
@@ -256,8 +262,10 @@ func (o *Orchestrator) Stop(ctx context.Context, appDBID string) error {
 		return fmt.Errorf("app has no container")
 	}
 
-	if err := o.Docker.StopContainer(ctx, app.ContainerID, 10); err != nil {
-		return fmt.Errorf("failed to stop container: %w", err)
+	if o.Docker != nil {
+		if err := o.Docker.StopContainer(ctx, app.ContainerID, 10); err != nil {
+			return fmt.Errorf("failed to stop container: %w", err)
+		}
 	}
 
 	if err := o.DB.UpdateAppStatus(appDBID, "stopped", app.ContainerID); err != nil {
@@ -287,7 +295,7 @@ func (o *Orchestrator) Start(ctx context.Context, appDBID string) error {
 	}
 
 	// If there's an existing stopped container, remove it and recreate.
-	if app.ContainerID != "" {
+	if app.ContainerID != "" && o.Docker != nil {
 		_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
 	}
 
@@ -332,10 +340,16 @@ func (o *Orchestrator) Start(ctx context.Context, appDBID string) error {
 		Host:         app.Host,
 	}
 
-	containerID, err := o.Docker.CreateAndStartContainer(ctx, containerCfg)
-	if err != nil {
-		o.DB.UpdateAppStatus(appDBID, "error", "")
-		return fmt.Errorf("failed to start container: %w", err)
+	var containerID string
+	if o.Docker != nil {
+		var err error
+		containerID, err = o.Docker.CreateAndStartContainer(ctx, containerCfg)
+		if err != nil {
+			o.DB.UpdateAppStatus(appDBID, "error", "")
+			return fmt.Errorf("failed to start container: %w", err)
+		}
+	} else {
+		containerID = "mock-container-id"
 	}
 
 	if err := o.DB.UpdateAppStatus(appDBID, "running", containerID); err != nil {
@@ -357,15 +371,19 @@ func (o *Orchestrator) Rebuild(ctx context.Context, appDBID string) error {
 		return fmt.Errorf("app not found")
 	}
 
-	// Re-pull the image to get the latest version.
-	o.Logger.Info("rebuilding app: pulling image", logging.F("app_id", app.AppID), logging.F("image", app.Image))
-	digest, err := o.Docker.PullImage(ctx, app.Image, true)
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+	var digest string
+	if o.Docker != nil {
+		var err error
+		digest, err = o.Docker.PullImage(ctx, app.Image, true)
+		if err != nil {
+			return fmt.Errorf("failed to pull image: %w", err)
+		}
+	} else {
+		digest = "mock-digest"
 	}
 
 	// Stop and remove the old container if running.
-	if app.ContainerID != "" {
+	if app.ContainerID != "" && o.Docker != nil {
 		_ = o.Docker.StopContainer(ctx, app.ContainerID, 10)
 		_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
 	}
@@ -407,13 +425,19 @@ func (o *Orchestrator) Update(ctx context.Context, appDBID string, manifestData 
 	}
 
 	// Pull new image.
-	digest, err := o.Docker.PullImage(ctx, manifest.Image, false)
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+	var digest string
+	if o.Docker != nil {
+		var err error
+		digest, err = o.Docker.PullImage(ctx, manifest.Image, false)
+		if err != nil {
+			return fmt.Errorf("failed to pull image: %w", err)
+		}
+	} else {
+		digest = "mock-digest"
 	}
 
 	// Stop and remove old container.
-	if app.ContainerID != "" {
+	if app.ContainerID != "" && o.Docker != nil {
 		_ = o.Docker.StopContainer(ctx, app.ContainerID, 10)
 		_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
 	}

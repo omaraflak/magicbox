@@ -300,6 +300,11 @@ func (s *Server) handleAppProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.docker == nil {
+		writeError(w, http.StatusInternalServerError, "docker client not initialized (mock)")
+		return
+	}
+
 	// Inspect container to resolve IP address
 	status, err := s.docker.InspectContainer(r.Context(), app.ContainerID)
 	if err != nil {
