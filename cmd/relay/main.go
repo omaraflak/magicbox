@@ -60,6 +60,7 @@ func main() {
 		Limit: &relay.RelayLimit{
 			Duration: 5 * time.Minute,         // Max duration for an active transfer
 			Data:     100 * 1024 * 1024,       // Limit transfers to 100MB per session
+			// Data limits are in bytes
 		},
 	}
 
