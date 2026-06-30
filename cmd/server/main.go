@@ -77,6 +77,15 @@ func run() error {
 	}
 	logger.Info("Traefik proxy ready")
 
+	// Clean up any old core container left over from a self-upgrade sequence.
+	go func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := dockerClient.CleanupOldCore(cleanupCtx, logger); err != nil {
+			logger.Warn("Failed to cleanup old core container", logging.F("error", err.Error()))
+		}
+	}()
+
 	// 7. Create orchestrator.
 	orch := core.NewOrchestrator(database, dockerClient, cfg, logger, rest.GenerateAppToken)
 

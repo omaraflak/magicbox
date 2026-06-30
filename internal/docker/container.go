@@ -7,10 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/magicbox/core/internal/logging"
 )
 
 // ContainerPrefix is the naming prefix for all Magicbox app containers.
@@ -247,4 +250,110 @@ func (c *Client) ContainerExistsByName(ctx context.Context, name string) (bool, 
 	}
 
 	return false, "", false, nil
+}
+
+// RenameContainer renames a container.
+func (c *Client) RenameContainer(ctx context.Context, containerID, newName string) error {
+	return c.cli.ContainerRename(ctx, containerID, newName)
+}
+
+// InspectRawContainer inspects the container, returning the raw Docker SDK response.
+func (c *Client) InspectRawContainer(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+	return c.cli.ContainerInspect(ctx, containerID)
+}
+
+// CreateAndStartCoreContainer creates and starts a new core container cloned from the old container config but with a new image.
+func (c *Client) CreateAndStartCoreContainer(ctx context.Context, newImage string, old *types.ContainerJSON) (string, error) {
+	// Reconstruct PortBindings
+	portBindings := old.HostConfig.PortBindings
+
+	// Reconstruct Binds
+	binds := old.HostConfig.Binds
+
+	// Reconstruct NetworkMode
+	networkMode := old.HostConfig.NetworkMode
+
+	// Reconstruct Env, Labels, Cmd, Entrypoint
+	configCopy := *old.Config
+	configCopy.Image = newImage
+
+	// Reconstruct HostConfig Copy
+	hostConfigCopy := *old.HostConfig
+
+	// We clean up any temporary run state
+	hostConfigCopy.PortBindings = portBindings
+	hostConfigCopy.Binds = binds
+	hostConfigCopy.NetworkMode = networkMode
+
+	// Remove trailing slash from Name if it starts with "/"
+	name := strings.TrimPrefix(old.Name, "/")
+
+	resp, err := c.cli.ContainerCreate(ctx,
+		&configCopy,
+		&hostConfigCopy,
+		nil,
+		nil,
+		name,
+	)
+	if err != nil {
+		return "", fmt.Errorf("docker: failed to recreate core container %s: %w", name, err)
+	}
+
+	// Connect to networks if they were connected
+	for netName, settings := range old.NetworkSettings.Networks {
+		var epConfig *network.EndpointSettings
+		if settings != nil {
+			epConfig = &network.EndpointSettings{
+				IPAMConfig: settings.IPAMConfig,
+				Links:      settings.Links,
+				Aliases:    settings.Aliases,
+			}
+		}
+		// Connect network (ignore if it's default bridge and already connected by default)
+		if netName != "bridge" {
+			_ = c.cli.NetworkConnect(ctx, netName, resp.ID, epConfig)
+		}
+	}
+
+	// Start the container
+	if err := c.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return "", fmt.Errorf("docker: failed to start recreated core container %s: %w", name, err)
+	}
+
+	return resp.ID, nil
+}
+
+// CleanupOldCore stops and removes the old core container (ending with "_old") if it exists.
+func (c *Client) CleanupOldCore(ctx context.Context, logger *logging.Logger) error {
+	containers, err := c.cli.ContainerList(ctx, container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return fmt.Errorf("docker: failed to list containers: %w", err)
+	}
+
+	for _, ctr := range containers {
+		for _, n := range ctr.Names {
+			name := strings.TrimPrefix(n, "/")
+			if strings.HasSuffix(name, "_old") {
+				// Verify if it's a core container (e.g. contains "core" or "magicbox_core")
+				if strings.Contains(name, "core") || strings.Contains(ctr.Image, "magicbox/core") {
+					logger.Info("CleanupOldCore: Found old core container, stopping and removing it", logging.F("name", name))
+					
+					// Stop it
+					stopTimeout := 10
+					_ = c.cli.ContainerStop(ctx, ctr.ID, container.StopOptions{Timeout: &stopTimeout})
+					
+					// Remove it
+					err = c.cli.ContainerRemove(ctx, ctr.ID, container.RemoveOptions{Force: true})
+					if err != nil {
+						logger.Error("CleanupOldCore: Failed to remove container", logging.F("name", name), logging.F("error", err.Error()))
+					} else {
+						logger.Info("CleanupOldCore: Successfully removed old container", logging.F("name", name))
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

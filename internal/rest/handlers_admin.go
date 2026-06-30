@@ -261,3 +261,89 @@ func (s *Server) handleAdminListLogs(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, lines)
 }
+
+type upgradeRequest struct {
+	Image string `json:"image"`
+}
+
+func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
+	var req upgradeRequest
+	_ = readJSON(r, &req)
+
+	targetImage := req.Image
+	if targetImage == "" {
+		targetImage = "magicbox/core:latest"
+	}
+
+	if s.docker == nil {
+		s.logger.Info("admin upgrade: docker client is nil (test mode), skipping actual upgrade")
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "upgrade initiated successfully (mock)",
+			"new_id":  "mock-new-id-12345",
+		})
+		return
+	}
+
+	// 1. Resolve our own container hostname (Container ID)
+	hostname, err := os.Hostname()
+	if err != nil {
+		s.logger.Error("admin upgrade: failed to resolve own hostname", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "failed to resolve container hostname")
+		return
+	}
+
+	// 2. Inspect ourselves to read current config metadata (ports, binds, networks, env, etc.)
+	selfInspect, err := s.docker.InspectRawContainer(r.Context(), hostname)
+	if err != nil {
+		s.logger.Error("admin upgrade: failed to inspect self container", logging.F("hostname", hostname), logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "failed to inspect self container: "+err.Error())
+		return
+	}
+
+	s.logger.Info("admin upgrade: self-upgrading core container",
+		logging.F("target_image", targetImage),
+		logging.F("current_id", selfInspect.ID),
+		logging.F("current_name", selfInspect.Name),
+	)
+
+	// 3. Pull the target image first
+	s.logger.Info("admin upgrade: pulling new core image", logging.F("image", targetImage))
+	_, err = s.docker.PullImage(r.Context(), targetImage, true)
+	if err != nil {
+		s.logger.Error("admin upgrade: failed to pull image", logging.F("image", targetImage), logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, "failed to pull image: "+err.Error())
+		return
+	}
+
+	// 4. Rename the current container to current_name + "_old"
+	oldName := strings.TrimPrefix(selfInspect.Name, "/") + "_old"
+	s.logger.Info("admin upgrade: renaming current container", logging.F("old_name", oldName))
+	err = s.docker.RenameContainer(r.Context(), selfInspect.ID, oldName)
+	if err != nil {
+		s.logger.Error("admin upgrade: failed to rename container", logging.F("id", selfInspect.ID), logging.F("new_name", oldName), logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "failed to rename container: "+err.Error())
+		return
+	}
+
+	// 5. Recreate and start the new container using the original config and name
+	s.logger.Info("admin upgrade: creating and starting new container version")
+	newID, err := s.docker.CreateAndStartCoreContainer(r.Context(), targetImage, &selfInspect)
+	if err != nil {
+		s.logger.Error("admin upgrade: failed to recreate core container", logging.F("error", err.Error()))
+		
+		// Attempt rollback: rename back to original name
+		rollbackName := strings.TrimPrefix(selfInspect.Name, "/")
+		_ = s.docker.RenameContainer(r.Context(), selfInspect.ID, rollbackName)
+
+		writeError(w, http.StatusInternalServerError, "failed to recreate container: "+err.Error())
+		return
+	}
+
+	s.logger.Info("admin upgrade: new core container spawned successfully, scheduling old container termination", logging.F("new_id", newID))
+
+	// Return a success JSON response to frontend client so the HTTP connection can close nicely
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "upgrade initiated successfully, container restarting",
+		"new_id":  newID,
+	})
+}

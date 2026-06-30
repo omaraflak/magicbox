@@ -75,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/admin/registries", auth(admin(http.HandlerFunc(s.handleAdminCreateRegistry))))
 	mux.Handle("DELETE /api/v1/admin/registries/{id}", auth(admin(http.HandlerFunc(s.handleAdminDeleteRegistry))))
 	mux.Handle("GET /api/v1/admin/logs", auth(admin(http.HandlerFunc(s.handleAdminListLogs))))
+	mux.Handle("POST /api/v1/admin/upgrade", auth(admin(http.HandlerFunc(s.handleAdminUpgrade))))
 
 	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
 	mux.Handle("/u/", auth(AppAccessMiddleware()(http.HandlerFunc(s.handleAppProxy))))
