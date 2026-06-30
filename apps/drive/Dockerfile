@@ -14,6 +14,8 @@ WORKDIR /magicbox/apps/drive
 RUN mkdir -p /magicbox && echo -e "module github.com/magicbox/core\n\ngo 1.23.0" > /magicbox/go.mod
 # Copy shared proto package to /magicbox/api/proto/v1
 COPY api/proto/v1/ /magicbox/api/proto/v1/
+# Copy shared sdk package to /magicbox/sdk
+COPY sdk/ /magicbox/sdk/
 # Copy module configuration
 COPY apps/drive/go.mod apps/drive/go.sum ./
 RUN go mod download
