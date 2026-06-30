@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/iterator"
@@ -32,6 +33,7 @@ func getGeminiModel(client *genai.Client, params Params) *genai.GenerativeModel 
 	if modelName == "" {
 		modelName = "gemini-3.1-flash-lite"
 	}
+	modelName = strings.TrimPrefix(modelName, "models/")
 	model := client.GenerativeModel(modelName)
 	
 	if params.Temperature != 0 {
