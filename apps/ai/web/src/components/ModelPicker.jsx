@@ -43,6 +43,8 @@ export default function ModelPicker({ value, onChange }) {
     return n.toLocaleString();
   };
 
+  const slug = (name) => name?.replace(/^models\//, '') || name;
+
   return (
     <div className="model-picker">
       <button
@@ -58,7 +60,7 @@ export default function ModelPicker({ value, onChange }) {
             </div>
           ) : selectedModel ? (
             <>
-              <span className="model-picker-selected-name">{selectedModel.display_name || selectedModel.name}</span>
+              <span className="model-picker-selected-name">{slug(selectedModel.name)}</span>
               <span className="model-picker-selected-meta">
                 {formatTokens(selectedModel.input_token_limit)} in · {formatTokens(selectedModel.output_token_limit)} out
               </span>
@@ -91,7 +93,7 @@ export default function ModelPicker({ value, onChange }) {
                 onClick={() => handleSelect(m.name)}
               >
                 <div className="model-option-header">
-                  <span className="model-option-name">{m.display_name || m.name}</span>
+                  <span className="model-option-name">{slug(m.name)}</span>
                   <span className="model-option-tokens">
                     {formatTokens(m.input_token_limit)} in · {formatTokens(m.output_token_limit)} out
                   </span>
@@ -100,9 +102,6 @@ export default function ModelPicker({ value, onChange }) {
                   <p className="model-option-description">{m.description}</p>
                 )}
                 <div className="model-option-footer">
-                  {m.supported_methods && m.supported_methods.map(method => (
-                    <span key={method} className="model-method-badge">{method}</span>
-                  ))}
                   <button
                     type="button"
                     className="model-option-detail-btn"

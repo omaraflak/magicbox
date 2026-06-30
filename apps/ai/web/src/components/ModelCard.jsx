@@ -3,34 +3,22 @@ import React from 'react';
 export default function ModelCard({ model }) {
   if (!model) return null;
 
+  const slug = model.name?.replace(/^models\//, '') || model.name;
+
   return (
     <div className="model-info-card">
       <div className="model-info-row">
-        <span className="model-info-label">Name</span>
-        <span className="model-info-value">{model.name}</span>
+        <span className="model-info-label">Model</span>
+        <span className="model-info-value">{slug}</span>
       </div>
-      {model.display_name && (
-        <div className="model-info-row">
-          <span className="model-info-label">Display Name</span>
-          <span className="model-info-value">{model.display_name}</span>
-        </div>
-      )}
+
       {model.description && (
         <div className="model-info-row">
           <span className="model-info-label">Description</span>
           <span className="model-info-value model-info-description">{model.description}</span>
         </div>
       )}
-      {model.supported_methods && model.supported_methods.length > 0 && (
-        <div className="model-info-row">
-          <span className="model-info-label">Methods</span>
-          <span className="model-info-value">
-            {model.supported_methods.map(m => (
-              <span key={m} className="model-method-badge">{m}</span>
-            ))}
-          </span>
-        </div>
-      )}
+
       <div className="model-info-row">
         <span className="model-info-label">Input Tokens</span>
         <span className="model-info-value">{model.input_token_limit?.toLocaleString() || '—'}</span>
