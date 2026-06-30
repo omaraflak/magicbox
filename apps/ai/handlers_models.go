@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -19,29 +21,22 @@ type ModelInfo struct {
 	TopK                       int32    `json:"top_k"`
 }
 
-func handleModels(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	client, err := getGeminiClient(r.Context())
+var getModels = func(ctx context.Context) ([]ModelInfo, error) {
+	client, err := getGeminiClient(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create Gemini client: "+err.Error())
-		return
+		return nil, fmt.Errorf("Failed to create Gemini client: %w", err)
 	}
 	defer client.Close()
 
 	var models []ModelInfo
-	iter := client.ListModels(r.Context())
+	iter := client.ListModels(ctx)
 	for {
 		m, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to list models: "+err.Error())
-			return
+			return nil, fmt.Errorf("Failed to list models: %w", err)
 		}
 
 		// Filter: must support generateContent (chat-capable)
@@ -75,6 +70,20 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		}
 
 		models = append(models, info)
+	}
+	return models, nil
+}
+
+func handleModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	models, err := getModels(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	writeJSON(w, http.StatusOK, models)

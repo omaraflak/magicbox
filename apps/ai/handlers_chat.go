@@ -26,7 +26,7 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan string)
 	errCh := make(chan error)
 
-	go chatStream(r.Context(), id, req.Message, ch, errCh)
+	go runChatStream(r.Context(), id, req.Message, ch, errCh)
 
 	streamSSE(w, ch, errCh)
 }
@@ -52,7 +52,7 @@ func handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan string)
 	errCh := make(chan error)
 
-	go chatStream(r.Context(), id, lastUserMsg, ch, errCh)
+	go runChatStream(r.Context(), id, lastUserMsg, ch, errCh)
 
 	streamSSE(w, ch, errCh)
 }

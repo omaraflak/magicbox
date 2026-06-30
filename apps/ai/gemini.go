@@ -141,3 +141,5 @@ func chatStream(ctx context.Context, conversationID string, newMsgContent string
 		log.Printf("Failed to save model message: %v", err)
 	}
 }
+
+var runChatStream = chatStream
