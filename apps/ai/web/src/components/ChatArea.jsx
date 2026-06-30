@@ -18,9 +18,14 @@ export default function ChatArea({ activeId, activeTitle, activeParams, onTitleC
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
   const inputRef = useRef(null);
+  const isCreatingChatRef = useRef(false);
 
   useEffect(() => {
     if (activeId && activeId !== 'new') {
+      if (isCreatingChatRef.current) {
+        isCreatingChatRef.current = false;
+        return;
+      }
       getConversation(activeId).then(res => {
         setMessages(res.messages || []);
         setLocalTitle(res.title || 'Untitled Chat');
@@ -193,6 +198,7 @@ export default function ChatArea({ activeId, activeTitle, activeParams, onTitleC
     let targetId = activeId;
     try {
       if (activeId === 'new') {
+        isCreatingChatRef.current = true;
         const { createConversation } = await import('../api');
         const res = await createConversation();
         if (!res || !res.id) {
