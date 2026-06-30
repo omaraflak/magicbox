@@ -19,17 +19,22 @@
   padding: 0;
 }
 
+html, body {
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   background: var(--bg-app);
   color: var(--text-primary);
-  overflow: hidden;
-  height: 100vh;
 }
 
 .app-container {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   position: relative;
   z-index: 1;
