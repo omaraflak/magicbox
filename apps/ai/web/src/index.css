@@ -1035,10 +1035,17 @@ body {
 
 .btn-preset-save {
   background: var(--bg-hover);
-  border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
+  transition: background 0.2s, color 0.2s;
+}
+
+.btn-preset-save:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
 }

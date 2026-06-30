@@ -34,12 +34,6 @@ export default function ParamsPanel({ activeId, initialParams, onParamsChange })
     <div className="params-panel glass-panel">
       <div className="panel-header">
         <h3 className="panel-title">Settings</h3>
-        <button 
-          onClick={() => setShowSavePresetModal(true)}
-          className="btn-preset-save"
-        >
-          Save as Preset
-        </button>
       </div>
       
       <ParamsEditor 
@@ -50,6 +44,13 @@ export default function ParamsPanel({ activeId, initialParams, onParamsChange })
         }}
         onSave={() => handleSave(params)}
       />
+
+      <button 
+        onClick={() => setShowSavePresetModal(true)}
+        className="btn-preset-save"
+      >
+        Save as Preset
+      </button>
 
       <PresetModal 
         isOpen={showSavePresetModal}
