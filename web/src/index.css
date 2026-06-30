@@ -179,6 +179,16 @@ textarea {
     text-decoration: none;
 }
 
+.btn:disabled,
+.btn[disabled] {
+    background: var(--border-color) !important;
+    color: var(--text-disabled) !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    opacity: 0.65;
+    border-color: transparent !important;
+}
+
 .btn-primary {
     background: var(--accent-glow);
     color: white;
