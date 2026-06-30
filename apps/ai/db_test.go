@@ -193,11 +193,10 @@ func TestUpdateConversationTitle(t *testing.T) {
 	}
 }
 
-func TestGetConversationsPaginated(t *testing.T) {
+func TestGetConversationsPaginated_Empty(t *testing.T) {
 	setupTestDB(t)
 	defer dbConn.Close()
 
-	// Ensure empty db returns empty list
 	list, err := getConversationsPaginated(10, 0)
 	if err != nil {
 		t.Fatalf("getConversationsPaginated failed: %v", err)
@@ -205,6 +204,11 @@ func TestGetConversationsPaginated(t *testing.T) {
 	if len(list) != 0 {
 		t.Errorf("Expected empty list, got %d items", len(list))
 	}
+}
+
+func TestGetConversationsPaginated_LimitOffset(t *testing.T) {
+	setupTestDB(t)
+	defer dbConn.Close()
 
 	// Create 25 root conversations
 	for i := 1; i <= 25; i++ {
@@ -214,7 +218,7 @@ func TestGetConversationsPaginated(t *testing.T) {
 		}
 	}
 
-	// Test pagination limits & offsets
+	// Test page 1
 	list1, err := getConversationsPaginated(20, 0)
 	if err != nil {
 		t.Fatalf("getConversationsPaginated page 1 failed: %v", err)
@@ -223,6 +227,7 @@ func TestGetConversationsPaginated(t *testing.T) {
 		t.Errorf("Expected 20 conversations in page 1, got %d", len(list1))
 	}
 
+	// Test page 2
 	list2, err := getConversationsPaginated(20, 20)
 	if err != nil {
 		t.Fatalf("getConversationsPaginated page 2 failed: %v", err)

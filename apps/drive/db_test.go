@@ -74,7 +74,7 @@ func TestInsertAndGetTrashRecord(t *testing.T) {
 	}
 }
 
-func TestAutoSendFoldersDAO(t *testing.T) {
+func TestInsertAndGetAutoSendFolder(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
@@ -88,12 +88,6 @@ func TestAutoSendFoldersDAO(t *testing.T) {
 		tx.Rollback()
 		t.Fatalf("insertAutoSendFolderTx failed: %v", err)
 	}
-	
-	err = insertAutoSendTargetTx(tx, "folder1", "contact1", "Alice")
-	if err != nil {
-		tx.Rollback()
-		t.Fatalf("insertAutoSendTargetTx failed: %v", err)
-	}
 	tx.Commit()
 
 	folders, err := getAllAutoSendFolders()
@@ -103,6 +97,29 @@ func TestAutoSendFoldersDAO(t *testing.T) {
 	if len(folders) != 1 || folders[0].Path != "path/to/folder" {
 		t.Errorf("getAllAutoSendFolders expected 1 folder with path/to/folder, got %v", folders)
 	}
+}
+
+func TestInsertAndGetAutoSendTargets(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	tx, err := beginTx()
+	if err != nil {
+		t.Fatalf("beginTx failed: %v", err)
+	}
+
+	err = insertAutoSendFolderTx(tx, "folder1", "path/to/folder", time.Now().Format(time.RFC3339))
+	if err != nil {
+		tx.Rollback()
+		t.Fatalf("insertAutoSendFolderTx failed: %v", err)
+	}
+
+	err = insertAutoSendTargetTx(tx, "folder1", "contact1", "Alice")
+	if err != nil {
+		tx.Rollback()
+		t.Fatalf("insertAutoSendTargetTx failed: %v", err)
+	}
+	tx.Commit()
 
 	targets, err := getAutoSendTargetsByFolder("folder1")
 	if err != nil {
