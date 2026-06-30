@@ -11,17 +11,33 @@ export default function ModelPicker({ value, onChange }) {
   const [detailModel, setDetailModel] = useState(null);
 
   useEffect(() => {
-    if (cachedModels) return;
+    const autoSelect = (list) => {
+      if (list.length === 0) return;
+      const hasValueInList = list.some(m => m.name === value);
+      if (!hasValueInList) {
+        const defaultModel = list.find(m => m.name.endsWith('gemini-3.1-flash-lite')) || list[0];
+        if (defaultModel) {
+          onChange(defaultModel.name);
+        }
+      }
+    };
+
+    if (cachedModels) {
+      autoSelect(cachedModels);
+      return;
+    }
+
     setLoading(true);
     getModels()
       .then(res => {
         const list = Array.isArray(res) ? res : [];
         cachedModels = list;
         setModels(list);
+        autoSelect(list);
       })
       .catch(() => setModels([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [value]);
 
   const selectedModel = models.find(m => m.name === value);
 
@@ -66,7 +82,7 @@ export default function ModelPicker({ value, onChange }) {
               </span>
             </>
           ) : (
-            <span className="model-picker-placeholder">Default (gemini-3.1-flash-lite)</span>
+            <span className="model-picker-placeholder">Select a model…</span>
           )}
         </div>
         <span className="model-picker-chevron">{expanded ? '▴' : '▾'}</span>
@@ -74,16 +90,6 @@ export default function ModelPicker({ value, onChange }) {
 
       {expanded && (
         <div className="model-picker-dropdown">
-          <button
-            type="button"
-            className={`model-picker-option ${!value ? 'selected' : ''}`}
-            onClick={() => handleSelect('')}
-          >
-            <div className="model-option-header">
-              <span className="model-option-name">Default</span>
-              <span className="model-option-meta">gemini-3.1-flash-lite</span>
-            </div>
-          </button>
 
           {models.map(m => (
             <div key={m.name} className="model-picker-option-wrapper">
