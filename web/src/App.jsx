@@ -41,7 +41,7 @@ export default function App() {
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
     const [actionError, setActionError] = useState('');
-    const [upgradeLoading, setUpgradeLoading] = useState(false);
+    const [upgradeStatus, setUpgradeStatus] = useState('');
     const [upgradeError, setUpgradeError] = useState('');
     const [rebuildingAppId, setRebuildingAppId] = useState(null);
     const [uninstallingAppId, setUninstallingAppId] = useState(null);
@@ -465,13 +465,12 @@ export default function App() {
     // Core Self-Upgrade
     const handleUpgradeCore = async (image) => {
         showConfirm(`Are you sure you want to upgrade the core system to image "${image}"? This will restart the container.`, async () => {
-            setUpgradeLoading(true);
+            setUpgradeStatus('upgrading');
             setUpgradeError('');
             
             const { status, data } = await callAPI('POST', '/admin/upgrade', { image });
             if (status === 200) {
-                // Show a blocking modal that polls health until the container comes back
-                showAlert("System upgrade triggered successfully. Re-connecting to Magicbox Core...", "Upgrading System");
+                setUpgradeStatus('reconnecting');
                 
                 // Poll health endpoint every 2 seconds until it responds
                 const interval = setInterval(async () => {
@@ -487,7 +486,7 @@ export default function App() {
                 }, 2000);
             } else {
                 setUpgradeError(data?.error || "Upgrade failed");
-                setUpgradeLoading(false);
+                setUpgradeStatus('');
             }
         }, "Confirm System Upgrade");
     };
@@ -579,7 +578,7 @@ export default function App() {
                         onDeleteContact={handleDeleteContact}
                         onUpgradeCore={handleUpgradeCore}
                         upgradeError={upgradeError}
-                        upgradeLoading={upgradeLoading}
+                        upgradeStatus={upgradeStatus}
                     />
                 )}
             </div>

@@ -34,7 +34,7 @@ export default function SettingsView({
     onDeleteContact,
     onUpgradeCore,
     upgradeError,
-    upgradeLoading
+    upgradeStatus
 }) {
     return (
         <div className="admin-layout animate-fade-in">
@@ -170,7 +170,7 @@ export default function SettingsView({
                             <AdminUpgradeTab 
                                 onUpgrade={onUpgradeCore} 
                                 error={upgradeError} 
-                                loading={upgradeLoading}
+                                status={upgradeStatus}
                             />
                         )}
                     </div>

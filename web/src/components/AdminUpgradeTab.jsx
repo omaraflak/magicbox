@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 
-export default function AdminUpgradeTab({ onUpgrade, error, loading }) {
+export default function AdminUpgradeTab({ onUpgrade, error, status }) {
     const [image, setImage] = useState('docker.io/magicbox/core:latest');
 
     const handleSubmit = (e) => {
         e.preventDefault();
         onUpgrade(image);
     };
+
+    const isPending = status !== '';
 
     return (
         <div className="admin-tab-content active">
@@ -32,7 +34,7 @@ export default function AdminUpgradeTab({ onUpgrade, error, loading }) {
                         onChange={(e) => setImage(e.target.value)}
                         placeholder="docker.io/magicbox/core:latest"
                         required
-                        disabled={loading}
+                        disabled={isPending}
                     />
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
                         e.g. <code>docker.io/magicbox/core:latest</code> or <code>docker.io/magicbox/core:v1.2.0</code>
@@ -48,11 +50,22 @@ export default function AdminUpgradeTab({ onUpgrade, error, loading }) {
                 <button 
                     type="submit" 
                     className="btn btn-primary" 
-                    disabled={loading}
+                    disabled={isPending}
                     style={{ padding: '10px 24px', fontSize: '0.9rem' }}
                 >
-                    {loading ? 'Initiating Upgrade...' : 'Start Self-Upgrade'}
+                    Start Self-Upgrade
                 </button>
+
+                {isPending && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '20px' }}>
+                        <div className="spinner-sm"></div>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            {status === 'upgrading' 
+                                ? 'Downloading image & recreating core container...' 
+                                : 'Re-connecting to Magicbox Core... this may take up to 10 seconds.'}
+                        </span>
+                    </div>
+                )}
             </form>
         </div>
     );
