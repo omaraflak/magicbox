@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
+
+	"github.com/magicbox/core/sdk"
 )
 
 var webRoot = "/web"
@@ -14,40 +14,6 @@ func init() {
 	if _, err := os.Stat("/web"); os.IsNotExist(err) {
 		webRoot = "web/dist"
 	}
-}
-
-func spaHandler(w http.ResponseWriter, r *http.Request) {
-	// Try to serve the requested file as a static asset.
-	clean := filepath.Clean(r.URL.Path)
-	filePath := filepath.Join(webRoot, clean)
-
-	info, err := os.Stat(filePath)
-	if err == nil && !info.IsDir() {
-		http.ServeFile(w, r, filePath)
-		return
-	}
-
-	// For SPA routes, serve index.html with a <base> tag injected
-	// so that relative asset paths (./assets/...) always resolve
-	// through the proxy prefix, regardless of the current route depth.
-	indexPath := filepath.Join(webRoot, "index.html")
-	html, err := os.ReadFile(indexPath)
-	if err != nil {
-		http.Error(w, "index.html not found", http.StatusInternalServerError)
-		return
-	}
-
-	// Use the proxy-forwarded prefix to determine the base path.
-	basePath := "/"
-	if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
-		basePath = "/" + strings.Trim(prefix, "/") + "/"
-	}
-
-	baseTag := `<base href="` + basePath + `">`
-	modified := strings.Replace(string(html), "<head>", "<head>\n    "+baseTag, 1)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(modified))
 }
 
 func main() {
@@ -86,7 +52,7 @@ func main() {
 	})
 
 	// SPA fallback
-	mux.HandleFunc("/", spaHandler)
+	mux.Handle("/", sdk.NewHTMLHandler(webRoot))
 
 	log.Fatal(http.ListenAndServe(":9090", mux))
 }

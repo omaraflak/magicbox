@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/magicbox/core/sdk"
 )
 
 // --- HTTP Handler SPA Tests ---
@@ -35,7 +37,7 @@ func TestSPAHandler_StaticAsset(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/assets/style.css", nil)
 	w := httptest.NewRecorder()
-	spaHandler(w, req)
+	sdk.NewHTMLHandler(webRoot).ServeHTTP(w, req)
 
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
@@ -64,7 +66,7 @@ func TestSPAHandler_SPARoute(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/conversations/123", nil)
 	w := httptest.NewRecorder()
-	spaHandler(w, req)
+	sdk.NewHTMLHandler(webRoot).ServeHTTP(w, req)
 
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
@@ -94,7 +96,7 @@ func TestSPAHandler_XForwardedPrefix(t *testing.T) {
 	req := httptest.NewRequest("GET", "/conversations/123", nil)
 	req.Header.Set("X-Forwarded-Prefix", "/u/omar/ai")
 	w := httptest.NewRecorder()
-	spaHandler(w, req)
+	sdk.NewHTMLHandler(webRoot).ServeHTTP(w, req)
 
 	if !strings.Contains(w.Body.String(), `<base href="/u/omar/ai/">`) {
 		t.Errorf("Expected base tag from X-Forwarded-Prefix, got: %s", w.Body.String())

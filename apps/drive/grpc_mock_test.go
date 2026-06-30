@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	pb "github.com/magicbox/core/api/proto/v1"
+	"github.com/magicbox/core/sdk"
 )
 
 type mockCoreServer struct {
@@ -47,4 +48,10 @@ func setupMockCoreServer(t *testing.T) {
 
 	coreURL = lis.Addr().String()
 	apiToken = "test_token"
+	env = &sdk.Env{
+		CoreURL:  coreURL,
+		ApiToken: apiToken,
+		UserID:   "test_user",
+		AppID:    "com.magicbox.drive",
+	}
 }

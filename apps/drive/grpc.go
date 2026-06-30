@@ -8,8 +8,6 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 
 	pb "github.com/magicbox/core/api/proto/v1"
 )
@@ -17,20 +15,11 @@ import (
 // Volume mapping: logical name → filesystem path
 
 func getUsernameFromCore() (string, error) {
-	if coreURL == "" || apiToken == "" {
-		return "", fmt.Errorf("missing gRPC core URL or authorization API token env vars")
-	}
-
-	conn, err := grpc.Dial(coreURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client, conn, ctx, err := getCoreClient()
 	if err != nil {
-		return "", fmt.Errorf("failed to dial core gRPC server: %w", err)
+		return "", err
 	}
 	defer conn.Close()
-
-	client := pb.NewMagicboxOSClient(conn)
-
-	// Set credentials header
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+apiToken))
 
 	resp, err := client.GetProfile(ctx, &pb.GetProfileRequest{})
 	if err != nil {
@@ -68,25 +57,8 @@ func sendWithRetry(ctx context.Context, client pb.MagicboxOSClient, req *pb.Send
 // --- Handlers ---
 
 func getCoreClient() (pb.MagicboxOSClient, *grpc.ClientConn, context.Context, error) {
-	if coreURL == "" || apiToken == "" {
-		return nil, nil, nil, fmt.Errorf("missing gRPC core URL or authorization API token env vars")
+	if env == nil {
+		return nil, nil, nil, fmt.Errorf("missing gRPC core URL or authorization API token")
 	}
-
-	const maxMessageSize = 512 * 1024 * 1024 // 512 MB
-	conn, err := grpc.Dial(
-		coreURL,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxMessageSize),
-			grpc.MaxCallSendMsgSize(maxMessageSize),
-		),
-	)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to dial core gRPC server: %w", err)
-	}
-
-	client := pb.NewMagicboxOSClient(conn)
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+apiToken))
-
-	return client, conn, ctx, nil
+	return env.GetCoreClient()
 }

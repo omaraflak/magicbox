@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/magicbox/core/sdk"
 )
 
 // Volume mapping: logical name → filesystem path
@@ -18,10 +19,11 @@ var volumes = map[string]string{
 // Environment variables injected by MagicBox
 
 var (
-	apiToken = os.Getenv("MAGICBOX_API_TOKEN")
-	coreURL  = os.Getenv("MAGICBOX_CORE_URL")
-	userID   = os.Getenv("MAGICBOX_USER_ID")
-	appID    = os.Getenv("MAGICBOX_APP_ID")
+	env      *sdk.Env
+	coreURL  string
+	apiToken string
+	userID   string
+	appID    string
 )
 
 const (

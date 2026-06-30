@@ -3,47 +3,28 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/magicbox/core/sdk"
 )
-
-// Volume mapping: logical name → filesystem path
-
-func spaHandler(w http.ResponseWriter, r *http.Request) {
-	filePath := filepath.Join("/web", filepath.Clean(r.URL.Path))
-
-	info, err := os.Stat(filePath)
-	if err == nil && !info.IsDir() {
-		http.ServeFile(w, r, filePath)
-		return
-	}
-
-	// Inject <base> tag so relative asset paths resolve through the proxy prefix.
-	html, err := os.ReadFile("/web/index.html")
-	if err != nil {
-		http.Error(w, "index.html not found", http.StatusInternalServerError)
-		return
-	}
-
-	basePath := "/"
-	if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
-		basePath = "/" + strings.Trim(prefix, "/") + "/"
-	}
-
-	baseTag := `<base href="` + basePath + `">`
-	modified := strings.Replace(string(html), "<head>", "<head>\n    "+baseTag, 1)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(modified))
-}
 
 // --- Main ---
 
 func main() {
 	log.Println("Starting Magic Drive API on port 9090...")
+
+	var err error
+	env, err = sdk.LoadEnv()
+	if err != nil {
+		log.Printf("Warning: Failed to load env variables: %v", err)
+	} else {
+		coreURL = env.CoreURL
+		apiToken = env.ApiToken
+		userID = env.UserID
+		appID = env.AppID
+	}
 
 	initDB()
 	defer dbConn.Close()
@@ -83,7 +64,7 @@ func main() {
 			writeError(w, http.StatusNotFound, "unknown internal endpoint")
 			return
 		}
-		spaHandler(w, r)
+		sdk.NewHTMLHandler("/web").ServeHTTP(w, r)
 	})
 
 	log.Fatal(http.ListenAndServe(":9090", mux))
