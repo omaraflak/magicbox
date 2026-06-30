@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"google.golang.org/api/iterator"
 )
@@ -10,7 +11,7 @@ type ModelInfo struct {
 	Name                       string   `json:"name"`
 	DisplayName                string   `json:"display_name"`
 	Description                string   `json:"description"`
-	SupportedGenerationMethods []string `json:"supported_generation_methods"`
+	SupportedGenerationMethods []string `json:"supported_methods"`
 	InputTokenLimit            int32    `json:"input_token_limit"`
 	OutputTokenLimit           int32    `json:"output_token_limit"`
 	Temperature                float32  `json:"temperature"`
@@ -41,6 +42,24 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "Failed to list models: "+err.Error())
 			return
+		}
+
+		// Filter: must support generateContent (chat-capable)
+		supportsChat := false
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				supportsChat = true
+				break
+			}
+		}
+		if !supportsChat {
+			continue
+		}
+
+		// Filter: skip experimental/preview models
+		nameLower := strings.ToLower(m.Name)
+		if strings.Contains(nameLower, "-exp") || strings.Contains(nameLower, "-preview") {
+			continue
 		}
 
 		info := ModelInfo{
