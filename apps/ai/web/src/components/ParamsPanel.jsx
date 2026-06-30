@@ -40,9 +40,8 @@ export default function ParamsPanel({ activeId, initialParams, onParamsChange })
         params={params} 
         onChange={(newParams) => {
           setParams(newParams);
-          // Auto-save on slider changes or prompt edits (we can pass handleSave as onSave for blur/mouseup)
         }}
-        onSave={() => handleSave(params)}
+        onSave={(updated) => handleSave(updated)}
       />
 
       <button 

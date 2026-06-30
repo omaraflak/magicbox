@@ -1062,18 +1062,19 @@ body {
   padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.04);
+  background: white;
   color: var(--text-primary);
   font-size: 14px;
   font-family: 'Inter', sans-serif;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-0.2s;
   text-align: left;
 }
 
 .model-picker-trigger.open,
 .model-picker-trigger:hover {
   border-color: var(--accent);
+  background: var(--bg-hover);
 }
 
 .model-picker-trigger-content {

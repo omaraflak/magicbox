@@ -3,7 +3,9 @@ import ModelPicker from './ModelPicker';
 
 export default function ParamsEditor({ params, onChange, onSave }) {
   const handleChange = (key, value) => {
-    onChange({ ...params, [key]: value });
+    const next = { ...params, [key]: value };
+    onChange(next);
+    return next;
   };
 
   return (
@@ -13,8 +15,8 @@ export default function ParamsEditor({ params, onChange, onSave }) {
         <ModelPicker
           value={params.model || ''}
           onChange={(name) => {
-            handleChange('model', name);
-            setTimeout(onSave, 0);
+            const next = handleChange('model', name);
+            if (onSave) onSave(next);
           }}
         />
         <span className="help-text">The AI model to use for this conversation.</span>
@@ -27,7 +29,7 @@ export default function ParamsEditor({ params, onChange, onSave }) {
         <textarea 
           value={params.system_prompt || ''} 
           onChange={e => handleChange('system_prompt', e.target.value)}
-          onBlur={onSave}
+          onBlur={() => onSave && onSave(params)}
           placeholder="You are a helpful assistant..."
           rows={4}
         />
@@ -43,8 +45,8 @@ export default function ParamsEditor({ params, onChange, onSave }) {
           type="range" min="0" max="2" step="0.1" 
           value={params.temperature || 1.0} 
           onChange={e => handleChange('temperature', parseFloat(e.target.value))}
-          onMouseUp={onSave}
-          onTouchEnd={onSave}
+          onMouseUp={() => onSave && onSave(params)}
+          onTouchEnd={() => onSave && onSave(params)}
         />
         <span className="help-text">Higher values make output more random, lower values more deterministic.</span>
       </div>
@@ -58,8 +60,8 @@ export default function ParamsEditor({ params, onChange, onSave }) {
           type="range" min="0" max="1" step="0.05" 
           value={params.top_p || 1.0} 
           onChange={e => handleChange('top_p', parseFloat(e.target.value))}
-          onMouseUp={onSave}
-          onTouchEnd={onSave}
+          onMouseUp={() => onSave && onSave(params)}
+          onTouchEnd={() => onSave && onSave(params)}
         />
         <span className="help-text">Controls diversity via nucleus sampling.</span>
       </div>
@@ -73,8 +75,8 @@ export default function ParamsEditor({ params, onChange, onSave }) {
           type="range" min="1" max="40" step="1" 
           value={params.top_k || 40} 
           onChange={e => handleChange('top_k', parseInt(e.target.value))}
-          onMouseUp={onSave}
-          onTouchEnd={onSave}
+          onMouseUp={() => onSave && onSave(params)}
+          onTouchEnd={() => onSave && onSave(params)}
         />
         <span className="help-text">Limit vocabulary size for tokens generated.</span>
       </div>
