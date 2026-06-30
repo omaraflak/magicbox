@@ -427,4 +427,3 @@ func TestSPAHandler(t *testing.T) {
 		t.Errorf("Expected base tag for root, got: %s", w.Body.String())
 	}
 }
-

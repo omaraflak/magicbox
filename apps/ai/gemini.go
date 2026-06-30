@@ -62,6 +62,7 @@ func chatStream(ctx context.Context, conversationID string, newMsgContent string
 
 	client, err := getGeminiClient(ctx)
 	if err != nil {
+		log.Printf("Failed to get Gemini client: %v", err)
 		errCh <- err
 		return
 	}
@@ -69,6 +70,7 @@ func chatStream(ctx context.Context, conversationID string, newMsgContent string
 
 	conv, err := getConversation(conversationID)
 	if err != nil {
+		log.Printf("Failed to get conversation %s: %v", conversationID, err)
 		errCh <- err
 		return
 	}
@@ -117,6 +119,7 @@ func chatStream(ctx context.Context, conversationID string, newMsgContent string
 			break
 		}
 		if err != nil {
+			log.Printf("Gemini stream error: %v", err)
 			errCh <- err
 			return
 		}

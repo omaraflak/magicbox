@@ -251,6 +251,14 @@ export default function ChatArea({ activeId, activeTitle, activeParams, onTitleC
                   newMsgs[newMsgs.length - 1] = { role: 'model', content: modelContent };
                   return newMsgs;
                 });
+              } else if (data.error) {
+                console.error("Gemini stream error:", data.error);
+                modelContent += `\n\n⚠️ **API Error:** ${data.error}`;
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  newMsgs[newMsgs.length - 1] = { role: 'model', content: modelContent };
+                  return newMsgs;
+                });
               }
             } catch(e) {}
           }
