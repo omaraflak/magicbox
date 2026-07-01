@@ -50,7 +50,7 @@ func TestAdminUpgrade_Success(t *testing.T) {
 	// Login admin to get session cookie
 	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/upgrade", bytes.NewReader([]byte(`{"image":"docker.io/magicbox/core:latest"}`)))
+	req := httptest.NewRequest("POST", "/api/v1/admin/upgrade", bytes.NewReader([]byte(`{"image":"docker.io/omaraflak/magicbox-core:latest"}`)))
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

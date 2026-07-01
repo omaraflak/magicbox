@@ -1,7 +1,7 @@
 services:
   magicbox-core:
     build: .
-    image: magicbox/core:latest
+    image: omaraflak/magicbox-core:latest
     container_name: magicbox_core
     restart: unless-stopped
     networks:

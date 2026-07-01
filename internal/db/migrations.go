@@ -88,7 +88,7 @@ func (d *DB) Migrate() error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := d.conn.Exec(
 		`INSERT OR IGNORE INTO allowed_registries (id, prefix, created_at) VALUES (?, ?, ?)`,
-		uuid.NewString(), "docker.io/magicbox/", now,
+		uuid.NewString(), "docker.io/omaraflak/", now,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to seed allowed_registries: %w", err)

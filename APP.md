@@ -13,7 +13,7 @@ Every application must include a `magicbox.json` file in its root directory defi
   "app_id": "com.magicbox.myapp",
   "name": "My App",
   "version": "1.0.0",
-  "image": "docker.io/magicbox/myapp:latest",
+  "image": "docker.io/omaraflak/magicbox-myapp:latest",
   "entry_port": 9090,
   "route_slug": "myapp",
   "webhook_path": "/internal/magicbox-webhook",

@@ -385,8 +385,8 @@ func (c *Client) CleanupOldCore(ctx context.Context, logger *logging.Logger) err
 		for _, n := range ctr.Names {
 			name := strings.TrimPrefix(n, "/")
 			if strings.HasSuffix(name, "_old") {
-				// Verify if it's a core container (e.g. contains "core" or "magicbox_core")
-				if strings.Contains(name, "core") || strings.Contains(ctr.Image, "magicbox/core") {
+				// Verify if it's a core container
+				if strings.Contains(ctr.Image, "magicbox-core") {
 					logger.Info("CleanupOldCore: Found old core container, stopping and removing it", logging.F("name", name))
 					
 					// Stop it

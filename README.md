@@ -8,9 +8,9 @@
 ### 1. Build Images
 
 ```bash
-docker build -t docker.io/magicbox/core:latest .
-docker build -t docker.io/magicbox/drive:latest -f apps/drive/Dockerfile .
-docker build -t docker.io/magicbox/ai:latest -f apps/ai/Dockerfile .
+docker build -t docker.io/omaraflak/magicbox-core:latest .
+docker build -t docker.io/omaraflak/magicbox-drive:latest -f apps/drive/Dockerfile .
+docker build -t docker.io/omaraflak/magicbox-ai:latest -f apps/ai/Dockerfile .
 ```
 
 ### 2. Start Stack

@@ -2,7 +2,7 @@
   "app_id": "com.magicbox.ai",
   "name": "Magic AI",
   "version": "1.0.0",
-  "image": "docker.io/magicbox/ai:latest",
+  "image": "docker.io/omaraflak/magicbox-ai:latest",
   "entry_port": 9090,
   "route_slug": "ai",
   "webhook_path": "/internal/magicbox-webhook",
