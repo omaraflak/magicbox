@@ -1,13 +1,13 @@
-name: Publish Docker Image
+name: Publish AI App Image
 
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'ai-v*.*.*'
 
 jobs:
   push_to_registry:
-    name: Build & Push to Docker Hub
+    name: Build & Push AI to Docker Hub
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repo
@@ -19,13 +19,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/magicbox-core
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/magicbox-ai
           tags: |
-            type=semver,pattern={{version}}
+            type=match,pattern=ai-v(.*),group=1
             type=raw,value=latest
 
       - name: Set up Docker Buildx
@@ -35,6 +35,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./apps/ai/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
