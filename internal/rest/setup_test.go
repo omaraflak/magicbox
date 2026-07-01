@@ -51,7 +51,7 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 	if err != nil {
 		t.Fatalf("failed to generate mnemonic: %v", err)
 	}
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
 	if err != nil {
 		t.Fatalf("failed to derive keys: %v", err)
 	}
@@ -67,6 +67,7 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 		PublicKeyPEM:     pubPEM,
 		EncryptionKeyPEM: encKeyPEM,
 		EncryptionPubPEM: encPubPEM,
+		KeyIndex:         0,
 	}
 
 	p2pMock := &MockP2PService{hostID: "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"}

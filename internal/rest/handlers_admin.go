@@ -365,17 +365,10 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminGetMnemonic(w http.ResponseWriter, r *http.Request) {
-	if s.config.Mnemonic == "" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"mnemonic":     "",
-			"acknowledged": true,
-		})
-		return
-	}
-
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"mnemonic":     s.config.Mnemonic,
-		"acknowledged": false,
+		"acknowledged": s.config.Mnemonic == "",
+		"key_index":    s.config.KeyIndex,
 	})
 }
 
@@ -388,6 +381,7 @@ func (s *Server) handleAdminAcknowledgeMnemonic(w http.ResponseWriter, r *http.R
 
 type recoverKeysRequest struct {
 	Mnemonic string `json:"mnemonic"`
+	Index    int    `json:"index"`
 }
 
 func (s *Server) handleAdminRecoverKeys(w http.ResponseWriter, r *http.Request) {
@@ -402,11 +396,18 @@ func (s *Server) handleAdminRecoverKeys(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := config.RecoverKeys(s.config.Root, req.Mnemonic); err != nil {
+	if req.Index < 0 {
+		writeError(w, http.StatusBadRequest, "key index must be greater than or equal to 0")
+		return
+	}
+
+	if err := config.RecoverKeys(s.config.Root, req.Mnemonic, req.Index); err != nil {
 		s.logger.Error("admin recover keys: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return
 	}
+
+	s.config.KeyIndex = req.Index
 
 	s.logger.Info("admin: keys recovered from mnemonic, restart required")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "keys recovered successfully, restart required"})

@@ -128,7 +128,7 @@ func TestRecoverKeys_Success(t *testing.T) {
 	}
 
 	// Call RecoverKeys.
-	if err := RecoverKeys(tempDir, mnemonic); err != nil {
+	if err := RecoverKeys(tempDir, mnemonic, 0); err != nil {
 		t.Fatalf("RecoverKeys returned error: %v", err)
 	}
 
@@ -137,8 +137,17 @@ func TestRecoverKeys_Success(t *testing.T) {
 		t.Errorf("expected mnemonic file to NOT exist on disk after recovery")
 	}
 
+	// Verify the key_index file exists and contains "0"
+	idxBytes, err := os.ReadFile(filepath.Join(coreDir, "key_index"))
+	if err != nil {
+		t.Fatalf("failed to read key_index: %v", err)
+	}
+	if string(idxBytes) != "0" {
+		t.Errorf("expected key_index to contain '0', got %q", string(idxBytes))
+	}
+
 	// Read back key files and compare with independent derivation.
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
 	if err != nil {
 		t.Fatalf("failed to derive keys: %v", err)
 	}
@@ -171,9 +180,61 @@ func TestRecoverKeys_InvalidMnemonicFails(t *testing.T) {
 	tempDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tempDir, "core"), 0750)
 
-	err := RecoverKeys(tempDir, "invalid mnemonic phrase")
+	err := RecoverKeys(tempDir, "invalid mnemonic phrase", 0)
 	if err == nil {
 		t.Error("expected error for invalid mnemonic, got nil")
+	}
+}
+
+func TestRecoverKeys_CustomIndexSuccess(t *testing.T) {
+	tempDir := t.TempDir()
+	coreDir := filepath.Join(tempDir, "core")
+	_ = os.MkdirAll(coreDir, 0750)
+
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+
+	if err := RecoverKeys(tempDir, mnemonic, 3); err != nil {
+		t.Fatalf("RecoverKeys returned error: %v", err)
+	}
+
+	idxBytes, err := os.ReadFile(filepath.Join(coreDir, "key_index"))
+	if err != nil {
+		t.Fatalf("failed to read key_index: %v", err)
+	}
+	if string(idxBytes) != "3" {
+		t.Errorf("expected key_index to be '3', got %q", string(idxBytes))
+	}
+
+	// Read back key files and compare with independent derivation at index 3.
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 3)
+	if err != nil {
+		t.Fatalf("failed to derive keys: %v", err)
+	}
+
+	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
+	wantPubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	wantEncKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+	wantEncPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
+
+	gotPrivPEM, _ := os.ReadFile(filepath.Join(coreDir, "identity.key"))
+	gotPubPEM, _ := os.ReadFile(filepath.Join(coreDir, "identity.pub"))
+	gotEncKeyPEM, _ := os.ReadFile(filepath.Join(coreDir, "encryption.key"))
+	gotEncPubPEM, _ := os.ReadFile(filepath.Join(coreDir, "encryption.pub"))
+
+	if !bytes.Equal(wantPrivPEM, gotPrivPEM) {
+		t.Errorf("identity private key mismatch")
+	}
+	if !bytes.Equal(wantPubPEM, gotPubPEM) {
+		t.Errorf("identity public key mismatch")
+	}
+	if !bytes.Equal(wantEncKeyPEM, gotEncKeyPEM) {
+		t.Errorf("encryption private key mismatch")
+	}
+	if !bytes.Equal(wantEncPubPEM, gotEncPubPEM) {
+		t.Errorf("encryption public key mismatch")
 	}
 }
 

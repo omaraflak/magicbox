@@ -24,6 +24,7 @@ type Config struct {
 	EncryptionKeyPEM []byte
 	EncryptionPubPEM []byte
 	Mnemonic         string
+	KeyIndex         int
 }
 
 // Load reads configuration from environment variables and initializes
@@ -69,6 +70,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load JWT secret: %w", err)
 	}
 
+	// Read the active key index from file on startup.
+	indexPath := filepath.Join(root, "core", "key_index")
+	keyIndex := 0
+	if idxBytes, err := os.ReadFile(indexPath); err == nil {
+		if _, err := fmt.Sscanf(string(idxBytes), "%d", &keyIndex); err != nil {
+			keyIndex = 0
+		}
+	}
+
 	// Load or generate deterministic keys.
 	privPEM, pubPEM, encKeyPEM, encPubPEM, mnemonic, err := loadOrGenerateKeys(root)
 	if err != nil {
@@ -91,6 +101,7 @@ func Load() (*Config, error) {
 		EncryptionKeyPEM: encKeyPEM,
 		EncryptionPubPEM: encPubPEM,
 		Mnemonic:         mnemonic,
+		KeyIndex:         keyIndex,
 	}, nil
 }
 
@@ -186,8 +197,8 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 		return nil, nil, nil, nil, "", fmt.Errorf("failed to generate mnemonic: %w", err)
 	}
 
-	// Derive keys from mnemonic
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
+	// Derive keys from mnemonic (always at index 0 initially)
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
 	if err != nil {
 		return nil, nil, nil, nil, "", fmt.Errorf("failed to derive keys from mnemonic: %w", err)
 	}
@@ -224,19 +235,26 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 		return nil, nil, nil, nil, "", err
 	}
 
+	// Save index "0" to disk
+	indexPath := filepath.Join(root, "core", "key_index")
+	if err := os.WriteFile(indexPath, []byte("0"), 0600); err != nil {
+		return nil, nil, nil, nil, "", err
+	}
+
 	return privPEM, pubPEM, encKeyPEM, encPubPEM, mnemonic, nil
 }
 
-// RecoverKeys derives Ed25519/X25519 keys from a mnemonic and overwrites all key files on disk.
+// RecoverKeys derives Ed25519/X25519 keys from a mnemonic at a specific index and overwrites all key files on disk.
 // It never saves the plaintext mnemonic phrase itself to disk.
-func RecoverKeys(root string, mnemonic string) error {
+func RecoverKeys(root string, mnemonic string, index int) error {
 	privPath := filepath.Join(root, "core", "identity.key")
 	pubPath := filepath.Join(root, "core", "identity.pub")
 	encKeyPath := filepath.Join(root, "core", "encryption.key")
 	encPubPath := filepath.Join(root, "core", "encryption.pub")
+	indexPath := filepath.Join(root, "core", "key_index")
 
 	// Derive keys from mnemonic (validates mnemonic internally).
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, index)
 	if err != nil {
 		return fmt.Errorf("failed to derive keys from mnemonic: %w", err)
 	}
@@ -271,6 +289,11 @@ func RecoverKeys(root string, mnemonic string) error {
 	}
 	if err := os.WriteFile(encPubPath, encPubPEM, 0644); err != nil {
 		return fmt.Errorf("failed to write encryption public key: %w", err)
+	}
+
+	// Write key index file.
+	if err := os.WriteFile(indexPath, []byte(fmt.Sprintf("%d", index)), 0600); err != nil {
+		return fmt.Errorf("failed to write key index: %w", err)
 	}
 
 	return nil

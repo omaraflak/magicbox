@@ -24,8 +24,8 @@ func GenerateMnemonic() (string, error) {
 	return bip39.NewMnemonic(entropy)
 }
 
-// DeriveKeys derives a deterministic Ed25519 private key and X25519 ecdh private key from a mnemonic.
-func DeriveKeys(mnemonic string) (ed25519.PrivateKey, *ecdh.PrivateKey, error) {
+// DeriveKeys derives a deterministic Ed25519 private key and X25519 ecdh private key from a mnemonic at a specific index.
+func DeriveKeys(mnemonic string, index int) (ed25519.PrivateKey, *ecdh.PrivateKey, error) {
 	if !bip39.IsMnemonicValid(mnemonic) {
 		return nil, nil, fmt.Errorf("invalid mnemonic phrase")
 	}
@@ -35,12 +35,20 @@ func DeriveKeys(mnemonic string) (ed25519.PrivateKey, *ecdh.PrivateKey, error) {
 		return nil, nil, fmt.Errorf("invalid seed derived from mnemonic")
 	}
 
-	// Use first 32 bytes for Ed25519
-	edPriv := ed25519.NewKeyFromSeed(seed[:32])
+	// Use SHA-256 of seed concatenated with path index for Ed25519
+	h1 := sha256.New()
+	h1.Write(seed)
+	h1.Write([]byte(fmt.Sprintf("/ed25519/%d", index)))
+	edSeed := h1.Sum(nil)
+	edPriv := ed25519.NewKeyFromSeed(edSeed)
 
-	// Use next 32 bytes for X25519
+	// Use SHA-256 of seed concatenated with path index for X25519
+	h2 := sha256.New()
+	h2.Write(seed)
+	h2.Write([]byte(fmt.Sprintf("/x25519/%d", index)))
+	xSeed := h2.Sum(nil)
 	curve := ecdh.X25519()
-	xPriv, err := curve.NewPrivateKey(seed[32:64])
+	xPriv, err := curve.NewPrivateKey(xSeed)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate X25519 key: %w", err)
 	}

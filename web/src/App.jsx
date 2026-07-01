@@ -492,15 +492,15 @@ export default function App() {
     };
 
     // Mnemonic: Recover Keys
-    const handleRecoverKeys = async (mnemonic) => {
+    const handleRecoverKeys = async (mnemonic, index) => {
         setRecoverError('');
         setRecoverStatus('');
         setActionLoading(true);
-        const { status, data } = await callAPI('POST', '/admin/recover', { mnemonic });
+        const { status, data } = await callAPI('POST', '/admin/recover', { mnemonic, index: parseInt(index, 10) });
         setActionLoading(false);
         if (status === 200) {
-            setRecoverStatus(data?.message || 'Keys recovered. Restart required.');
-            loadMnemonic();
+            setRecoverStatus(data?.message || 'Keys recovered successfully. Restart required.');
+            loadMnemonic(); // reload to get updated index from backend
         } else {
             setRecoverError(data?.error || 'Recovery failed');
         }

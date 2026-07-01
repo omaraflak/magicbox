@@ -19,12 +19,12 @@ func TestGenerateMnemonic_Success(t *testing.T) {
 func TestDeriveKeys_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
 
-	edPriv1, xPriv1, err := DeriveKeys(mnemonic)
+	edPriv1, xPriv1, err := DeriveKeys(mnemonic, 0)
 	if err != nil {
 		t.Fatalf("failed to derive keys: %v", err)
 	}
 
-	edPriv2, xPriv2, err := DeriveKeys(mnemonic)
+	edPriv2, xPriv2, err := DeriveKeys(mnemonic, 0)
 	if err != nil {
 		t.Fatalf("failed to derive keys 2: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestDeriveKeys_Success(t *testing.T) {
 
 func TestPEMSerialization_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	edPriv, xPriv, _ := DeriveKeys(mnemonic)
+	edPriv, xPriv, _ := DeriveKeys(mnemonic, 0)
 
 	// 1. Ed25519 Private Key PEM
 	edPrivPEM, err := MarshalPrivateKey(edPriv)
@@ -99,7 +99,7 @@ func TestPEMSerialization_Success(t *testing.T) {
 
 func TestSignAndVerify_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	edPriv, _, _ := DeriveKeys(mnemonic)
+	edPriv, _, _ := DeriveKeys(mnemonic, 0)
 	edPub := edPriv.Public().(ed25519.PublicKey)
 	message := []byte("Hello, Magicbox P2P!")
 
@@ -111,7 +111,7 @@ func TestSignAndVerify_Success(t *testing.T) {
 
 func TestSignAndVerify_InvalidMessageFails(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	edPriv, _, _ := DeriveKeys(mnemonic)
+	edPriv, _, _ := DeriveKeys(mnemonic, 0)
 	edPub := edPriv.Public().(ed25519.PublicKey)
 	message := []byte("Hello, Magicbox P2P!")
 
@@ -123,7 +123,7 @@ func TestSignAndVerify_InvalidMessageFails(t *testing.T) {
 
 func TestEncryptAndDecryptECDH_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	_, xPriv, _ := DeriveKeys(mnemonic)
+	_, xPriv, _ := DeriveKeys(mnemonic, 0)
 	xPub := xPriv.PublicKey()
 	message := []byte("Secret E2E message payload.")
 
@@ -146,10 +146,10 @@ func TestEncryptAndSign_Success(t *testing.T) {
 	mnemonicSender, _ := GenerateMnemonic()
 	mnemonicRecipient, _ := GenerateMnemonic()
 
-	edPrivSender, _, _ := DeriveKeys(mnemonicSender)
+	edPrivSender, _, _ := DeriveKeys(mnemonicSender, 0)
 	edPubSender := edPrivSender.Public().(ed25519.PublicKey)
 
-	_, xPrivRecipient, _ := DeriveKeys(mnemonicRecipient)
+	_, xPrivRecipient, _ := DeriveKeys(mnemonicRecipient, 0)
 	xPubRecipient := xPrivRecipient.PublicKey()
 
 	secretPayload := []byte("ECIES secured e2e message payload.")
@@ -174,11 +174,11 @@ func TestEncryptAndSign_InvalidSignatureFails(t *testing.T) {
 	mnemonicRecipient, _ := GenerateMnemonic()
 	mnemonicWrongSender, _ := GenerateMnemonic()
 
-	edPrivSender, _, _ := DeriveKeys(mnemonicSender)
-	_, xPrivRecipient, _ := DeriveKeys(mnemonicRecipient)
+	edPrivSender, _, _ := DeriveKeys(mnemonicSender, 0)
+	_, xPrivRecipient, _ := DeriveKeys(mnemonicRecipient, 0)
 	xPubRecipient := xPrivRecipient.PublicKey()
 
-	edPrivWrongSender, _, _ := DeriveKeys(mnemonicWrongSender)
+	edPrivWrongSender, _, _ := DeriveKeys(mnemonicWrongSender, 0)
 	edPubWrongSender := edPrivWrongSender.Public().(ed25519.PublicKey)
 
 	secretPayload := []byte("ECIES secured e2e message payload.")
@@ -192,7 +192,7 @@ func TestEncryptAndSign_InvalidSignatureFails(t *testing.T) {
 }
 
 func TestDeriveKeys_InvalidMnemonicFails(t *testing.T) {
-	_, _, err := DeriveKeys("invalid mnemonic sentence that fails checksum completely")
+	_, _, err := DeriveKeys("invalid mnemonic sentence that fails checksum completely", 0)
 	if err == nil {
 		t.Error("expected error for invalid mnemonic phrase, got nil")
 	}
@@ -223,5 +223,26 @@ func TestUnmarshalX25519PublicKey_InvalidPEMFails(t *testing.T) {
 	_, err := UnmarshalX25519PublicKey([]byte("invalid pem blocks"))
 	if err == nil {
 		t.Error("expected error for invalid PEM data, got nil")
+	}
+}
+
+func TestDeriveKeys_DifferentIndicesProduceDifferentKeys(t *testing.T) {
+	mnemonic, _ := GenerateMnemonic()
+
+	edPriv1, xPriv1, err := DeriveKeys(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive keys at index 0: %v", err)
+	}
+
+	edPriv2, xPriv2, err := DeriveKeys(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive keys at index 1: %v", err)
+	}
+
+	if bytes.Equal(edPriv1, edPriv2) {
+		t.Error("expected different Ed25519 keys for different indices, but they are the same")
+	}
+	if bytes.Equal(xPriv1.Bytes(), xPriv2.Bytes()) {
+		t.Error("expected different X25519 keys for different indices, but they are the same")
 	}
 }

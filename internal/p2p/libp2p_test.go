@@ -20,7 +20,7 @@ func TestLibp2pServiceFlow(t *testing.T) {
 
 	// 1. Generate local identities
 	mnemonic1, _ := internalcrypto.GenerateMnemonic()
-	edPriv1, xPriv1, err := internalcrypto.DeriveKeys(mnemonic1)
+	edPriv1, xPriv1, err := internalcrypto.DeriveKeys(mnemonic1, 0)
 	if err != nil {
 		t.Fatalf("failed to derive keys 1: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestLibp2pServiceFlow(t *testing.T) {
 	}
 
 	mnemonic2, _ := internalcrypto.GenerateMnemonic()
-	edPriv2, xPriv2, err := internalcrypto.DeriveKeys(mnemonic2)
+	edPriv2, xPriv2, err := internalcrypto.DeriveKeys(mnemonic2, 0)
 	if err != nil {
 		t.Fatalf("failed to derive keys 2: %v", err)
 	}
@@ -134,11 +134,11 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 	defer cancel()
 
 	mnemonic1, _ := internalcrypto.GenerateMnemonic()
-	edPriv1, xPriv1, _ := internalcrypto.DeriveKeys(mnemonic1)
+	edPriv1, xPriv1, _ := internalcrypto.DeriveKeys(mnemonic1, 0)
 	p2pKey1, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv1)
 
 	mnemonic2, _ := internalcrypto.GenerateMnemonic()
-	edPriv2, xPriv2, _ := internalcrypto.DeriveKeys(mnemonic2)
+	edPriv2, xPriv2, _ := internalcrypto.DeriveKeys(mnemonic2, 0)
 	p2pKey2, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv2)
 
 	logger1, _ := logging.New(t.TempDir())

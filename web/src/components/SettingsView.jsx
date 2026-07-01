@@ -143,7 +143,7 @@ export default function SettingsView({
                                 onClick={() => onAdminTabChange('keys')}
                                 style={{ padding: '6px 16px', fontSize: '0.85rem' }}
                             >
-                                🔑 Encryption Keys
+                                Encryption Keys
                             </button>
                             <button 
                                 className={`btn ${adminTab === 'upgrade' ? 'btn-primary' : 'btn-secondary'}`}
@@ -187,6 +187,7 @@ export default function SettingsView({
                         )}
                         {adminTab === 'keys' && (
                             <AdminKeysTab
+                                activeIndex={mnemonicData?.key_index || 0}
                                 onRecover={onRecoverKeys}
                                 loading={loading}
                                 error={recoverError}
