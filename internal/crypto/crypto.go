@@ -1,87 +1,269 @@
 package crypto
 
 import (
-	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
-// GenerateKeyPair generates a new RSA 4096-bit private and public key pair.
-func GenerateKeyPair() (*rsa.PrivateKey, error) {
-	return rsa.GenerateKey(rand.Reader, 4096)
-}
-
-// EncodePrivateKeyToPEM serializes an RSA private key to PEM format.
-func EncodePrivateKeyToPEM(priv *rsa.PrivateKey) []byte {
-	privBytes := x509.MarshalPKCS1PrivateKey(priv)
-	block := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privBytes,
+// GenerateMnemonic generates a new 12-word BIP-39 mnemonic phrase.
+func GenerateMnemonic() (string, error) {
+	entropy, err := bip39.NewEntropy(128)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate entropy: %w", err)
 	}
-	return pem.EncodeToMemory(block)
+	return bip39.NewMnemonic(entropy)
 }
 
-// EncodePublicKeyToPEM serializes an RSA public key to PEM format.
-func EncodePublicKeyToPEM(pub *rsa.PublicKey) ([]byte, error) {
-	pubBytes, err := x509.MarshalPKIXPublicKey(pub)
+// DeriveKeys derives a deterministic Ed25519 private key and X25519 ecdh private key from a mnemonic.
+func DeriveKeys(mnemonic string) (ed25519.PrivateKey, *ecdh.PrivateKey, error) {
+	if !bip39.IsMnemonicValid(mnemonic) {
+		return nil, nil, fmt.Errorf("invalid mnemonic phrase")
+	}
+
+	seed := bip39.NewSeed(mnemonic, "")
+	if len(seed) < 64 {
+		return nil, nil, fmt.Errorf("invalid seed derived from mnemonic")
+	}
+
+	// Use first 32 bytes for Ed25519
+	edPriv := ed25519.NewKeyFromSeed(seed[:32])
+
+	// Use next 32 bytes for X25519
+	curve := ecdh.X25519()
+	xPriv, err := curve.NewPrivateKey(seed[32:64])
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate X25519 key: %w", err)
+	}
+
+	return edPriv, xPriv, nil
+}
+
+// MarshalPrivateKey PEM-encodes an Ed25519 or X25519 private key using PKCS#8.
+func MarshalPrivateKey(priv interface{}) ([]byte, error) {
+	derBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
 		return nil, err
 	}
 	block := &pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: pubBytes,
+		Type:  "PRIVATE KEY",
+		Bytes: derBytes,
 	}
 	return pem.EncodeToMemory(block), nil
 }
 
-// ParsePrivateKeyFromPEM deserializes an RSA private key from PEM bytes.
-func ParsePrivateKeyFromPEM(pemBytes []byte) (*rsa.PrivateKey, error) {
+// UnmarshalEd25519PrivateKey decodes an Ed25519 private key from PEM bytes.
+func UnmarshalEd25519PrivateKey(pemBytes []byte) (ed25519.PrivateKey, error) {
 	block, _ := pem.Decode(pemBytes)
-	if block == nil || block.Type != "RSA PRIVATE KEY" {
+	if block == nil || block.Type != "PRIVATE KEY" {
 		return nil, fmt.Errorf("invalid private key PEM")
 	}
-	return x509.ParsePKCS1PrivateKey(block.Bytes)
-}
-
-// ParsePublicKeyFromPEM deserializes an RSA public key from PEM bytes.
-func ParsePublicKeyFromPEM(pemBytes []byte) (*rsa.PublicKey, error) {
-	block, _ := pem.Decode(pemBytes)
-	if block == nil || block.Type != "RSA PUBLIC KEY" {
-		return nil, fmt.Errorf("invalid public key PEM")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		return nil, err
 	}
-	rsaPub, ok := pub.(*rsa.PublicKey)
+	edPriv, ok := parsed.(ed25519.PrivateKey)
 	if !ok {
-		return nil, fmt.Errorf("not an RSA public key")
+		return nil, fmt.Errorf("not an Ed25519 private key")
 	}
-	return rsaPub, nil
+	return edPriv, nil
 }
 
-// Sign signs arbitrary data using the private key.
-func Sign(priv *rsa.PrivateKey, data []byte) ([]byte, error) {
-	hashed := sha256.Sum256(data)
-	return rsa.SignPSS(rand.Reader, priv, crypto.SHA256, hashed[:], nil)
+// UnmarshalX25519PrivateKey decodes an X25519 private key from PEM bytes.
+func UnmarshalX25519PrivateKey(pemBytes []byte) (*ecdh.PrivateKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil || block.Type != "PRIVATE KEY" {
+		return nil, fmt.Errorf("invalid private key PEM")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	xPriv, ok := parsed.(*ecdh.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("not an X25519 private key")
+	}
+	return xPriv, nil
 }
 
-// Verify checks if the signature is valid for the given data and public key.
-func Verify(pub *rsa.PublicKey, data, sig []byte) error {
-	hashed := sha256.Sum256(data)
-	return rsa.VerifyPSS(pub, crypto.SHA256, hashed[:], sig, nil)
+// MarshalPublicKey PEM-encodes an Ed25519 or X25519 public key using PKIX.
+func MarshalPublicKey(pub interface{}) ([]byte, error) {
+	derBytes, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+	block := &pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: derBytes,
+	}
+	return pem.EncodeToMemory(block), nil
 }
 
-// Encrypt encrypts arbitrary data using the public key.
-func Encrypt(pub *rsa.PublicKey, data []byte) ([]byte, error) {
-	return rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, data, nil)
+// UnmarshalEd25519PublicKey decodes an Ed25519 public key from PEM bytes.
+func UnmarshalEd25519PublicKey(pemBytes []byte) (ed25519.PublicKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return nil, fmt.Errorf("invalid public key PEM")
+	}
+	parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	edPub, ok := parsed.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an Ed25519 public key")
+	}
+	return edPub, nil
 }
 
-// Decrypt decrypts encrypted data using the private key.
-func Decrypt(priv *rsa.PrivateKey, ciphertext []byte) ([]byte, error) {
-	return rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, ciphertext, nil)
+// UnmarshalX25519PublicKey decodes an X25519 public key from PEM bytes.
+func UnmarshalX25519PublicKey(pemBytes []byte) (*ecdh.PublicKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return nil, fmt.Errorf("invalid public key PEM")
+	}
+	parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	xPub, ok := parsed.(*ecdh.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an X25519 public key")
+	}
+	return xPub, nil
+}
+
+// Sign signs arbitrary data using the Ed25519 private key.
+func Sign(priv ed25519.PrivateKey, data []byte) []byte {
+	return ed25519.Sign(priv, data)
+}
+
+// Verify checks if the signature is valid for the given data and Ed25519 public key.
+func Verify(pub ed25519.PublicKey, data, sig []byte) bool {
+	return ed25519.Verify(pub, data, sig)
+}
+
+// EncryptECDH encrypts data using recipient's X25519 public key and AES-256-GCM.
+func EncryptECDH(recipientPub *ecdh.PublicKey, data []byte) (ephemeralPubBytes, iv, ciphertext []byte, err error) {
+	curve := ecdh.X25519()
+	ephemeralPriv, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	ephemeralPubBytes = ephemeralPriv.PublicKey().Bytes()
+
+	sharedSecret, err := ephemeralPriv.ECDH(recipientPub)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	aesKey := sha256.Sum256(sharedSecret)
+
+	iv = make([]byte, 12)
+	if _, err = rand.Read(iv); err != nil {
+		return nil, nil, nil, err
+	}
+
+	block, err := aes.NewCipher(aesKey[:])
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	ciphertext = aesGCM.Seal(nil, iv, data, nil)
+	return ephemeralPubBytes, iv, ciphertext, nil
+}
+
+// DecryptECDH decrypts data using recipient's X25519 private key and sender's ephemeral public key.
+func DecryptECDH(recipientPriv *ecdh.PrivateKey, ephemeralPubBytes, iv, ciphertext []byte) ([]byte, error) {
+	curve := ecdh.X25519()
+	ephemeralPub, err := curve.NewPublicKey(ephemeralPubBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	sharedSecret, err := recipientPriv.ECDH(ephemeralPub)
+	if err != nil {
+		return nil, err
+	}
+
+	aesKey := sha256.Sum256(sharedSecret)
+
+	block, err := aes.NewCipher(aesKey[:])
+	if err != nil {
+		return nil, err
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	return aesGCM.Open(nil, iv, ciphertext, nil)
+}
+
+// EncryptedEnvelope represents a signed, ECDH-encrypted package.
+type EncryptedEnvelope struct {
+	Version      string `json:"version"`
+	EphemeralPub []byte `json:"ephemeral_pub"`
+	IV           []byte `json:"iv"`
+	Ciphertext   []byte `json:"ciphertext"`
+	Signature    []byte `json:"signature"`
+}
+
+// EncryptAndSign wraps the data payload in a signed, hybrid-encrypted envelope.
+// The signature covers ephemeralPub + iv + ciphertext to prevent any field from
+// being swapped without detection.
+func EncryptAndSign(senderPriv ed25519.PrivateKey, recipientPub *ecdh.PublicKey, data []byte) ([]byte, error) {
+	ephemeralPubBytes, iv, ciphertext, err := EncryptECDH(recipientPub, data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sign over ALL cryptographic material, not just ciphertext
+	signed := make([]byte, 0, len(ephemeralPubBytes)+len(iv)+len(ciphertext))
+	signed = append(signed, ephemeralPubBytes...)
+	signed = append(signed, iv...)
+	signed = append(signed, ciphertext...)
+	signature := Sign(senderPriv, signed)
+
+	envelope := EncryptedEnvelope{
+		Version:      "1.0",
+		EphemeralPub: ephemeralPubBytes,
+		IV:           iv,
+		Ciphertext:   ciphertext,
+		Signature:    signature,
+	}
+
+	return json.Marshal(envelope)
+}
+
+// DecryptAndVerify decrypts and verifies the signed, hybrid-encrypted envelope.
+func DecryptAndVerify(recipientPriv *ecdh.PrivateKey, senderPub ed25519.PublicKey, envelopeBytes []byte) ([]byte, error) {
+	var envelope EncryptedEnvelope
+	if err := json.Unmarshal(envelopeBytes, &envelope); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal envelope: %w", err)
+	}
+
+	// Verify signature over ALL cryptographic material
+	signed := make([]byte, 0, len(envelope.EphemeralPub)+len(envelope.IV)+len(envelope.Ciphertext))
+	signed = append(signed, envelope.EphemeralPub...)
+	signed = append(signed, envelope.IV...)
+	signed = append(signed, envelope.Ciphertext...)
+	if !Verify(senderPub, signed, envelope.Signature) {
+		return nil, fmt.Errorf("invalid signature")
+	}
+
+	return DecryptECDH(recipientPriv, envelope.EphemeralPub, envelope.IV, envelope.Ciphertext)
 }

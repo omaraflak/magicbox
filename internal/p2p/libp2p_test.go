@@ -2,8 +2,9 @@ package p2p
 
 import (
 	"context"
-	"crypto/rsa"
-	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -13,30 +14,27 @@ import (
 	"github.com/magicbox/core/internal/logging"
 )
 
-func rsaToLibp2pKey(rsaPriv *rsa.PrivateKey) (libp2pcrypto.PrivKey, error) {
-	der := x509.MarshalPKCS1PrivateKey(rsaPriv)
-	return libp2pcrypto.UnmarshalRsaPrivateKey(der)
-}
-
 func TestLibp2pServiceFlow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// 1. Generate local identities
-	rsaPriv1, err := internalcrypto.GenerateKeyPair()
+	mnemonic1, _ := internalcrypto.GenerateMnemonic()
+	edPriv1, xPriv1, err := internalcrypto.DeriveKeys(mnemonic1)
 	if err != nil {
-		t.Fatalf("failed to generate rsa key 1: %v", err)
+		t.Fatalf("failed to derive keys 1: %v", err)
 	}
-	p2pKey1, err := rsaToLibp2pKey(rsaPriv1)
+	p2pKey1, err := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv1)
 	if err != nil {
 		t.Fatalf("failed to convert key 1: %v", err)
 	}
 
-	rsaPriv2, err := internalcrypto.GenerateKeyPair()
+	mnemonic2, _ := internalcrypto.GenerateMnemonic()
+	edPriv2, xPriv2, err := internalcrypto.DeriveKeys(mnemonic2)
 	if err != nil {
-		t.Fatalf("failed to generate rsa key 2: %v", err)
+		t.Fatalf("failed to derive keys 2: %v", err)
 	}
-	p2pKey2, err := rsaToLibp2pKey(rsaPriv2)
+	p2pKey2, err := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv2)
 	if err != nil {
 		t.Fatalf("failed to convert key 2: %v", err)
 	}
@@ -53,8 +51,8 @@ func TestLibp2pServiceFlow(t *testing.T) {
 	}
 	defer logger2.Close()
 
-	srv1 := NewLibp2pService(p2pKey1, []string{"/ip4/127.0.0.1/tcp/0"}, logger1)
-	srv2 := NewLibp2pService(p2pKey2, []string{"/ip4/127.0.0.1/tcp/0"}, logger2)
+	srv1 := NewLibp2pService(p2pKey1, xPriv1, []string{"/ip4/127.0.0.1/tcp/0"}, logger1)
+	srv2 := NewLibp2pService(p2pKey2, xPriv2, []string{"/ip4/127.0.0.1/tcp/0"}, logger2)
 
 	// Start Node 1
 	if err := srv1.Start(ctx); err != nil {
@@ -79,22 +77,31 @@ func TestLibp2pServiceFlow(t *testing.T) {
 	})
 
 	// 4. Send message from Node 1 to Node 2
-	// Node 2 addresses has the format: /ip4/127.0.0.1/tcp/xxxxx/p2p/PeerID
 	addrs2 := srv2.Multiaddrs()
 	if len(addrs2) == 0 {
 		t.Fatalf("node 2 has no listening multiaddresses")
 	}
 
-	// Use localhost address for test reliability
-	var targetAddr string
+	var rawAddr string
 	for _, a := range addrs2 {
-		targetAddr = a
+		rawAddr = a
 		break
 	}
 
+	// Create JSON payload and base64 encode it for the invite URL path
+	payload := map[string]string{
+		"multiaddr":   rawAddr,
+		"user_id":     "user-456",
+		"enc_pub_key": hex.EncodeToString(xPriv2.PublicKey().Bytes()),
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
+	targetAddr := "magicbox://invite/" + b64Payload
+
 	testMsg := &Message{
-		AppID:   "com.magicbox.test",
-		Payload: []byte("Hello from peer 1!"),
+		AppID:        "com.magicbox.test",
+		TargetUserID: "user-456",
+		Payload:      []byte("Hello from peer 1!"),
 	}
 
 	err = srv1.SendTo(ctx, targetAddr, testMsg)
@@ -102,7 +109,7 @@ func TestLibp2pServiceFlow(t *testing.T) {
 		t.Fatalf("failed to send message: %v", err)
 	}
 
-	// 5. Assert message reception
+	// 5. Assert message reception and decryption
 	select {
 	case sender := <-receivedSender:
 		if sender != srv1.HostID() {
@@ -126,32 +133,42 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	rsaPriv1, _ := internalcrypto.GenerateKeyPair()
-	p2pKey1, _ := rsaToLibp2pKey(rsaPriv1)
-	rsaPriv2, _ := internalcrypto.GenerateKeyPair()
-	p2pKey2, _ := rsaToLibp2pKey(rsaPriv2)
+	mnemonic1, _ := internalcrypto.GenerateMnemonic()
+	edPriv1, xPriv1, _ := internalcrypto.DeriveKeys(mnemonic1)
+	p2pKey1, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv1)
+
+	mnemonic2, _ := internalcrypto.GenerateMnemonic()
+	edPriv2, xPriv2, _ := internalcrypto.DeriveKeys(mnemonic2)
+	p2pKey2, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv2)
 
 	logger1, _ := logging.New(t.TempDir())
 	defer logger1.Close()
 	logger2, _ := logging.New(t.TempDir())
 	defer logger2.Close()
 
-	srv1 := NewLibp2pService(p2pKey1, []string{"/ip4/127.0.0.1/tcp/0"}, logger1)
-	srv2 := NewLibp2pService(p2pKey2, []string{"/ip4/127.0.0.1/tcp/0"}, logger2)
+	srv1 := NewLibp2pService(p2pKey1, xPriv1, []string{"/ip4/127.0.0.1/tcp/0"}, logger1)
+	srv2 := NewLibp2pService(p2pKey2, xPriv2, []string{"/ip4/127.0.0.1/tcp/0"}, logger2)
 
 	_ = srv1.Start(ctx)
 	defer srv1.Stop()
 	_ = srv2.Start(ctx)
 	defer srv2.Stop()
 
-	// Wait, we don't register any handler for "com.magicbox.unhandled" on srv2.
-	// We want to verify it doesn't crash.
 	addrs2 := srv2.Multiaddrs()
-	targetAddr := addrs2[0]
+
+	payload := map[string]string{
+		"multiaddr":   addrs2[0],
+		"user_id":     "user-456",
+		"enc_pub_key": hex.EncodeToString(xPriv2.PublicKey().Bytes()),
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
+	targetAddr := "magicbox://invite/" + b64Payload
 
 	testMsg := &Message{
-		AppID:   "com.magicbox.unhandled",
-		Payload: []byte("Some data"),
+		AppID:        "com.magicbox.unhandled",
+		TargetUserID: "user-456",
+		Payload:      []byte("Some data"),
 	}
 
 	var wg sync.WaitGroup

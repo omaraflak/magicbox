@@ -8,6 +8,7 @@ import (
 
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/core"
+	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
@@ -46,9 +47,26 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
+	if err != nil {
+		t.Fatalf("failed to derive keys: %v", err)
+	}
+	privPEM, _ := crypto.MarshalPrivateKey(edPriv)
+	pubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	encKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+	encPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
+
 	cfg := &config.Config{
-		Root:      tempDir,
-		JWTSecret: []byte("my-test-super-secret-key-signature-123"),
+		Root:             tempDir,
+		JWTSecret:        []byte("my-test-super-secret-key-signature-123"),
+		PrivateKeyPEM:    privPEM,
+		PublicKeyPEM:     pubPEM,
+		EncryptionKeyPEM: encKeyPEM,
+		EncryptionPubPEM: encPubPEM,
 	}
 
 	p2pMock := &MockP2PService{hostID: "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"}

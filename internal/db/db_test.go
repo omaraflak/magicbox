@@ -123,7 +123,7 @@ func TestAddAndGetContact_Success(t *testing.T) {
 	multiaddr := "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H?user_id=alice-id"
 	targetUserID := "alice-id"
 
-	if err := db.AddContact(contactID, userID, contactName, multiaddr, targetUserID); err != nil {
+	if err := db.AddContact(contactID, userID, contactName, multiaddr, targetUserID, "test-enc-pub-key"); err != nil {
 		t.Fatalf("AddContact failed: %v", err)
 	}
 

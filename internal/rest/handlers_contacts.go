@@ -1,12 +1,15 @@
 package rest
 
 import (
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/magicbox/core/internal/crypto"
 )
 
 func (s *Server) handleListContacts(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +26,13 @@ func (s *Server) handleListContacts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, contacts)
+}
+
+// InvitationPayload represents the fields encoded in the invitation link.
+type InvitationPayload struct {
+	Multiaddr string `json:"multiaddr"`
+	UserID    string `json:"user_id"`
+	EncPubKey string `json:"enc_pub_key"`
 }
 
 func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
@@ -46,17 +56,39 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetUserID := ""
-	if u, parseErr := url.Parse(req.Multiaddr); parseErr == nil {
-		targetUserID = u.Query().Get("user_id")
+	if !strings.HasPrefix(req.Multiaddr, "magicbox://invite/") {
+		writeError(w, http.StatusBadRequest, "invalid invite link: must start with magicbox://invite/")
+		return
 	}
+
+	b64Payload := strings.TrimPrefix(req.Multiaddr, "magicbox://invite/")
+	if b64Payload == "" {
+		writeError(w, http.StatusBadRequest, "invalid invite link: missing payload")
+		return
+	}
+
+	payloadBytes, err := base64.URLEncoding.DecodeString(b64Payload)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid base64 payload: "+err.Error())
+		return
+	}
+
+	var payload InvitationPayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid payload JSON: "+err.Error())
+		return
+	}
+
+	targetUserID := payload.UserID
+	encPubKey := payload.EncPubKey
+
 	if targetUserID == "" {
-		writeError(w, http.StatusBadRequest, "invalid multiaddr: missing user_id query parameter")
+		writeError(w, http.StatusBadRequest, "invalid invite link: missing user_id")
 		return
 	}
 
 	id := uuid.NewString()
-	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, req.Multiaddr, targetUserID); err != nil {
+	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, req.Multiaddr, targetUserID, encPubKey); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save contact: "+err.Error())
 		return
 	}
@@ -103,16 +135,44 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use relay multiaddress (p2p-circuit) if available to support NAT traversal over the internet
-	targetAddr := peerID
-	for _, addr := range s.p2pService.Multiaddrs() {
+	// Use relay multiaddress (p2p-circuit) if available to support NAT traversal over the internet.
+	// Otherwise, fall back to the first full multiaddress (never a bare peer ID).
+	multiaddrs := s.p2pService.Multiaddrs()
+	if len(multiaddrs) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "P2P network has no listening addresses")
+		return
+	}
+
+	targetAddr := multiaddrs[0]
+	for _, addr := range multiaddrs {
 		if strings.Contains(addr, "/p2p-circuit") {
 			targetAddr = addr
 			break
 		}
 	}
 
-	inviteLink := fmt.Sprintf("magicbox://invite/%s?user_id=%s", targetAddr, claims.UserID)
+	// Unmarshal static X25519 public key and encode its raw bytes as hex
+	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.EncryptionPubPEM)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse local encryption public key: "+err.Error())
+		return
+	}
+	hexPub := hex.EncodeToString(pubKey.Bytes())
+
+	payload := InvitationPayload{
+		Multiaddr: targetAddr,
+		UserID:    claims.UserID,
+		EncPubKey: hexPub,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to marshal invitation payload: "+err.Error())
+		return
+	}
+
+	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
+	inviteLink := fmt.Sprintf("magicbox://invite/%s", b64Payload)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"peer_id":      peerID,

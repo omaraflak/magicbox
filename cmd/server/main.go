@@ -100,7 +100,12 @@ func run() error {
 		return fmt.Errorf("failed to parse identity key for P2P: %w", err)
 	}
 
-	p2pService := p2p.NewLibp2pService(p2pKey, nil, logger)
+	encryptionPriv, err := p2p.ParsePEMToX25519PrivKey(cfg.EncryptionKeyPEM)
+	if err != nil {
+		return fmt.Errorf("failed to parse encryption key for P2P: %w", err)
+	}
+
+	p2pService := p2p.NewLibp2pService(p2pKey, encryptionPriv, nil, logger)
 	if err := p2pService.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start P2P service: %w", err)
 	}
