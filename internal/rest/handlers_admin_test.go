@@ -70,9 +70,8 @@ func TestAdminUpgrade_Success(t *testing.T) {
 func TestAdminGetMnemonic_Success(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
-	// Create the core directory and write a mnemonic file.
-	_ = os.MkdirAll(filepath.Dir(cfg.MnemonicPath), 0750)
-	_ = os.WriteFile(cfg.MnemonicPath, []byte("test mnemonic phrase"), 0600)
+	// Set mnemonic directly in memory.
+	cfg.Mnemonic = "test mnemonic phrase"
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
@@ -101,9 +100,8 @@ func TestAdminGetMnemonic_Success(t *testing.T) {
 func TestAdminGetMnemonic_AfterAcknowledgment(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
-	// Make sure the mnemonic file does NOT exist.
-	_ = os.MkdirAll(filepath.Dir(cfg.MnemonicPath), 0750)
-	_ = os.Remove(cfg.MnemonicPath)
+	// Ensure mnemonic is empty in memory.
+	cfg.Mnemonic = ""
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
@@ -144,9 +142,8 @@ func TestAdminGetMnemonic_Unauthenticated(t *testing.T) {
 func TestAdminAcknowledgeMnemonic_Success(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
-	// Create the core directory and write the mnemonic file first.
-	_ = os.MkdirAll(filepath.Dir(cfg.MnemonicPath), 0750)
-	_ = os.WriteFile(cfg.MnemonicPath, []byte("some mnemonic words"), 0600)
+	// Set mnemonic directly in memory.
+	cfg.Mnemonic = "some mnemonic words"
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
@@ -162,9 +159,9 @@ func TestAdminAcknowledgeMnemonic_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 
-	// Verify the mnemonic file was deleted.
-	if _, err := os.Stat(cfg.MnemonicPath); err == nil || !os.IsNotExist(err) {
-		t.Errorf("expected MnemonicPath file to be deleted, but it still exists at %s", cfg.MnemonicPath)
+	// Verify the mnemonic was cleared from memory.
+	if cfg.Mnemonic != "" {
+		t.Errorf("expected Config.Mnemonic to be cleared in memory, but got %q", cfg.Mnemonic)
 	}
 }
 

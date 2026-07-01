@@ -187,7 +187,6 @@ export default function SettingsView({
                         )}
                         {adminTab === 'keys' && (
                             <AdminKeysTab
-                                mnemonic={mnemonicData?.mnemonic || ''}
                                 onRecover={onRecoverKeys}
                                 loading={loading}
                                 error={recoverError}

@@ -67,7 +67,6 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 		PublicKeyPEM:     pubPEM,
 		EncryptionKeyPEM: encKeyPEM,
 		EncryptionPubPEM: encPubPEM,
-		MnemonicPath:     filepath.Join(tempDir, "core", "mnemonic"),
 	}
 
 	p2pMock := &MockP2PService{hostID: "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"}

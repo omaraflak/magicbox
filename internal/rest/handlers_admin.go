@@ -365,38 +365,25 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminGetMnemonic(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile(s.config.MnemonicPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Mnemonic file has been deleted -> it has been acknowledged!
-			writeJSON(w, http.StatusOK, map[string]interface{}{
-				"mnemonic":     "",
-				"acknowledged": true,
-			})
-			return
-		}
-		s.logger.Error("admin get mnemonic: failed to read mnemonic file", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "failed to read mnemonic")
+	if s.config.Mnemonic == "" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"mnemonic":     "",
+			"acknowledged": true,
+		})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"mnemonic":     string(data),
+		"mnemonic":     s.config.Mnemonic,
 		"acknowledged": false,
 	})
 }
 
 func (s *Server) handleAdminAcknowledgeMnemonic(w http.ResponseWriter, r *http.Request) {
-	// Security: Wipe the plaintext mnemonic file from disk upon acknowledgment.
-	if err := os.Remove(s.config.MnemonicPath); err != nil {
-		if !os.IsNotExist(err) {
-			s.logger.Error("admin acknowledge mnemonic: failed to delete mnemonic file", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "failed to acknowledge mnemonic")
-			return
-		}
-	}
+	// Security: Wipe the in-memory plaintext mnemonic phrase.
+	s.config.Mnemonic = ""
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "mnemonic acknowledged and cleared from disk"})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "mnemonic acknowledged and cleared from memory"})
 }
 
 type recoverKeysRequest struct {

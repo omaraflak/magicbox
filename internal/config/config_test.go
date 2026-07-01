@@ -51,7 +51,7 @@ func TestLoadOrGenerateKeys_CreatesKeysAndMnemonic(t *testing.T) {
 	coreDir := filepath.Join(tempDir, "core")
 	_ = os.MkdirAll(coreDir, 0750)
 
-	privPEM, pubPEM, encKeyPEM, encPubPEM, err := loadOrGenerateKeys(tempDir)
+	privPEM, pubPEM, encKeyPEM, encPubPEM, mnemonic, err := loadOrGenerateKeys(tempDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,9 +60,13 @@ func TestLoadOrGenerateKeys_CreatesKeysAndMnemonic(t *testing.T) {
 		t.Errorf("expected all 4 keys to be generated and populated")
 	}
 
-	// Verify files exist
-	if _, err := os.Stat(filepath.Join(coreDir, "mnemonic")); os.IsNotExist(err) {
-		t.Errorf("expected mnemonic file to exist")
+	if mnemonic == "" {
+		t.Errorf("expected generated mnemonic to be returned, got empty string")
+	}
+
+	// Verify key files exist, but mnemonic file does NOT exist
+	if _, err := os.Stat(filepath.Join(coreDir, "mnemonic")); err == nil || !os.IsNotExist(err) {
+		t.Errorf("expected mnemonic file to NOT exist on disk")
 	}
 	if _, err := os.Stat(filepath.Join(coreDir, "identity.key")); os.IsNotExist(err) {
 		t.Errorf("expected identity private key file to exist")
@@ -83,12 +87,19 @@ func TestLoadOrGenerateKeys_ReadsExistingKeys(t *testing.T) {
 	coreDir := filepath.Join(tempDir, "core")
 	_ = os.MkdirAll(coreDir, 0750)
 
-	priv1, pub1, encKey1, encPub1, _ := loadOrGenerateKeys(tempDir)
+	priv1, pub1, encKey1, encPub1, mnemonic1, _ := loadOrGenerateKeys(tempDir)
 
-	// Call again, should read existing
-	priv2, pub2, encKey2, encPub2, err := loadOrGenerateKeys(tempDir)
+	// Call again, should read existing and return empty mnemonic
+	priv2, pub2, encKey2, encPub2, mnemonic2, err := loadOrGenerateKeys(tempDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mnemonic2 != "" {
+		t.Errorf("expected empty mnemonic on reload, got %q", mnemonic2)
+	}
+	if mnemonic1 == "" {
+		t.Errorf("expected mnemonic1 to not be empty")
 	}
 
 	if !bytes.Equal(priv1, priv2) {
@@ -121,13 +132,9 @@ func TestRecoverKeys_Success(t *testing.T) {
 		t.Fatalf("RecoverKeys returned error: %v", err)
 	}
 
-	// Read back the mnemonic file.
-	gotMnemonic, err := os.ReadFile(filepath.Join(coreDir, "mnemonic"))
-	if err != nil {
-		t.Fatalf("failed to read mnemonic file: %v", err)
-	}
-	if string(gotMnemonic) != mnemonic {
-		t.Errorf("expected mnemonic %q, got %q", mnemonic, string(gotMnemonic))
+	// Verify the mnemonic file does NOT exist.
+	if _, err := os.Stat(filepath.Join(coreDir, "mnemonic")); err == nil || !os.IsNotExist(err) {
+		t.Errorf("expected mnemonic file to NOT exist on disk after recovery")
 	}
 
 	// Read back key files and compare with independent derivation.
@@ -169,4 +176,5 @@ func TestRecoverKeys_InvalidMnemonicFails(t *testing.T) {
 		t.Error("expected error for invalid mnemonic, got nil")
 	}
 }
+
 

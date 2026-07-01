@@ -122,8 +122,8 @@ export default function MnemonicModal({ mnemonic, onAcknowledge, loading }) {
                     color: 'var(--accent-error)',
                     fontWeight: 500,
                 }}>
-                    ⚠️ This phrase will not be shown again automatically. You can view it later in Admin Console → Encryption Keys.
-                </p>
+					⚠️ This phrase will be permanently cleared from memory once you click confirm. It is never stored on disk and cannot be retrieved later.
+				</p>
             </div>
         </div>
     );
