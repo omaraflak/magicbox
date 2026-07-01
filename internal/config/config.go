@@ -23,6 +23,7 @@ type Config struct {
 	PublicKeyPEM     []byte
 	EncryptionKeyPEM []byte
 	EncryptionPubPEM []byte
+	MnemonicPath     string
 }
 
 // Load reads configuration from environment variables and initializes
@@ -89,6 +90,7 @@ func Load() (*Config, error) {
 		PublicKeyPEM:     pubPEM,
 		EncryptionKeyPEM: encKeyPEM,
 		EncryptionPubPEM: encPubPEM,
+		MnemonicPath:     filepath.Join(root, "core", "mnemonic"),
 	}, nil
 }
 
@@ -180,24 +182,18 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 
 	// Otherwise, load or generate mnemonic
 	var mnemonic string
-	passphrase := os.Getenv("MAGICBOX_RECOVERY_PASSPHRASE")
-	if passphrase != "" {
-		mnemonic = passphrase
-		log.Println("Initializing Magicbox keys from MAGICBOX_RECOVERY_PASSPHRASE")
+	mBytes, err := os.ReadFile(mnemonicPath)
+	if err == nil {
+		mnemonic = string(mBytes)
 	} else {
-		mBytes, err := os.ReadFile(mnemonicPath)
-		if err == nil {
-			mnemonic = string(mBytes)
-		} else {
-			mnemonic, err = crypto.GenerateMnemonic()
-			if err != nil {
-				return nil, nil, nil, nil, fmt.Errorf("failed to generate mnemonic: %w", err)
-			}
-			if err := os.WriteFile(mnemonicPath, []byte(mnemonic), 0600); err != nil {
-				return nil, nil, nil, nil, fmt.Errorf("failed to write mnemonic: %w", err)
-			}
-			log.Println("New BIP-39 mnemonic generated and saved to core/mnemonic")
+		mnemonic, err = crypto.GenerateMnemonic()
+		if err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("failed to generate mnemonic: %w", err)
 		}
+		if err := os.WriteFile(mnemonicPath, []byte(mnemonic), 0600); err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("failed to write mnemonic: %w", err)
+		}
+		log.Println("New BIP-39 mnemonic generated and saved to core/mnemonic")
 	}
 
 	// Derive keys from mnemonic
@@ -239,4 +235,58 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 	}
 
 	return privPEM, pubPEM, encKeyPEM, encPubPEM, nil
+}
+
+// RecoverKeys derives Ed25519/X25519 keys from a mnemonic and overwrites all key files on disk.
+func RecoverKeys(root string, mnemonic string) error {
+	mnemonicPath := filepath.Join(root, "core", "mnemonic")
+	privPath := filepath.Join(root, "core", "identity.key")
+	pubPath := filepath.Join(root, "core", "identity.pub")
+	encKeyPath := filepath.Join(root, "core", "encryption.key")
+	encPubPath := filepath.Join(root, "core", "encryption.pub")
+
+	// Derive keys from mnemonic (validates mnemonic internally).
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
+	if err != nil {
+		return fmt.Errorf("failed to derive keys from mnemonic: %w", err)
+	}
+
+	// Marshal keys to PEM.
+	privPEM, err := crypto.MarshalPrivateKey(edPriv)
+	if err != nil {
+		return fmt.Errorf("failed to marshal identity private key: %w", err)
+	}
+	pubPEM, err := crypto.MarshalPublicKey(edPriv.Public())
+	if err != nil {
+		return fmt.Errorf("failed to marshal identity public key: %w", err)
+	}
+	encKeyPEM, err := crypto.MarshalPrivateKey(xPriv)
+	if err != nil {
+		return fmt.Errorf("failed to marshal encryption private key: %w", err)
+	}
+	encPubPEM, err := crypto.MarshalPublicKey(xPriv.PublicKey())
+	if err != nil {
+		return fmt.Errorf("failed to marshal encryption public key: %w", err)
+	}
+
+	// Write mnemonic.
+	if err := os.WriteFile(mnemonicPath, []byte(mnemonic), 0600); err != nil {
+		return fmt.Errorf("failed to write mnemonic: %w", err)
+	}
+
+	// Write all key files.
+	if err := os.WriteFile(privPath, privPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write identity private key: %w", err)
+	}
+	if err := os.WriteFile(pubPath, pubPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write identity public key: %w", err)
+	}
+	if err := os.WriteFile(encKeyPath, encKeyPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write encryption private key: %w", err)
+	}
+	if err := os.WriteFile(encPubPath, encPubPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write encryption public key: %w", err)
+	}
+
+	return nil
 }

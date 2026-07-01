@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/logging"
 )
 
@@ -362,3 +363,65 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 		"new_id":  newID,
 	})
 }
+
+func (s *Server) handleAdminGetMnemonic(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile(s.config.MnemonicPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Mnemonic file has been deleted -> it has been acknowledged!
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"mnemonic":     "",
+				"acknowledged": true,
+			})
+			return
+		}
+		s.logger.Error("admin get mnemonic: failed to read mnemonic file", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "failed to read mnemonic")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"mnemonic":     string(data),
+		"acknowledged": false,
+	})
+}
+
+func (s *Server) handleAdminAcknowledgeMnemonic(w http.ResponseWriter, r *http.Request) {
+	// Security: Wipe the plaintext mnemonic file from disk upon acknowledgment.
+	if err := os.Remove(s.config.MnemonicPath); err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.Error("admin acknowledge mnemonic: failed to delete mnemonic file", logging.F("error", err.Error()))
+			writeError(w, http.StatusInternalServerError, "failed to acknowledge mnemonic")
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "mnemonic acknowledged and cleared from disk"})
+}
+
+type recoverKeysRequest struct {
+	Mnemonic string `json:"mnemonic"`
+}
+
+func (s *Server) handleAdminRecoverKeys(w http.ResponseWriter, r *http.Request) {
+	var req recoverKeysRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Mnemonic == "" {
+		writeError(w, http.StatusBadRequest, "mnemonic is required")
+		return
+	}
+
+	if err := config.RecoverKeys(s.config.Root, req.Mnemonic); err != nil {
+		s.logger.Error("admin recover keys: failed to recover keys", logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
+		return
+	}
+
+	s.logger.Info("admin: keys recovered from mnemonic, restart required")
+	writeJSON(w, http.StatusOK, map[string]string{"message": "keys recovered successfully, restart required"})
+}
+

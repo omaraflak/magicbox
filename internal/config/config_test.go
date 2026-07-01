@@ -105,53 +105,68 @@ func TestLoadOrGenerateKeys_ReadsExistingKeys(t *testing.T) {
 	}
 }
 
-func TestLoadOrGenerateKeys_DeterministicRecovery(t *testing.T) {
+func TestRecoverKeys_Success(t *testing.T) {
+	tempDir := t.TempDir()
+	coreDir := filepath.Join(tempDir, "core")
+	_ = os.MkdirAll(coreDir, 0750)
+
+	// Generate a valid mnemonic.
 	mnemonic, err := crypto.GenerateMnemonic()
 	if err != nil {
 		t.Fatalf("failed to generate mnemonic: %v", err)
 	}
 
-	os.Setenv("MAGICBOX_RECOVERY_PASSPHRASE", mnemonic)
-	defer os.Unsetenv("MAGICBOX_RECOVERY_PASSPHRASE")
+	// Call RecoverKeys.
+	if err := RecoverKeys(tempDir, mnemonic); err != nil {
+		t.Fatalf("RecoverKeys returned error: %v", err)
+	}
 
-	// Generate in TempDir 1
-	tempDir1 := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(tempDir1, "core"), 0750)
-	priv1, pub1, encKey1, encPub1, err := loadOrGenerateKeys(tempDir1)
+	// Read back the mnemonic file.
+	gotMnemonic, err := os.ReadFile(filepath.Join(coreDir, "mnemonic"))
 	if err != nil {
-		t.Fatalf("unexpected error on dir 1: %v", err)
+		t.Fatalf("failed to read mnemonic file: %v", err)
+	}
+	if string(gotMnemonic) != mnemonic {
+		t.Errorf("expected mnemonic %q, got %q", mnemonic, string(gotMnemonic))
 	}
 
-	// Generate in TempDir 2
-	tempDir2 := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(tempDir2, "core"), 0750)
-	priv2, pub2, encKey2, encPub2, err := loadOrGenerateKeys(tempDir2)
+	// Read back key files and compare with independent derivation.
+	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic)
 	if err != nil {
-		t.Fatalf("unexpected error on dir 2: %v", err)
+		t.Fatalf("failed to derive keys: %v", err)
 	}
 
-	if !bytes.Equal(priv1, priv2) {
-		t.Errorf("deterministic identity private keys did not match across directories")
+	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
+	wantPubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	wantEncKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+	wantEncPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
+
+	gotPrivPEM, _ := os.ReadFile(filepath.Join(coreDir, "identity.key"))
+	gotPubPEM, _ := os.ReadFile(filepath.Join(coreDir, "identity.pub"))
+	gotEncKeyPEM, _ := os.ReadFile(filepath.Join(coreDir, "encryption.key"))
+	gotEncPubPEM, _ := os.ReadFile(filepath.Join(coreDir, "encryption.pub"))
+
+	if !bytes.Equal(wantPrivPEM, gotPrivPEM) {
+		t.Errorf("identity private key mismatch")
 	}
-	if !bytes.Equal(pub1, pub2) {
-		t.Errorf("deterministic identity public keys did not match across directories")
+	if !bytes.Equal(wantPubPEM, gotPubPEM) {
+		t.Errorf("identity public key mismatch")
 	}
-	if !bytes.Equal(encKey1, encKey2) {
-		t.Errorf("deterministic encryption private keys did not match across directories")
+	if !bytes.Equal(wantEncKeyPEM, gotEncKeyPEM) {
+		t.Errorf("encryption private key mismatch")
 	}
-	if !bytes.Equal(encPub1, encPub2) {
-		t.Errorf("deterministic encryption public keys did not match across directories")
+	if !bytes.Equal(wantEncPubPEM, gotEncPubPEM) {
+		t.Errorf("encryption public key mismatch")
 	}
 }
 
-func TestLoadOrGenerateKeys_InvalidRecoveryPassphraseFails(t *testing.T) {
-	os.Setenv("MAGICBOX_RECOVERY_PASSPHRASE", "invalid passphrase structure")
-	defer os.Unsetenv("MAGICBOX_RECOVERY_PASSPHRASE")
-
+func TestRecoverKeys_InvalidMnemonicFails(t *testing.T) {
 	tempDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tempDir, "core"), 0750)
-	_, _, _, _, err := loadOrGenerateKeys(tempDir)
+
+	err := RecoverKeys(tempDir, "invalid mnemonic phrase")
 	if err == nil {
-		t.Error("expected error for invalid recovery passphrase, got nil")
+		t.Error("expected error for invalid mnemonic, got nil")
 	}
 }
+

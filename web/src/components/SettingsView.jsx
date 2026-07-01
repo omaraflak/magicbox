@@ -6,6 +6,7 @@ import AdminUsersTab from './AdminUsersTab';
 import AdminRegistriesTab from './AdminRegistriesTab';
 import AdminLogsTab from './AdminLogsTab';
 import AdminUpgradeTab from './AdminUpgradeTab';
+import AdminKeysTab from './AdminKeysTab';
 
 export default function SettingsView({ 
     user, 
@@ -34,7 +35,11 @@ export default function SettingsView({
     onDeleteContact,
     onUpgradeCore,
     upgradeError,
-    upgradeStatus
+    upgradeStatus,
+    mnemonicData,
+    onRecoverKeys,
+    recoverError,
+    recoverStatus
 }) {
     return (
         <div className="admin-layout animate-fade-in">
@@ -126,12 +131,19 @@ export default function SettingsView({
                             >
                                 Registries
                             </button>
-                             <button 
+                            <button 
                                 className={`btn ${adminTab === 'logs' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => onAdminTabChange('logs')}
                                 style={{ padding: '6px 16px', fontSize: '0.85rem' }}
                             >
                                 Kernel Logs
+                            </button>
+                            <button 
+                                className={`btn ${adminTab === 'keys' ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => onAdminTabChange('keys')}
+                                style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+                            >
+                                🔑 Encryption Keys
                             </button>
                             <button 
                                 className={`btn ${adminTab === 'upgrade' ? 'btn-primary' : 'btn-secondary'}`}
@@ -171,6 +183,15 @@ export default function SettingsView({
                                 onUpgrade={onUpgradeCore} 
                                 error={upgradeError} 
                                 status={upgradeStatus}
+                            />
+                        )}
+                        {adminTab === 'keys' && (
+                            <AdminKeysTab
+                                mnemonic={mnemonicData?.mnemonic || ''}
+                                onRecover={onRecoverKeys}
+                                loading={loading}
+                                error={recoverError}
+                                status={recoverStatus}
                             />
                         )}
                     </div>

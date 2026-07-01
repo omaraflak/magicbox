@@ -11,9 +11,10 @@ export const ROUTES = {
     SETTINGS_ADMIN_REGISTRIES: '/settings/admin/registries',
     SETTINGS_ADMIN_LOGS: '/settings/admin/logs',
     SETTINGS_ADMIN_UPGRADE: '/settings/admin/upgrade',
+    SETTINGS_ADMIN_KEYS: '/settings/admin/keys',
 };
 
-const ADMIN_SUBTABS = ['users', 'registries', 'logs', 'upgrade'];
+const ADMIN_SUBTABS = ['users', 'registries', 'logs', 'keys', 'upgrade'];
 
 /**
  * Derive the app view, settings section, and admin sub-tab from a URL pathname.

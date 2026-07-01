@@ -11,6 +11,8 @@ import InstallAppModal from './components/InstallAppModal';
 import CreateUserModal from './components/CreateUserModal';
 import AddRegistryModal from './components/AddRegistryModal';
 import Modal from './components/Modal';
+import MnemonicModal from './components/MnemonicModal';
+import AdminKeysTab from './components/AdminKeysTab';
 
 import { 
     apiRequest, 
@@ -43,6 +45,10 @@ export default function App() {
     const [actionError, setActionError] = useState('');
     const [upgradeStatus, setUpgradeStatus] = useState('');
     const [upgradeError, setUpgradeError] = useState('');
+    const [mnemonicData, setMnemonicData] = useState(null);
+    const [showMnemonicModal, setShowMnemonicModal] = useState(false);
+    const [recoverStatus, setRecoverStatus] = useState('');
+    const [recoverError, setRecoverError] = useState('');
     const [rebuildingAppId, setRebuildingAppId] = useState(null);
     const [uninstallingAppId, setUninstallingAppId] = useState(null);
     const [startingAppId, setStartingAppId] = useState(null);
@@ -221,12 +227,18 @@ export default function App() {
         if (status === 200) setInvitationInfo(data);
     };
 
+    const loadMnemonic = async () => {
+        const { status, data } = await callAPI('GET', '/admin/mnemonic');
+        if (status === 200) setMnemonicData(data);
+    };
+
     useEffect(() => {
         if (view === 'settings') {
             if (settingsSection === 'admin') {
                 loadUsers();
                 loadRegistries();
                 loadLogs();
+                loadMnemonic();
             } else if (settingsSection === 'contacts') {
                 loadContacts();
                 loadInvitationInfo();
@@ -247,6 +259,14 @@ export default function App() {
             const me = await fetchMe(csrfToken);
             if (me) {
                 setUser(me);
+                // Load mnemonic for first-boot display
+                if (me.is_admin) {
+                    const { status: mStatus, data: mData } = await callAPI('GET', '/admin/mnemonic');
+                    if (mStatus === 200 && mData && !mData.acknowledged) {
+                        setMnemonicData(mData);
+                        setShowMnemonicModal(true);
+                    }
+                }
                 navigate('dashboard');
             }
         } else {
@@ -462,6 +482,30 @@ export default function App() {
         loadLogs(level);
     };
 
+    // Mnemonic: Acknowledge
+    const handleAcknowledgeMnemonic = async () => {
+        setActionLoading(true);
+        await callAPI('POST', '/admin/mnemonic/acknowledge');
+        setShowMnemonicModal(false);
+        setActionLoading(false);
+        setMnemonicData(prev => prev ? { ...prev, acknowledged: true } : prev);
+    };
+
+    // Mnemonic: Recover Keys
+    const handleRecoverKeys = async (mnemonic) => {
+        setRecoverError('');
+        setRecoverStatus('');
+        setActionLoading(true);
+        const { status, data } = await callAPI('POST', '/admin/recover', { mnemonic });
+        setActionLoading(false);
+        if (status === 200) {
+            setRecoverStatus(data?.message || 'Keys recovered. Restart required.');
+            loadMnemonic();
+        } else {
+            setRecoverError(data?.error || 'Recovery failed');
+        }
+    };
+
     // Core Self-Upgrade
     const handleUpgradeCore = async (image) => {
         showConfirm(`Are you sure you want to upgrade the core system to image "${image}"? This will restart the container.`, async () => {
@@ -579,6 +623,10 @@ export default function App() {
                         onUpgradeCore={handleUpgradeCore}
                         upgradeError={upgradeError}
                         upgradeStatus={upgradeStatus}
+                        mnemonicData={mnemonicData}
+                        onRecoverKeys={handleRecoverKeys}
+                        recoverError={recoverError}
+                        recoverStatus={recoverStatus}
                     />
                 )}
             </div>
@@ -675,6 +723,14 @@ export default function App() {
                     <button className="btn btn-primary" onClick={confirmModal.onConfirm}>OK</button>
                 </div>
             </Modal>
+
+            {showMnemonicModal && mnemonicData && (
+                <MnemonicModal
+                    mnemonic={mnemonicData.mnemonic}
+                    onAcknowledge={handleAcknowledgeMnemonic}
+                    loading={actionLoading}
+                />
+            )}
         </div>
     );
 }
