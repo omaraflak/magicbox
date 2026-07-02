@@ -79,11 +79,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/admin/registries/{id}", auth(admin(http.HandlerFunc(s.handleAdminDeleteRegistry))))
 	mux.Handle("GET /api/v1/admin/logs", auth(admin(http.HandlerFunc(s.handleAdminListLogs))))
 	mux.Handle("POST /api/v1/admin/upgrade", auth(admin(http.HandlerFunc(s.handleAdminUpgrade))))
+	mux.Handle("POST /api/v1/admin/restart", auth(admin(http.HandlerFunc(s.handleAdminRestart))))
 	mux.Handle("GET /api/v1/admin/mnemonic", auth(admin(http.HandlerFunc(s.handleAdminGetMnemonic))))
 	mux.Handle("POST /api/v1/admin/mnemonic/acknowledge", auth(admin(http.HandlerFunc(s.handleAdminAcknowledgeMnemonic))))
 	mux.Handle("POST /api/v1/admin/keys/rotate-encryption", auth(admin(http.HandlerFunc(s.handleAdminRotateEncryptionKeys))))
 	mux.Handle("POST /api/v1/admin/keys/rotate-identity", auth(admin(http.HandlerFunc(s.handleAdminRotateIdentityKeys))))
-	mux.Handle("POST /api/v1/admin/restart", auth(admin(http.HandlerFunc(s.handleAdminRestart))))
 
 	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
 	mux.Handle("/u/", auth(AppAccessMiddleware()(http.HandlerFunc(s.handleAppProxy))))

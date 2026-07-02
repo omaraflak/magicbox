@@ -127,9 +127,13 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity }) {
                 fontSize: '0.85rem',
                 color: encError ? 'var(--accent-error)' : 'var(--accent-success)',
                 marginBottom: '20px',
-                textAlign: 'left'
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
               }}>
-                {encError ? `❌ ${encError}` : `✅ ${encStatus}`}
+                <span>{encError ? `❌ ${encError}` : `✅ ${encStatus}`}</span>
+                {!encError && encStatus.includes('Restarting') && <div className="spinner-sm" />}
               </div>
             )}
 
@@ -200,9 +204,13 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity }) {
                 fontSize: '0.85rem',
                 color: idError ? 'var(--accent-error)' : 'var(--accent-success)',
                 marginBottom: '20px',
-                textAlign: 'left'
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
               }}>
-                {idError ? `❌ ${idError}` : `✅ ${idStatus}`}
+                <span>{idError ? `❌ ${idError}` : `✅ ${idStatus}`}</span>
+                {!idError && idStatus.includes('Restarting') && <div className="spinner-sm" />}
               </div>
             )}
 
