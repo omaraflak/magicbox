@@ -13,7 +13,7 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, loa
     const handleRotateIdentitySubmit = (e) => {
         e.preventDefault();
         // Optional mnemonic, if empty it generates a new one.
-        if (window.confirm("⚠️ WARNING: This will completely reset your cryptographic identity (Peer ID). You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?")) {
+        if (window.confirm("⚠️ WARNING: This will completely RESET your cryptographic identity (Peer ID). You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?")) {
             onRotateIdentity(idMnemonic.trim() || null);
         }
     };
@@ -27,7 +27,7 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, loa
                 border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)'
             }}>
-                <div className="tab-header" style={{ marginBottom: '16px' }}>
+                <div className="tab-header" style={{ marginBottom: '16px', textAlign: 'left' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                         Rotate Encryption Keys
                     </h3>
@@ -76,17 +76,18 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, loa
                 </form>
             </div>
 
-            {/* Section 2: Danger Zone - Rotate Identity */}
+            {/* Section 2: Danger Zone - Reset Identity */}
             <div style={{
                 background: 'rgba(239, 68, 68, 0.02)',
                 padding: '24px',
                 border: '1px solid rgba(239, 68, 68, 0.2)',
-                borderRadius: 'var(--radius-md)'
+                borderRadius: 'var(--radius-md)',
+                textAlign: 'left'
             }}>
-                <div className="tab-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="tab-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start', textAlign: 'left' }}>
                     <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#ef4444' }}>
-                        Danger Zone: Rotate P2P Identity
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#ef4444', margin: 0, textAlign: 'left' }}>
+                        Danger Zone: Reset P2P Identity
                     </h3>
                 </div>
 
@@ -127,7 +128,7 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, loa
                         disabled={loading}
                         style={{ padding: '10px 24px', fontSize: '0.9rem' }}
                     >
-                        {loading ? 'Resetting...' : 'Reset & Rotate P2P Identity'}
+                        {loading ? 'Resetting...' : 'Reset P2P Identity'}
                     </button>
                 </form>
             </div>
@@ -141,7 +142,8 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, loa
                     borderRadius: 'var(--radius-md)',
                     fontSize: '0.9rem',
                     color: error ? 'var(--accent-error)' : 'var(--accent-success)',
-                    marginTop: '20px'
+                    marginTop: '20px',
+                    textAlign: 'left'
                 }}>
                     {error ? `❌ ${error}` : `✅ ${status}`}
                 </div>

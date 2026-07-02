@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 export default function SetupView({ onSubmit, onRecoverSubmit, error, loading }) {
-    const [mode, setMode] = useState('new'); // 'new' or 'recover'
+    const [isRecover, setIsRecover] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -21,7 +21,7 @@ export default function SetupView({ onSubmit, onRecoverSubmit, error, loading })
             return;
         }
 
-        if (mode === 'recover') {
+        if (isRecover) {
             const formattedMnemonic = mnemonic.trim();
             if (!formattedMnemonic) {
                 setValidationError('Mnemonic phrase is required for recovery');
@@ -47,53 +47,6 @@ export default function SetupView({ onSubmit, onRecoverSubmit, error, loading })
                 <p>Initialize your personal cloud kernel. Create the primary administrator account.</p>
             </div>
 
-            {/* Mode Tab Switcher */}
-            <div style={{
-                display: 'flex',
-                background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                padding: '4px',
-                marginBottom: '28px'
-            }}>
-                <button
-                    type="button"
-                    onClick={() => { setMode('new'); setValidationError(''); }}
-                    style={{
-                        flex: 1,
-                        background: mode === 'new' ? 'var(--bg-card)' : 'transparent',
-                        color: mode === 'new' ? 'var(--text-primary)' : 'var(--text-muted)',
-                        border: 'none',
-                        padding: '8px 12px',
-                        fontSize: '0.85rem',
-                        fontWeight: 600,
-                        borderRadius: 'calc(var(--radius-md) - 2px)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                    }}
-                >
-                    Create New Identity
-                </button>
-                <button
-                    type="button"
-                    onClick={() => { setMode('recover'); setValidationError(''); }}
-                    style={{
-                        flex: 1,
-                        background: mode === 'recover' ? 'var(--bg-card)' : 'transparent',
-                        color: mode === 'recover' ? 'var(--text-primary)' : 'var(--text-muted)',
-                        border: 'none',
-                        padding: '8px 12px',
-                        fontSize: '0.85rem',
-                        fontWeight: 600,
-                        borderRadius: 'calc(var(--radius-md) - 2px)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                    }}
-                >
-                    Recover Identity
-                </button>
-            </div>
-
             <form onSubmit={handleSubmit} className="auth-form">
                 <div className="form-group">
                     <label htmlFor="setup-username">Username</label>
@@ -109,44 +62,6 @@ export default function SetupView({ onSubmit, onRecoverSubmit, error, loading })
                     />
                     <span className="field-hint">Alphanumeric and underscores only, 3-32 characters.</span>
                 </div>
-                
-                {mode === 'recover' && (
-                    <div className="form-group" style={{ marginBottom: '20px' }}>
-                        <label htmlFor="setup-mnemonic">12-Word Recovery Phrase</label>
-                        <textarea 
-                            id="setup-mnemonic" 
-                            placeholder="word1 word2 word3..." 
-                            required 
-                            rows={3}
-                            value={mnemonic}
-                            onChange={(e) => setMnemonic(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '12px 16px',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: 'var(--radius-md)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                fontFamily: 'monospace',
-                                fontSize: '0.9rem',
-                                resize: 'none',
-                            }}
-                            disabled={loading}
-                        />
-                        <div style={{
-                            padding: '12px 16px',
-                            background: 'rgba(239, 68, 68, 0.03)',
-                            border: '1px solid rgba(239, 68, 68, 0.2)',
-                            borderRadius: 'var(--radius-md)',
-                            marginTop: '10px',
-                            fontSize: '0.78rem',
-                            color: 'var(--accent-error)',
-                            lineHeight: 1.5
-                        }}>
-                            ⚠️ <strong>Warning:</strong> Do not recover your identity here if your previous keys were compromised. A compromised mnemonic will generate compromised keys. If compromised, choose "Create New Identity" instead.
-                        </div>
-                    </div>
-                )}
 
                 <div className="form-group">
                     <label htmlFor="setup-password">Password</label>
@@ -162,7 +77,7 @@ export default function SetupView({ onSubmit, onRecoverSubmit, error, loading })
                     />
                 </div>
                 
-                <div className="form-group">
+                <div className="form-group" style={{ marginBottom: '24px' }}>
                     <label htmlFor="setup-confirm-password">Confirm Password</label>
                     <input 
                         type="password" 
@@ -176,13 +91,80 @@ export default function SetupView({ onSubmit, onRecoverSubmit, error, loading })
                     />
                 </div>
 
-                {activeError && <div className="error-box">{activeError}</div>}
+                {/* Expandable Recover Identity Section */}
+                <div style={{ marginBottom: '24px', textAlign: 'left' }}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsRecover(!isRecover);
+                            setValidationError('');
+                        }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent)',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            padding: 0,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                        disabled={loading}
+                    >
+                        <span style={{ fontSize: '0.7rem', display: 'inline-block', transform: isRecover ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▶</span>
+                        <span>{isRecover ? 'Hide Recovery Options' : 'Recover Existing Identity'}</span>
+                    </button>
+
+                    {isRecover && (
+                        <div style={{ marginTop: '16px', animation: 'animate-fade-in 0.2s ease' }}>
+                            <div className="form-group" style={{ marginBottom: '16px' }}>
+                                <label htmlFor="setup-mnemonic">12-Word Recovery Phrase</label>
+                                <textarea 
+                                    id="setup-mnemonic" 
+                                    placeholder="Enter your 12-word recovery phrase..." 
+                                    required={isRecover}
+                                    rows={3}
+                                    value={mnemonic}
+                                    onChange={(e) => setMnemonic(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-input)',
+                                        color: 'var(--text-primary)',
+                                        fontFamily: 'monospace',
+                                        fontSize: '0.9rem',
+                                        resize: 'none',
+                                    }}
+                                    disabled={loading}
+                                />
+                            </div>
+
+                            <div style={{
+                                padding: '12px 16px',
+                                background: 'rgba(239, 68, 68, 0.03)',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                borderRadius: 'var(--radius-md)',
+                                fontSize: '0.78rem',
+                                color: 'var(--accent-error)',
+                                lineHeight: 1.5
+                            }}>
+                                ⚠️ <strong>Warning:</strong> Do not recover your identity here if your previous keys were compromised. A compromised mnemonic will generate compromised keys. If you want to replace a compromised identity, keep this section closed and create a fresh identity instead.
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {activeError && <div className="error-box" style={{ marginBottom: '20px' }}>{activeError}</div>}
 
                 <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
                     <span>
                         {loading 
-                            ? (mode === 'recover' ? 'Recovering...' : 'Initializing...') 
-                            : (mode === 'recover' ? 'Recover & Initialize OS' : 'Initialize OS')
+                            ? (isRecover ? 'Recovering...' : 'Initializing...') 
+                            : (isRecover ? 'Recover & Initialize OS' : 'Initialize OS')
                         }
                     </span>
                 </button>
