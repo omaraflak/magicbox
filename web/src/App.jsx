@@ -70,7 +70,7 @@ export default function App() {
         isAlert: false,
     });
 
-    const showConfirm = (message, onConfirm, title = 'Confirm Action') => {
+  const showConfirm = (message, onConfirm, title = 'Confirm Action', onCancel = null) => {
         setConfirmModal({
             isOpen: true,
             title,
@@ -79,7 +79,10 @@ export default function App() {
                 setConfirmModal(prev => ({ ...prev, isOpen: false }));
                 onConfirm();
             },
-            onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+          onCancel: () => {
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            if (onCancel) onCancel();
+          },
             isAlert: false,
         });
     };
@@ -521,19 +524,28 @@ export default function App() {
 
     // Reset & Rotate Identity Keys (Danger Zone)
     const handleRotateIdentityKeys = async (mnemonic) => {
-        const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
-        if (status === 200) {
-            if (data?.mnemonic) {
-                // If a new mnemonic was generated, show the modal so they can copy it!
-                setMnemonicData({ mnemonic: data.mnemonic, acknowledged: false });
-                setShowMnemonicModal(true);
-            } else {
-                loadMnemonic();
-            }
-            return { success: true, message: data?.message || 'Identity keys reset successfully. System reset. Restart required.' };
-        } else {
-            return { success: false, error: data?.error || 'Reset failed' };
-        }
+      return new Promise((resolve) => {
+        showConfirm(
+          "⚠️ WARNING: This will completely RESET your cryptographic identity. You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?",
+          async () => {
+                  const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
+                  if (status === 200) {
+                    if (data?.mnemonic) {
+                      // If a new mnemonic was generated, show the modal so they can copy it!
+                      setMnemonicData({ mnemonic: data.mnemonic, acknowledged: false });
+                      setShowMnemonicModal(true);
+                    } else {
+                      loadMnemonic();
+                    }
+                      resolve({ success: true, message: data?.message || 'Identity keys reset successfully. System reset. Restart required.' });
+                    } else {
+                      resolve({ success: false, error: data?.error || 'Reset failed' });
+                    }
+              },
+              "Confirm Identity Reset",
+              () => resolve({ success: false, cancelled: true })
+            );
+        });
     };
 
     // Core Self-Upgrade

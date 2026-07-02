@@ -43,27 +43,29 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity }) {
   const handleRotateIdentitySubmit = async (e) => {
         e.preventDefault();
 
-        if (window.confirm("⚠️ WARNING: This will completely RESET your cryptographic identity (Peer ID). You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?")) {
-          setIdError('');
-          setIdStatus('');
-          // Clear other section's feedback
-          setEncError('');
-          setEncStatus('');
+        setIdError('');
+        setIdStatus('');
+        // Clear other section's feedback
+        setEncError('');
+        setEncStatus('');
 
-          setIdLoading(true);
-          try {
+        setIdLoading(true);
+        try {
             const result = await onRotateIdentity(idMnemonic.trim() || null);
-            if (result.success) {
-              setIdStatus(result.message);
-              setIdMnemonic(''); // clear input on success
-            } else {
-              setIdError(result.error);
+            if (result.cancelled) {
+                // User cancelled the modal, do not show status or error.
+                return;
             }
-          } catch (err) {
+            if (result.success) {
+                setIdStatus(result.message);
+                setIdMnemonic(''); // clear input on success
+            } else {
+                setIdError(result.error);
+            }
+        } catch (err) {
             setIdError(err.message || 'Operation failed');
-          } finally {
+        } finally {
             setIdLoading(false);
-          }
         }
     };
 
