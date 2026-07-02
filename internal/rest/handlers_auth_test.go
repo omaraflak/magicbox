@@ -5,7 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/magicbox/core/internal/crypto"
+	"github.com/magicbox/core/internal/db"
 )
 
 func TestSetupFlow_Success(t *testing.T) {
@@ -219,4 +224,116 @@ func getSessionCookieForUser(t *testing.T, handler http.Handler, username, passw
 	}
 	t.Fatalf("session cookie not found for %s", username)
 	return nil
+}
+
+func TestSetupRecover_Success(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	// Create core directory so keys can be written.
+	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
+
+	// Generate a valid mnemonic
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+
+	setupBody := map[string]string{
+		"username": "omar",
+		"password": "mypassword123",
+		"mnemonic": mnemonic,
+	}
+	bodyBytes, _ := json.Marshal(setupBody)
+	req := httptest.NewRequest("POST", "/api/v1/setup/recover", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected setup status 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	// Capture and verify session cookie
+	cookies := rr.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == SessionCookieName {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("expected session cookie to be set")
+	}
+
+	claims, err := ValidateSessionToken(cfg.JWTSecret, sessionCookie.Value)
+	if err != nil {
+		t.Fatalf("failed to validate session: %v", err)
+	}
+	if claims.Username != "omar" {
+		t.Errorf("expected 'omar', got %q", claims.Username)
+	}
+
+	// Check DB user count
+	count, _ := database.UserCount()
+	if count != 1 {
+		t.Errorf("expected 1 user in database, got %d", count)
+	}
+
+	// Check system settings
+	val1, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
+	val2, _ := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
+	if val1 != "0" || val2 != "0" {
+		t.Errorf("expected key indices to be initialized to '0', got identity=%q encryption=%q", val1, val2)
+	}
+}
+
+func TestSetupRecover_AlreadyCompleted(t *testing.T) {
+	handler, _, _ := setupTestServer(t)
+
+	// Perform standard setup once
+	setupBody := map[string]string{
+		"username": "omar",
+		"password": "mypassword123",
+	}
+	bodyBytes, _ := json.Marshal(setupBody)
+	req := httptest.NewRequest("POST", "/api/v1/setup", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("pre-setup failed: %d", rr.Code)
+	}
+
+	// Attempt recover setup
+	mnemonic, _ := crypto.GenerateMnemonic()
+	recoverBody := map[string]string{
+		"username": "omar2",
+		"password": "mypassword123",
+		"mnemonic": mnemonic,
+	}
+	bodyBytes, _ = json.Marshal(recoverBody)
+	req = httptest.NewRequest("POST", "/api/v1/setup/recover", bytes.NewReader(bodyBytes))
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestSetupRecover_InvalidMnemonic(t *testing.T) {
+	handler, _, _ := setupTestServer(t)
+
+	setupBody := map[string]string{
+		"username": "omar",
+		"password": "mypassword123",
+		"mnemonic": "invalid mnemonic words list here",
+	}
+	bodyBytes, _ := json.Marshal(setupBody)
+	req := httptest.NewRequest("POST", "/api/v1/setup/recover", bytes.NewReader(bodyBytes))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d", rr.Code)
+	}
 }

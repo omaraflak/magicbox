@@ -248,6 +248,24 @@ export default function App() {
 
     // 4. Action Handlers
 
+    // Setup and recover from existing mnemonic
+    const handleSetupRecover = async ({ username, password, mnemonic }) => {
+        setActionLoading(true);
+        setActionError('');
+        const { status, data } = await callAPI('POST', '/setup/recover', { username, password, mnemonic });
+        setActionLoading(false);
+        if (status === 201) {
+            // Auto login after setup
+            const me = await fetchMe(csrfToken);
+            if (me) {
+                setUser(me);
+                navigate('dashboard');
+            }
+        } else {
+            setActionError(data?.error || "Recovery setup failed");
+        }
+    };
+
     // Setup day-zero account
     const handleSetup = async ({ username, password }) => {
         setActionLoading(true);
@@ -491,18 +509,39 @@ export default function App() {
         setMnemonicData(prev => prev ? { ...prev, acknowledged: true } : prev);
     };
 
-    // Mnemonic: Recover Keys
-    const handleRecoverKeys = async (mnemonic, index) => {
+    // Rotate/Recover Encryption Keys
+    const handleRotateEncryptionKeys = async (mnemonic) => {
         setRecoverError('');
         setRecoverStatus('');
         setActionLoading(true);
-        const { status, data } = await callAPI('POST', '/admin/recover', { mnemonic, index: parseInt(index, 10) });
+        const { status, data } = await callAPI('POST', '/admin/keys/rotate-encryption', { mnemonic });
         setActionLoading(false);
         if (status === 200) {
-            setRecoverStatus(data?.message || 'Keys recovered successfully. Restart required.');
-            loadMnemonic(); // reload to get updated index from backend
+            setRecoverStatus(data?.message || 'Encryption keys rotated successfully. Restart required.');
+            loadMnemonic();
         } else {
-            setRecoverError(data?.error || 'Recovery failed');
+            setRecoverError(data?.error || 'Rotation failed');
+        }
+    };
+
+    // Reset & Rotate Identity Keys (Danger Zone)
+    const handleRotateIdentityKeys = async (mnemonic) => {
+        setRecoverError('');
+        setRecoverStatus('');
+        setActionLoading(true);
+        const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
+        setActionLoading(false);
+        if (status === 200) {
+            setRecoverStatus(data?.message || 'Identity keys rotated successfully. System reset. Restart required.');
+            if (data?.mnemonic) {
+                // If a new mnemonic was generated, show the modal so they can copy it!
+                setMnemonicData({ mnemonic: data.mnemonic, acknowledged: false });
+                setShowMnemonicModal(true);
+            } else {
+                loadMnemonic();
+            }
+        } else {
+            setRecoverError(data?.error || 'Reset failed');
         }
     };
 
@@ -561,7 +600,7 @@ export default function App() {
             <div className="main-viewport">
                 {(view === 'setup' || view === 'login') && (
                     <div className="container auth-container">
-                        {view === 'setup' && <SetupView onSubmit={handleSetup} error={actionError} loading={actionLoading} />}
+                        {view === 'setup' && <SetupView onSubmit={handleSetup} onRecoverSubmit={handleSetupRecover} error={actionError} loading={actionLoading} />}
                         {view === 'login' && <LoginView onSubmit={handleLogin} error={actionError} loading={actionLoading} />}
                     </div>
                 )}
@@ -624,7 +663,8 @@ export default function App() {
                         upgradeError={upgradeError}
                         upgradeStatus={upgradeStatus}
                         mnemonicData={mnemonicData}
-                        onRecoverKeys={handleRecoverKeys}
+                        onRotateEncryption={handleRotateEncryptionKeys}
+                        onRotateIdentity={handleRotateIdentityKeys}
                         recoverError={recoverError}
                         recoverStatus={recoverStatus}
                     />

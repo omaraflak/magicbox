@@ -132,20 +132,6 @@ func TestRecoverKeys_Success(t *testing.T) {
 		t.Fatalf("RecoverKeys returned error: %v", err)
 	}
 
-	// Verify the mnemonic file does NOT exist.
-	if _, err := os.Stat(filepath.Join(coreDir, "mnemonic")); err == nil || !os.IsNotExist(err) {
-		t.Errorf("expected mnemonic file to NOT exist on disk after recovery")
-	}
-
-	// Verify the key_index file exists and contains "0"
-	idxBytes, err := os.ReadFile(filepath.Join(coreDir, "key_index"))
-	if err != nil {
-		t.Fatalf("failed to read key_index: %v", err)
-	}
-	if string(idxBytes) != "0" {
-		t.Errorf("expected key_index to contain '0', got %q", string(idxBytes))
-	}
-
 	// Read back key files and compare with independent derivation.
 	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
 	if err != nil {
@@ -200,14 +186,6 @@ func TestRecoverKeys_CustomIndexSuccess(t *testing.T) {
 		t.Fatalf("RecoverKeys returned error: %v", err)
 	}
 
-	idxBytes, err := os.ReadFile(filepath.Join(coreDir, "key_index"))
-	if err != nil {
-		t.Fatalf("failed to read key_index: %v", err)
-	}
-	if string(idxBytes) != "3" {
-		t.Errorf("expected key_index to be '3', got %q", string(idxBytes))
-	}
-
 	// Read back key files and compare with independent derivation at index 3.
 	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 3)
 	if err != nil {
@@ -235,6 +213,43 @@ func TestRecoverKeys_CustomIndexSuccess(t *testing.T) {
 	}
 	if !bytes.Equal(wantEncPubPEM, gotEncPubPEM) {
 		t.Errorf("encryption public key mismatch")
+	}
+}
+
+func TestRotateEncryptionKey_Success(t *testing.T) {
+	tempDir := t.TempDir()
+	coreDir := filepath.Join(tempDir, "core")
+	_ = os.MkdirAll(coreDir, 0750)
+
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+
+	// Rotate encryption key to index 5
+	if err := RotateEncryptionKey(tempDir, mnemonic, 5); err != nil {
+		t.Fatalf("RotateEncryptionKey failed: %v", err)
+	}
+
+	// Verify encryption key files exist, but identity key files DO NOT exist (since they shouldn't be overwritten/created)
+	if _, err := os.Stat(filepath.Join(coreDir, "identity.key")); !os.IsNotExist(err) {
+		t.Errorf("expected identity.key to NOT be created by RotateEncryptionKey")
+	}
+
+	gotEncKeyPEM, err := os.ReadFile(filepath.Join(coreDir, "encryption.key"))
+	if err != nil {
+		t.Fatalf("failed to read encryption.key: %v", err)
+	}
+
+	// Deriving independently to verify correctness
+	_, xPriv, err := crypto.DeriveKeys(mnemonic, 5)
+	if err != nil {
+		t.Fatalf("failed to derive keys: %v", err)
+	}
+	wantEncKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+
+	if !bytes.Equal(wantEncKeyPEM, gotEncKeyPEM) {
+		t.Errorf("expected encryption key to match index 5 key")
 	}
 }
 

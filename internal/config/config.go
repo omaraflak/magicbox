@@ -23,8 +23,9 @@ type Config struct {
 	PublicKeyPEM     []byte
 	EncryptionKeyPEM []byte
 	EncryptionPubPEM []byte
-	Mnemonic         string
-	KeyIndex         int
+	Mnemonic           string
+	IdentityKeyIndex   int
+	EncryptionKeyIndex int
 }
 
 // Load reads configuration from environment variables and initializes
@@ -70,15 +71,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load JWT secret: %w", err)
 	}
 
-	// Read the active key index from file on startup.
-	indexPath := filepath.Join(root, "core", "key_index")
-	keyIndex := 0
-	if idxBytes, err := os.ReadFile(indexPath); err == nil {
-		if _, err := fmt.Sscanf(string(idxBytes), "%d", &keyIndex); err != nil {
-			keyIndex = 0
-		}
-	}
-
 	// Load or generate deterministic keys.
 	privPEM, pubPEM, encKeyPEM, encPubPEM, mnemonic, err := loadOrGenerateKeys(root)
 	if err != nil {
@@ -91,17 +83,18 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Root:             root,
-		HostRoot:         hostRoot,
-		Port:             port,
-		JWTSecret:        jwtSecret,
-		DBPath:           filepath.Join(root, "core", "magicbox.db"),
-		PrivateKeyPEM:    privPEM,
-		PublicKeyPEM:     pubPEM,
-		EncryptionKeyPEM: encKeyPEM,
-		EncryptionPubPEM: encPubPEM,
-		Mnemonic:         mnemonic,
-		KeyIndex:         keyIndex,
+		Root:               root,
+		HostRoot:           hostRoot,
+		Port:               port,
+		JWTSecret:          jwtSecret,
+		DBPath:             filepath.Join(root, "core", "magicbox.db"),
+		PrivateKeyPEM:      privPEM,
+		PublicKeyPEM:       pubPEM,
+		EncryptionKeyPEM:   encKeyPEM,
+		EncryptionPubPEM:   encPubPEM,
+		Mnemonic:           mnemonic,
+		IdentityKeyIndex:   0,
+		EncryptionKeyIndex: 0,
 	}, nil
 }
 
@@ -235,12 +228,6 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 		return nil, nil, nil, nil, "", err
 	}
 
-	// Save index "0" to disk
-	indexPath := filepath.Join(root, "core", "key_index")
-	if err := os.WriteFile(indexPath, []byte("0"), 0600); err != nil {
-		return nil, nil, nil, nil, "", err
-	}
-
 	return privPEM, pubPEM, encKeyPEM, encPubPEM, mnemonic, nil
 }
 
@@ -251,7 +238,6 @@ func RecoverKeys(root string, mnemonic string, index int) error {
 	pubPath := filepath.Join(root, "core", "identity.pub")
 	encKeyPath := filepath.Join(root, "core", "encryption.key")
 	encPubPath := filepath.Join(root, "core", "encryption.pub")
-	indexPath := filepath.Join(root, "core", "key_index")
 
 	// Derive keys from mnemonic (validates mnemonic internally).
 	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, index)
@@ -291,9 +277,34 @@ func RecoverKeys(root string, mnemonic string, index int) error {
 		return fmt.Errorf("failed to write encryption public key: %w", err)
 	}
 
-	// Write key index file.
-	if err := os.WriteFile(indexPath, []byte(fmt.Sprintf("%d", index)), 0600); err != nil {
-		return fmt.Errorf("failed to write key index: %w", err)
+	return nil
+}
+
+// RotateEncryptionKey derives X25519 keys from a mnemonic at a specific index and overwrites the encryption key files on disk.
+func RotateEncryptionKey(root string, mnemonic string, index int) error {
+	encKeyPath := filepath.Join(root, "core", "encryption.key")
+	encPubPath := filepath.Join(root, "core", "encryption.pub")
+
+	// Derive keys from mnemonic (index affects only the x25519 path).
+	_, xPriv, err := crypto.DeriveKeys(mnemonic, index)
+	if err != nil {
+		return fmt.Errorf("failed to derive encryption keys from mnemonic: %w", err)
+	}
+
+	encKeyPEM, err := crypto.MarshalPrivateKey(xPriv)
+	if err != nil {
+		return fmt.Errorf("failed to marshal encryption private key: %w", err)
+	}
+	encPubPEM, err := crypto.MarshalPublicKey(xPriv.PublicKey())
+	if err != nil {
+		return fmt.Errorf("failed to marshal encryption public key: %w", err)
+	}
+
+	if err := os.WriteFile(encKeyPath, encKeyPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write encryption private key: %w", err)
+	}
+	if err := os.WriteFile(encPubPath, encPubPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write encryption public key: %w", err)
 	}
 
 	return nil

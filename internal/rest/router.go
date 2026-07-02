@@ -41,6 +41,7 @@ func (s *Server) Handler() http.Handler {
 	// Public routes — no authentication required.
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
+	mux.HandleFunc("POST /api/v1/setup/recover", s.handleSetupRecover)
 	mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/v1/auth/csrf", s.handleCSRFToken)
@@ -78,7 +79,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/admin/upgrade", auth(admin(http.HandlerFunc(s.handleAdminUpgrade))))
 	mux.Handle("GET /api/v1/admin/mnemonic", auth(admin(http.HandlerFunc(s.handleAdminGetMnemonic))))
 	mux.Handle("POST /api/v1/admin/mnemonic/acknowledge", auth(admin(http.HandlerFunc(s.handleAdminAcknowledgeMnemonic))))
-	mux.Handle("POST /api/v1/admin/recover", auth(admin(http.HandlerFunc(s.handleAdminRecoverKeys))))
+	mux.Handle("POST /api/v1/admin/keys/rotate-encryption", auth(admin(http.HandlerFunc(s.handleAdminRotateEncryptionKeys))))
+	mux.Handle("POST /api/v1/admin/keys/rotate-identity", auth(admin(http.HandlerFunc(s.handleAdminRotateIdentityKeys))))
 
 	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
 	mux.Handle("/u/", auth(AppAccessMiddleware()(http.HandlerFunc(s.handleAppProxy))))

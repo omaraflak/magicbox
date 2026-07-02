@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/magicbox/core/internal/config"
+	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/logging"
 )
 
@@ -75,6 +77,94 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	SetSessionCookie(w, token)
 
 	s.logger.Info("setup: admin user created", logging.F("username", req.Username))
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"id":       userID,
+		"username": req.Username,
+	})
+}
+
+type setupRecoverRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Mnemonic string `json:"mnemonic"`
+}
+
+func (s *Server) handleSetupRecover(w http.ResponseWriter, r *http.Request) {
+	count, err := s.db.UserCount()
+	if err != nil {
+		s.logger.Error("setup recover: failed to count users", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if count > 0 {
+		writeError(w, http.StatusForbidden, "setup already completed")
+		return
+	}
+
+	var req setupRecoverRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if !usernameRegex.MatchString(req.Username) {
+		writeError(w, http.StatusBadRequest, "username must be 3-32 lowercase alphanumeric or underscore characters")
+		return
+	}
+	if len(req.Password) < minPassLen {
+		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+
+	if err := config.RecoverKeys(s.config.Root, req.Mnemonic, 0); err != nil {
+		s.logger.Error("setup recover: failed to recover keys", logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
+	if err != nil {
+		s.logger.Error("setup recover: failed to hash password", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	userID := uuid.NewString()
+	if err := s.db.CreateUser(userID, req.Username, string(hash), true); err != nil {
+		s.logger.Error("setup recover: failed to create user", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "0"); err != nil {
+		s.logger.Error("setup recover: failed to set identity key index", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "0"); err != nil {
+		s.logger.Error("setup recover: failed to set encryption key index", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Create user directories.
+	userDir := filepath.Join(s.config.Root, "users", req.Username)
+	for _, sub := range []string{"apps", "shared"} {
+		if err := os.MkdirAll(filepath.Join(userDir, sub), 0750); err != nil {
+			s.logger.Error("setup recover: failed to create user directory", logging.F("error", err.Error()))
+		}
+	}
+
+	// Auto-login: generate session token and set cookie.
+	token, err := GenerateSessionToken(s.config.JWTSecret, userID, req.Username, true)
+	if err != nil {
+		s.logger.Error("setup recover: failed to generate session token", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	SetSessionCookie(w, token)
+
+	s.logger.Info("setup recover: admin user created and keys recovered", logging.F("username", req.Username))
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"id":       userID,
 		"username": req.Username,

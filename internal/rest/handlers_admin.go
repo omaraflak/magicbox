@@ -2,7 +2,10 @@ package rest
 
 import (
 	"bufio"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,10 +14,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/magicbox/core/internal/config"
+	"github.com/magicbox/core/internal/crypto"
+	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/logging"
+	"github.com/magicbox/core/internal/p2p"
 )
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
@@ -366,9 +373,10 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminGetMnemonic(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"mnemonic":     s.config.Mnemonic,
-		"acknowledged": s.config.Mnemonic == "",
-		"key_index":    s.config.KeyIndex,
+		"mnemonic":             s.config.Mnemonic,
+		"acknowledged":         s.config.Mnemonic == "",
+		"identity_key_index":   s.config.IdentityKeyIndex,
+		"encryption_key_index": s.config.EncryptionKeyIndex,
 	})
 }
 
@@ -379,37 +387,127 @@ func (s *Server) handleAdminAcknowledgeMnemonic(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, map[string]string{"message": "mnemonic acknowledged and cleared from memory"})
 }
 
-type recoverKeysRequest struct {
-	Mnemonic string `json:"mnemonic"`
-	Index    int    `json:"index"`
-}
-
-func (s *Server) handleAdminRecoverKeys(w http.ResponseWriter, r *http.Request) {
-	var req recoverKeysRequest
+func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mnemonic string `json:"mnemonic"`
+	}
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if req.Mnemonic == "" {
-		writeError(w, http.StatusBadRequest, "mnemonic is required")
+	if req.Mnemonic == "" || !bip39.IsMnemonicValid(req.Mnemonic) {
+		writeError(w, http.StatusBadRequest, "invalid mnemonic phrase")
 		return
 	}
 
-	if req.Index < 0 {
-		writeError(w, http.StatusBadRequest, "key index must be greater than or equal to 0")
+	newIndex := s.config.EncryptionKeyIndex + 1
+
+	if err := config.RotateEncryptionKey(s.config.Root, req.Mnemonic, newIndex); err != nil {
+		s.logger.Error("admin rotate encryption keys: failed to rotate key", logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, "failed to rotate encryption keys: "+err.Error())
 		return
 	}
 
-	if err := config.RecoverKeys(s.config.Root, req.Mnemonic, req.Index); err != nil {
-		s.logger.Error("admin recover keys: failed to recover keys", logging.F("error", err.Error()))
+	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, fmt.Sprintf("%d", newIndex)); err != nil {
+		s.logger.Error("admin rotate encryption keys: database error", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	s.config.EncryptionKeyIndex = newIndex
+
+	_, xPriv, err := crypto.DeriveKeys(req.Mnemonic, newIndex)
+	if err != nil {
+		s.logger.Error("admin rotate encryption keys: failed to derive key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	pubHex := hex.EncodeToString(xPriv.PublicKey().Bytes())
+
+	user := GetUserFromContext(r)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	contacts, err := s.db.GetContacts(user.UserID)
+	if err != nil {
+		s.logger.Error("admin rotate encryption keys: database error getting contacts", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	for _, contact := range contacts {
+		msg := &p2p.Message{
+			AppID:        "system:key-update",
+			TargetUserID: contact.TargetUserID,
+			Payload:      []byte(pubHex),
+		}
+		_ = s.p2pService.SendTo(r.Context(), contact.Multiaddr, msg)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Encryption keys rotated successfully. Restart required.",
+	})
+}
+
+func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mnemonic string `json:"mnemonic"`
+	}
+	bodyBytes, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxBodySize))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to read body")
+		return
+	}
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+	}
+
+	mnemonic := req.Mnemonic
+	if mnemonic == "" {
+		var err error
+		mnemonic, err = crypto.GenerateMnemonic()
+		if err != nil {
+			s.logger.Error("admin rotate identity keys: failed to generate mnemonic", logging.F("error", err.Error()))
+			writeError(w, http.StatusInternalServerError, "failed to generate mnemonic")
+			return
+		}
+	} else {
+		if !bip39.IsMnemonicValid(mnemonic) {
+			writeError(w, http.StatusBadRequest, "invalid mnemonic phrase")
+			return
+		}
+	}
+
+	if err := config.RecoverKeys(s.config.Root, mnemonic, 0); err != nil {
+		s.logger.Error("admin rotate identity keys: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return
 	}
 
-	s.config.KeyIndex = req.Index
+	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "0"); err != nil {
+		s.logger.Error("admin rotate identity keys: database error", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "0"); err != nil {
+		s.logger.Error("admin rotate identity keys: database error", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
-	s.logger.Info("admin: keys recovered from mnemonic, restart required")
-	writeJSON(w, http.StatusOK, map[string]string{"message": "keys recovered successfully, restart required"})
+	s.config.IdentityKeyIndex = 0
+	s.config.EncryptionKeyIndex = 0
+	s.config.Mnemonic = mnemonic
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"mnemonic": mnemonic,
+		"message":  "Identity keys rotated successfully. System reset. Restart required.",
+	})
 }
 

@@ -138,3 +138,53 @@ func TestAddAndGetContact_Success(t *testing.T) {
 		t.Errorf("unexpected contact details: %+v", contacts[0])
 	}
 }
+
+func TestSystemSettings_GetAndSet(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	// Verify default values seeded by migration
+	idIdx, err := db.GetSystemSetting(SettingIdentityKeyIndex)
+	if err != nil {
+		t.Fatalf("failed to get default identity key index: %v", err)
+	}
+	if idIdx != "0" {
+		t.Errorf("expected default identity key index to be '0', got %q", idIdx)
+	}
+
+	encIdx, err := db.GetSystemSetting(SettingEncryptionKeyIndex)
+	if err != nil {
+		t.Fatalf("failed to get default encryption key index: %v", err)
+	}
+	if encIdx != "0" {
+		t.Errorf("expected default encryption key index to be '0', got %q", encIdx)
+	}
+
+	// Update setting
+	err = db.SetSystemSetting(SettingIdentityKeyIndex, "5")
+	if err != nil {
+		t.Fatalf("SetSystemSetting failed: %v", err)
+	}
+
+	idIdx, err = db.GetSystemSetting(SettingIdentityKeyIndex)
+	if err != nil {
+		t.Fatalf("GetSystemSetting failed: %v", err)
+	}
+	if idIdx != "5" {
+		t.Errorf("expected identity key index to be updated to '5', got %q", idIdx)
+	}
+
+	// Set new setting
+	err = db.SetSystemSetting("custom_config", "hello_world")
+	if err != nil {
+		t.Fatalf("SetSystemSetting failed: %v", err)
+	}
+
+	val, err := db.GetSystemSetting("custom_config")
+	if err != nil {
+		t.Fatalf("GetSystemSetting failed: %v", err)
+	}
+	if val != "hello_world" {
+		t.Errorf("expected 'hello_world', got %q", val)
+	}
+}

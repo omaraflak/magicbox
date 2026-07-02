@@ -67,6 +67,11 @@ func (d *DB) Migrate() error {
 			created_at TEXT NOT NULL,
 			UNIQUE(user_id, multiaddr)
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS system_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range statements {
@@ -85,6 +90,10 @@ func (d *DB) Migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN webhook_path TEXT DEFAULT '/internal/magicbox-webhook'`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN target_user_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN enc_pub_key TEXT NOT NULL DEFAULT ''`)
+
+	// Seed default system settings if they do not exist
+	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('identity_key_index', '0')`)
+	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('encryption_key_index', '0')`)
 
 	// Seed default allowed registry.
 	now := time.Now().UTC().Format(time.RFC3339)

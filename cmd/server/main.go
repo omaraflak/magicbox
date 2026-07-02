@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,6 +56,20 @@ func run() error {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 	logger.Info("database initialized")
+
+	// Read the active key indices from the database system_settings table.
+	idIndexVal, err := database.GetSystemSetting(db.SettingIdentityKeyIndex)
+	if err == nil && idIndexVal != "" {
+		fmt.Sscanf(idIndexVal, "%d", &cfg.IdentityKeyIndex)
+	}
+	encIndexVal, err := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
+	if err == nil && encIndexVal != "" {
+		fmt.Sscanf(encIndexVal, "%d", &cfg.EncryptionKeyIndex)
+	}
+	logger.Info("loaded key indices from database",
+		logging.F("identity_index", cfg.IdentityKeyIndex),
+		logging.F("encryption_index", cfg.EncryptionKeyIndex),
+	)
 
 	// 4. Initialize Docker client.
 	dockerClient, err := docker.New()
@@ -113,6 +128,27 @@ func run() error {
 
 	// Register generic P2P routing callback handler that forwards received P2P payloads to target app webhooks.
 	p2pService.SetDefaultHandler(func(ctx context.Context, fromPeerID string, msg *p2p.Message) error {
+		if msg.AppID == "system:key-update" {
+			logger.Info("Received encryption key rotation update from peer", logging.F("from_peer", fromPeerID))
+			newKeyHex := string(msg.Payload)
+			contacts, err := database.GetContacts(msg.TargetUserID)
+			if err != nil {
+				logger.Error("Failed to fetch contacts to apply key update", logging.F("error", err.Error()))
+				return err
+			}
+			for _, contact := range contacts {
+				if strings.Contains(contact.Multiaddr, fromPeerID) {
+					err = database.UpdateContactEncPubKey(contact.ID, newKeyHex)
+					if err != nil {
+						logger.Error("Failed to update contact encryption key", logging.F("contact_id", contact.ID), logging.F("error", err.Error()))
+					} else {
+						logger.Info("Successfully updated contact encryption public key", logging.F("contact_id", contact.ID))
+					}
+				}
+			}
+			return nil
+		}
+
 		if msg.TargetUserID == "" {
 			logger.Warn("Incoming P2P message dropped: missing target_user_id in message envelope",
 				logging.F("from_peer", fromPeerID),
