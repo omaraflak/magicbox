@@ -75,5 +75,6 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 	orch := core.NewOrchestrator(database, nil, cfg, logger, GenerateAppToken)
 
 	server := NewServer(cfg, database, nil, logger, orch, p2pMock)
+	server.onRestart = func() {}
 	return server.Handler(), database, cfg
 }

@@ -323,4 +323,31 @@ func TestAdminRotateIdentityKeys_SuccessProvided(t *testing.T) {
 	}
 }
 
+func TestAdminRestart_Success(t *testing.T) {
+	handler, database, _ := setupTestServer(t)
+
+	// Create admin user
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u2", "admin", string(hash), true)
+
+	// Login admin to get session cookie
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/restart", nil)
+	req.AddCookie(adminCookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rr.Body).Decode(&resp)
+	if resp["message"] != "restarting" {
+		t.Errorf("expected restarting, got: %s", resp["message"])
+	}
+}
+
+
 

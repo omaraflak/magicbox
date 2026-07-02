@@ -20,6 +20,7 @@ type Server struct {
 	logger       *logging.Logger
 	orchestrator *core.Orchestrator
 	p2pService   p2p.Service
+	onRestart    func()
 }
 
 // NewServer creates a new REST API server with the given dependencies.
@@ -31,6 +32,7 @@ func NewServer(config *config.Config, db *db.DB, dockerClient *docker.Client, lo
 		logger:       logger,
 		orchestrator: orchestrator,
 		p2pService:   p2pService,
+		onRestart:    func() { os.Exit(0) },
 	}
 }
 
@@ -81,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/admin/mnemonic/acknowledge", auth(admin(http.HandlerFunc(s.handleAdminAcknowledgeMnemonic))))
 	mux.Handle("POST /api/v1/admin/keys/rotate-encryption", auth(admin(http.HandlerFunc(s.handleAdminRotateEncryptionKeys))))
 	mux.Handle("POST /api/v1/admin/keys/rotate-identity", auth(admin(http.HandlerFunc(s.handleAdminRotateIdentityKeys))))
+	mux.Handle("POST /api/v1/admin/restart", auth(admin(http.HandlerFunc(s.handleAdminRestart))))
 
 	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
 	mux.Handle("/u/", auth(AppAccessMiddleware()(http.HandlerFunc(s.handleAppProxy))))

@@ -47,6 +47,7 @@ export default function App() {
     const [upgradeError, setUpgradeError] = useState('');
     const [mnemonicData, setMnemonicData] = useState(null);
     const [showMnemonicModal, setShowMnemonicModal] = useState(false);
+    const [isIdentityResetPending, setIsIdentityResetPending] = useState(false);
 
     const [rebuildingAppId, setRebuildingAppId] = useState(null);
     const [uninstallingAppId, setUninstallingAppId] = useState(null);
@@ -509,6 +510,34 @@ export default function App() {
         setShowMnemonicModal(false);
         setActionLoading(false);
         setMnemonicData(prev => prev ? { ...prev, acknowledged: true } : prev);
+
+        if (isIdentityResetPending) {
+            setIsIdentityResetPending(false);
+            triggerSystemRestart();
+        }
+    };
+
+    // Trigger System Restart (Docker Container Reboot)
+    const triggerSystemRestart = async () => {
+        setUpgradeStatus('reconnecting'); // Show styled "Reconnecting..." spinner overlay
+        try {
+            await callAPI('POST', '/admin/restart');
+        } catch (e) {
+            // Ignore connection abort errors since server terminates immediately
+        }
+        
+        // Poll health endpoint every 1.5 seconds until container is back online
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/v1/health');
+                if (res.status === 200) {
+                    clearInterval(interval);
+                    window.location.reload();
+                }
+            } catch (e) {
+                // Keep polling during downtime
+            }
+        }, 1500);
     };
 
     // Rotate/Recover Encryption Keys
@@ -516,7 +545,8 @@ export default function App() {
         const { status, data } = await callAPI('POST', '/admin/keys/rotate-encryption', { mnemonic });
         if (status === 200) {
             loadMnemonic();
-            return { success: true, message: data?.message || 'Encryption keys rotated successfully. Restart required.' };
+            setTimeout(triggerSystemRestart, 1500);
+            return { success: true, message: 'Encryption keys rotated successfully! Restarting Magicbox to apply changes...' };
         } else {
             return { success: false, error: data?.error || 'Rotation failed' };
         }
@@ -524,26 +554,28 @@ export default function App() {
 
     // Reset & Rotate Identity Keys (Danger Zone)
     const handleRotateIdentityKeys = async (mnemonic) => {
-      return new Promise((resolve) => {
-        showConfirm(
-          "⚠️ WARNING: This will completely RESET your cryptographic identity. You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?",
-          async () => {
-                  const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
-                  if (status === 200) {
-                    if (data?.mnemonic) {
-                      // If a new mnemonic was generated, show the modal so they can copy it!
-                      setMnemonicData({ mnemonic: data.mnemonic, acknowledged: false });
-                      setShowMnemonicModal(true);
+        return new Promise((resolve) => {
+            showConfirm(
+                "⚠️ WARNING: This will completely RESET your cryptographic identity. You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?",
+                async () => {
+                    const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
+                    if (status === 200) {
+                        if (data?.mnemonic) {
+                            // If a new mnemonic was generated, show the modal so they can copy it!
+                            setMnemonicData({ mnemonic: data.mnemonic, acknowledged: false });
+                            setShowMnemonicModal(true);
+                            setIsIdentityResetPending(true); // restart after modal is acknowledged
+                        } else {
+                            loadMnemonic();
+                            setTimeout(triggerSystemRestart, 1500); // restart immediately
+                        }
+                        resolve({ success: true, message: 'Identity keys reset successfully! Restarting Magicbox to apply changes...' });
                     } else {
-                      loadMnemonic();
+                        resolve({ success: false, error: data?.error || 'Reset failed' });
                     }
-                      resolve({ success: true, message: data?.message || 'Identity keys reset successfully. System reset. Restart required.' });
-                    } else {
-                      resolve({ success: false, error: data?.error || 'Reset failed' });
-                    }
-              },
-              "Confirm Identity Reset",
-              () => resolve({ success: false, cancelled: true })
+                },
+                "Confirm Identity Reset",
+                () => resolve({ success: false, cancelled: true })
             );
         });
     };

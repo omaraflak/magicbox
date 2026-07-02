@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tyler-smith/go-bip39"
@@ -510,4 +511,16 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 		"message":  "Identity keys rotated successfully. System reset. Restart required.",
 	})
 }
+
+func (s *Server) handleAdminRestart(w http.ResponseWriter, r *http.Request) {
+	s.logger.Info("admin: container restart requested, shutting down process")
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "restarting"})
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		s.onRestart()
+	}()
+}
+
 
