@@ -96,3 +96,55 @@ go test -v ./internal/rpc -run TestGrpcGetProfile
 ```
 
 
+## Cryptography and Key Management
+
+Magicbox uses standard asymmetric cryptographic primitives to manage user identities, secure peer-to-peer data transport, and encrypt message payloads. All operational keys are derived deterministically from a single master seed.
+
+### 1. Deterministic Key Derivation
+To simplify backup and recovery, Magicbox derives all keys from a single **12-word BIP-39 mnemonic phrase**.
+* **Seed Generation**: The mnemonic phrase is converted into a 64-byte master seed.
+* **Separation of Concerns**: We enforce strict isolation between Identity Keys (used for signatures and node discovery) and Operational Encryption Keys (used for message payloads).
+* **Deterministic Derivation Paths**: Keys are derived by hashing the master seed concatenated with a virtual path structure:
+  * **Ed25519 Identity Key (Index $i$)**: Derived via `SHA256(MasterSeed || "/ed25519/i")`
+  * **X25519 Encryption Key (Index $j$)**: Derived via `SHA256(MasterSeed || "/x25519/j")`
+
+This path separation allows independent rotation of encryption keys while keeping the user's network identity static.
+
+### 2. Peer Identity (Ed25519)
+* **Usage**: Used for signatures, message verification, and establishing P2P connections.
+* **Peer ID**: The node's libp2p Peer ID is the cryptographic hash of the Ed25519 public key.
+* **Connection Handshake**: Nodes identify and authenticate each other using their static Ed25519 keys during the libp2p secure transport handshake (Noise protocol).
+
+### 3. Payload Encryption (Hybrid X25519 + AES-GCM)
+Message payloads are encrypted end-to-end to protect user privacy.
+* **Asymmetric Exchange**: Encryption keys are X25519 key pairs.
+* **Symmetric Encryption**: Actual data payload encryption is performed symmetrically using **AES-256-GCM**.
+* **One-Way Hybrid Protocol (No network handshake)**:
+  1. Alice wants to send a message to Bob. She retrieves Bob's static X25519 public key from her database.
+  2. Alice generates a temporary **ephemeral X25519 key pair**.
+  3. Alice calculates a shared secret using Diffie-Hellman (ECDH) between her ephemeral private key and Bob's static public key.
+  4. The shared secret is passed through a key derivation function to yield an AES-256 key.
+  5. Alice encrypts the payload with AES-GCM and packages the ciphertext along with her ephemeral public key.
+  6. Bob receives the package, performs ECDH between Alice's ephemeral public key and his static private key to derive the same AES key, and decrypts the payload.
+
+### 4. Key Rotation & Recovery Workflows
+The database keeps track of the active indices in the `system_settings` table under `identity_key_index` and `encryption_key_index`.
+
+#### A. Routine Rotation (Encryption Key Only)
+* **Trigger**: Initiated by the administrator to rotate encryption keys regularly.
+* **Action**: Derives the next X25519 encryption key by incrementing `encryption_key_index` ($j \rightarrow j+1$). The Ed25519 identity remains untouched.
+* **Propagation**: The server automatically broadcasts the new X25519 public key to all of the user's contacts using the secure P2P stream (`system:key-update` app ID).
+* **Authentication**: The propagation packet is signed with the user's static Ed25519 private key. Because the identity key is unchanged, contacts verify the signature to authenticate the update and save the new key.
+* **Activation**: A container restart is required to load the new key from disk into the memory cache.
+
+#### B. Reset (Identity & Encryption Keys)
+* **Trigger**: System reset or emergency recovery in case of private key compromise.
+* **Action**: Generates a brand new mnemonic (or accepts a custom one) and resets both `identity_key_index` and `encryption_key_index` to `0`.
+* **Consequences**: This resets the user's libp2p Peer ID. To the P2P network, the user is a completely new node. Existing contacts will see the user go offline.
+* **Re-Authentication**: To restore connection, the user must manually distribute a new Invite Link (containing the new Peer ID and X25519 key) to all contacts.
+
+### 5. Disk & Database Storage Rules
+To prevent unauthorized access to sensitive cryptographic material:
+* **Mnemonic**: The 12-word mnemonic is displayed *once* to the user during first boot. Once acknowledged, it is wiped from disk and memory.
+* **Private Keys**: Stored in `/opt/magicbox/core/` (`identity.key` and `encryption.key`) with restricted read/write permissions (`0600`).
+* **Key Indices**: Stored in the SQLite database `system_settings` table.
