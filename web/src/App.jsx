@@ -47,8 +47,7 @@ export default function App() {
     const [upgradeError, setUpgradeError] = useState('');
     const [mnemonicData, setMnemonicData] = useState(null);
     const [showMnemonicModal, setShowMnemonicModal] = useState(false);
-    const [recoverStatus, setRecoverStatus] = useState('');
-    const [recoverError, setRecoverError] = useState('');
+
     const [rebuildingAppId, setRebuildingAppId] = useState(null);
     const [uninstallingAppId, setUninstallingAppId] = useState(null);
     const [startingAppId, setStartingAppId] = useState(null);
@@ -511,28 +510,19 @@ export default function App() {
 
     // Rotate/Recover Encryption Keys
     const handleRotateEncryptionKeys = async (mnemonic) => {
-        setRecoverError('');
-        setRecoverStatus('');
-        setActionLoading(true);
         const { status, data } = await callAPI('POST', '/admin/keys/rotate-encryption', { mnemonic });
-        setActionLoading(false);
         if (status === 200) {
-            setRecoverStatus(data?.message || 'Encryption keys rotated successfully. Restart required.');
             loadMnemonic();
+            return { success: true, message: data?.message || 'Encryption keys rotated successfully. Restart required.' };
         } else {
-            setRecoverError(data?.error || 'Rotation failed');
+            return { success: false, error: data?.error || 'Rotation failed' };
         }
     };
 
     // Reset & Rotate Identity Keys (Danger Zone)
     const handleRotateIdentityKeys = async (mnemonic) => {
-        setRecoverError('');
-        setRecoverStatus('');
-        setActionLoading(true);
         const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
-        setActionLoading(false);
         if (status === 200) {
-            setRecoverStatus(data?.message || 'Identity keys rotated successfully. System reset. Restart required.');
             if (data?.mnemonic) {
                 // If a new mnemonic was generated, show the modal so they can copy it!
                 setMnemonicData({ mnemonic: data.mnemonic, acknowledged: false });
@@ -540,8 +530,9 @@ export default function App() {
             } else {
                 loadMnemonic();
             }
+            return { success: true, message: data?.message || 'Identity keys reset successfully. System reset. Restart required.' };
         } else {
-            setRecoverError(data?.error || 'Reset failed');
+            return { success: false, error: data?.error || 'Reset failed' };
         }
     };
 
@@ -665,8 +656,6 @@ export default function App() {
                         mnemonicData={mnemonicData}
                         onRotateEncryption={handleRotateEncryptionKeys}
                         onRotateIdentity={handleRotateIdentityKeys}
-                        recoverError={recoverError}
-                        recoverStatus={recoverStatus}
                     />
                 )}
             </div>
