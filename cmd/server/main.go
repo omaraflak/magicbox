@@ -19,6 +19,7 @@ import (
 	"github.com/magicbox/core/internal/docker"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
+	"github.com/magicbox/core/internal/protocol"
 	"github.com/magicbox/core/internal/rest"
 	"github.com/magicbox/core/internal/rpc"
 )
@@ -125,38 +126,13 @@ func run() error {
 	}
 	defer p2pService.Stop()
 
-	// Register generic P2P routing callback handler that forwards received P2P payloads to target app webhooks.
-	p2pService.SetDefaultHandler(func(ctx context.Context, fromPeerID string, msg *p2p.Message) error {
-		if msg.AppID == "system:key-update" {
-			logger.Info("Received encryption key rotation update from peer", logging.F("from_peer", fromPeerID))
-			newKeyHex := string(msg.Payload)
-			contact, err := database.GetContactByPeerID(msg.TargetUserID, fromPeerID)
-			if err != nil {
-				logger.Error("Failed to look up contact by peer ID for key update",
-					logging.F("peer_id", fromPeerID),
-					logging.F("error", err.Error()))
-				return err
-			}
-			if contact == nil {
-				logger.Warn("Received key update from unknown peer, ignoring",
-					logging.F("peer_id", fromPeerID))
-				return nil
-			}
-			err = database.UpdateContactEncPubKey(contact.ID, newKeyHex)
-			if err != nil {
-				logger.Error("Failed to update contact encryption key",
-					logging.F("contact_id", contact.ID),
-					logging.F("error", err.Error()))
-				return err
-			}
-			logger.Info("Successfully updated contact encryption public key",
-				logging.F("contact_id", contact.ID),
-				logging.F("peer_id", fromPeerID))
-			return nil
-		}
+	// Register system protocol handlers (key rotation, etc.).
+	protocol.RegisterSystemHandlers(p2pService, database, logger)
 
+	// Register default handler for app-to-app P2P message routing.
+	p2pService.SetDefaultHandler(func(ctx context.Context, fromPeerID string, msg *p2p.Message) error {
 		if msg.TargetUserID == "" {
-			logger.Warn("Incoming P2P message dropped: missing target_user_id in message envelope",
+			logger.Warn("Incoming P2P message dropped: missing target_user_id",
 				logging.F("from_peer", fromPeerID),
 				logging.F("app_id", msg.AppID),
 			)
@@ -169,21 +145,10 @@ func run() error {
 			logging.F("app_id", msg.AppID),
 		)
 
-		// Dispatch message payload to the local app's container webhook endpoint.
-		// Set source app ID as "p2p-gateway" and source user ID as "peer:" + fromPeerID.
-		_, err := orch.DispatchWebhook(
-			ctx,
-			msg.AppID,
-			msg.TargetUserID,
-			"p2p-gateway",
-			fromPeerID,
-			"remote",
-			msg.Payload,
-		)
+		_, err := orch.DispatchWebhook(ctx, msg.AppID, msg.TargetUserID, "p2p-gateway", fromPeerID, "remote", msg.Payload)
 		if err != nil {
-			logger.Error("Failed to dispatch incoming P2P message webhook",
+			logger.Error("Failed to dispatch P2P message webhook",
 				logging.F("from_peer", fromPeerID),
-				logging.F("target_user", msg.TargetUserID),
 				logging.F("app_id", msg.AppID),
 				logging.F("error", err.Error()),
 			)
