@@ -16,23 +16,39 @@ func TestGenerateMnemonic_Success(t *testing.T) {
 	}
 }
 
-func TestDeriveKeys_Success(t *testing.T) {
+func TestDeriveIdentityKey_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
 
-	edPriv1, xPriv1, err := DeriveKeys(mnemonic, 0)
+	edPriv1, err := DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys: %v", err)
+		t.Fatalf("failed to derive identity key: %v", err)
 	}
 
-	edPriv2, xPriv2, err := DeriveKeys(mnemonic, 0)
+	edPriv2, err := DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys 2: %v", err)
+		t.Fatalf("failed to derive identity key 2: %v", err)
 	}
 
 	// Assert determinism
 	if !bytes.Equal(edPriv1, edPriv2) {
 		t.Error("deterministic Ed25519 keys do not match")
 	}
+}
+
+func TestDeriveEncryptionKey_Success(t *testing.T) {
+	mnemonic, _ := GenerateMnemonic()
+
+	xPriv1, err := DeriveEncryptionKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
+	}
+
+	xPriv2, err := DeriveEncryptionKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key 2: %v", err)
+	}
+
+	// Assert determinism
 	if !bytes.Equal(xPriv1.Bytes(), xPriv2.Bytes()) {
 		t.Error("deterministic X25519 keys do not match")
 	}
@@ -40,7 +56,8 @@ func TestDeriveKeys_Success(t *testing.T) {
 
 func TestPEMSerialization_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	edPriv, xPriv, _ := DeriveKeys(mnemonic, 0)
+	edPriv, _ := DeriveIdentityKey(mnemonic, 0)
+	xPriv, _ := DeriveEncryptionKey(mnemonic, 0)
 
 	// 1. Ed25519 Private Key PEM
 	edPrivPEM, err := MarshalPrivateKey(edPriv)
@@ -99,7 +116,7 @@ func TestPEMSerialization_Success(t *testing.T) {
 
 func TestSignAndVerify_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	edPriv, _, _ := DeriveKeys(mnemonic, 0)
+	edPriv, _ := DeriveIdentityKey(mnemonic, 0)
 	edPub := edPriv.Public().(ed25519.PublicKey)
 	message := []byte("Hello, Magicbox P2P!")
 
@@ -111,7 +128,7 @@ func TestSignAndVerify_Success(t *testing.T) {
 
 func TestSignAndVerify_InvalidMessageFails(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	edPriv, _, _ := DeriveKeys(mnemonic, 0)
+	edPriv, _ := DeriveIdentityKey(mnemonic, 0)
 	edPub := edPriv.Public().(ed25519.PublicKey)
 	message := []byte("Hello, Magicbox P2P!")
 
@@ -123,7 +140,7 @@ func TestSignAndVerify_InvalidMessageFails(t *testing.T) {
 
 func TestEncryptAndDecryptECDH_Success(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
-	_, xPriv, _ := DeriveKeys(mnemonic, 0)
+	xPriv, _ := DeriveEncryptionKey(mnemonic, 0)
 	xPub := xPriv.PublicKey()
 	message := []byte("Secret E2E message payload.")
 
@@ -146,10 +163,10 @@ func TestEncryptAndSign_Success(t *testing.T) {
 	mnemonicSender, _ := GenerateMnemonic()
 	mnemonicRecipient, _ := GenerateMnemonic()
 
-	edPrivSender, _, _ := DeriveKeys(mnemonicSender, 0)
+	edPrivSender, _ := DeriveIdentityKey(mnemonicSender, 0)
 	edPubSender := edPrivSender.Public().(ed25519.PublicKey)
 
-	_, xPrivRecipient, _ := DeriveKeys(mnemonicRecipient, 0)
+	xPrivRecipient, _ := DeriveEncryptionKey(mnemonicRecipient, 0)
 	xPubRecipient := xPrivRecipient.PublicKey()
 
 	secretPayload := []byte("ECIES secured e2e message payload.")
@@ -174,11 +191,11 @@ func TestEncryptAndSign_InvalidSignatureFails(t *testing.T) {
 	mnemonicRecipient, _ := GenerateMnemonic()
 	mnemonicWrongSender, _ := GenerateMnemonic()
 
-	edPrivSender, _, _ := DeriveKeys(mnemonicSender, 0)
-	_, xPrivRecipient, _ := DeriveKeys(mnemonicRecipient, 0)
+	edPrivSender, _ := DeriveIdentityKey(mnemonicSender, 0)
+	xPrivRecipient, _ := DeriveEncryptionKey(mnemonicRecipient, 0)
 	xPubRecipient := xPrivRecipient.PublicKey()
 
-	edPrivWrongSender, _, _ := DeriveKeys(mnemonicWrongSender, 0)
+	edPrivWrongSender, _ := DeriveIdentityKey(mnemonicWrongSender, 0)
 	edPubWrongSender := edPrivWrongSender.Public().(ed25519.PublicKey)
 
 	secretPayload := []byte("ECIES secured e2e message payload.")
@@ -191,8 +208,15 @@ func TestEncryptAndSign_InvalidSignatureFails(t *testing.T) {
 	}
 }
 
-func TestDeriveKeys_InvalidMnemonicFails(t *testing.T) {
-	_, _, err := DeriveKeys("invalid mnemonic sentence that fails checksum completely", 0)
+func TestDeriveIdentityKey_InvalidMnemonicFails(t *testing.T) {
+	_, err := DeriveIdentityKey("invalid mnemonic sentence that fails checksum completely", 0)
+	if err == nil {
+		t.Error("expected error for invalid mnemonic phrase, got nil")
+	}
+}
+
+func TestDeriveEncryptionKey_InvalidMnemonicFails(t *testing.T) {
+	_, err := DeriveEncryptionKey("invalid mnemonic sentence that fails checksum completely", 0)
 	if err == nil {
 		t.Error("expected error for invalid mnemonic phrase, got nil")
 	}
@@ -229,14 +253,24 @@ func TestUnmarshalX25519PublicKey_InvalidPEMFails(t *testing.T) {
 func TestDeriveKeys_DifferentIndicesProduceDifferentKeys(t *testing.T) {
 	mnemonic, _ := GenerateMnemonic()
 
-	edPriv1, xPriv1, err := DeriveKeys(mnemonic, 0)
+	edPriv1, err := DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys at index 0: %v", err)
+		t.Fatalf("failed to derive identity key at index 0: %v", err)
 	}
 
-	edPriv2, xPriv2, err := DeriveKeys(mnemonic, 1)
+	edPriv2, err := DeriveIdentityKey(mnemonic, 1)
 	if err != nil {
-		t.Fatalf("failed to derive keys at index 1: %v", err)
+		t.Fatalf("failed to derive identity key at index 1: %v", err)
+	}
+
+	xPriv1, err := DeriveEncryptionKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key at index 0: %v", err)
+	}
+
+	xPriv2, err := DeriveEncryptionKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key at index 1: %v", err)
 	}
 
 	if bytes.Equal(edPriv1, edPriv2) {

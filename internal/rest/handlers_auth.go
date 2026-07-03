@@ -116,7 +116,7 @@ func (s *Server) handleSetupRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := config.RecoverKeys(s.config.Root, req.Mnemonic, 0); err != nil {
+	if err := config.RecoverKeys(s.config.Root, req.Mnemonic, 0, 0); err != nil {
 		s.logger.Error("setup recover: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return

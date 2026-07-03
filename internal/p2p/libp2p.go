@@ -5,13 +5,12 @@ import (
 	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/x509"
-	"encoding/base64"
+
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	corecrypto "github.com/magicbox/core/internal/crypto"
+	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -207,27 +207,9 @@ func (s *Libp2pService) SendTo(ctx context.Context, target string, msg *Message)
 		return fmt.Errorf("libp2p: host not started")
 	}
 
-	if !strings.HasPrefix(target, "magicbox://invite/") {
-		return fmt.Errorf("libp2p: target must start with magicbox://invite/")
-	}
-
-	b64Payload := strings.TrimPrefix(target, "magicbox://invite/")
-	if b64Payload == "" {
-		return fmt.Errorf("libp2p: missing payload in invite link")
-	}
-
-	payloadBytes, err := base64.URLEncoding.DecodeString(b64Payload)
+	payload, err := invite.Parse(target)
 	if err != nil {
-		return fmt.Errorf("libp2p: failed to decode base64 payload: %w", err)
-	}
-
-	var payload struct {
-		Multiaddr string `json:"multiaddr"`
-		UserID    string `json:"user_id"`
-		EncPubKey string `json:"enc_pub_key"`
-	}
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return fmt.Errorf("libp2p: failed to unmarshal payload JSON: %w", err)
+		return fmt.Errorf("libp2p: invalid invite link: %w", err)
 	}
 
 	addr, err := multiaddr.NewMultiaddr(payload.Multiaddr)

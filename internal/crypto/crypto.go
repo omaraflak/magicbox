@@ -24,36 +24,54 @@ func GenerateMnemonic() (string, error) {
 	return bip39.NewMnemonic(entropy)
 }
 
-// DeriveKeys derives a deterministic Ed25519 private key and X25519 ecdh private key from a mnemonic at a specific index.
-func DeriveKeys(mnemonic string, index int) (ed25519.PrivateKey, *ecdh.PrivateKey, error) {
+// mnemonicToSeed validates a BIP-39 mnemonic and returns the derived seed.
+func mnemonicToSeed(mnemonic string) ([]byte, error) {
 	if !bip39.IsMnemonicValid(mnemonic) {
-		return nil, nil, fmt.Errorf("invalid mnemonic phrase")
+		return nil, fmt.Errorf("invalid mnemonic phrase")
 	}
 
 	seed := bip39.NewSeed(mnemonic, "")
 	if len(seed) < 64 {
-		return nil, nil, fmt.Errorf("invalid seed derived from mnemonic")
+		return nil, fmt.Errorf("invalid seed derived from mnemonic")
 	}
 
-	// Use SHA-256 of seed concatenated with path index for Ed25519
-	h1 := sha256.New()
-	h1.Write(seed)
-	h1.Write([]byte(fmt.Sprintf("/ed25519/%d", index)))
-	edSeed := h1.Sum(nil)
-	edPriv := ed25519.NewKeyFromSeed(edSeed)
+	return seed, nil
+}
 
-	// Use SHA-256 of seed concatenated with path index for X25519
-	h2 := sha256.New()
-	h2.Write(seed)
-	h2.Write([]byte(fmt.Sprintf("/x25519/%d", index)))
-	xSeed := h2.Sum(nil)
+// DeriveIdentityKey derives a deterministic Ed25519 private key from a mnemonic at a specific index.
+// The key is derived via SHA256(MasterSeed || "/ed25519/{index}").
+func DeriveIdentityKey(mnemonic string, index int) (ed25519.PrivateKey, error) {
+	seed, err := mnemonicToSeed(mnemonic)
+	if err != nil {
+		return nil, err
+	}
+
+	h := sha256.New()
+	h.Write(seed)
+	h.Write([]byte(fmt.Sprintf("/ed25519/%d", index)))
+	edSeed := h.Sum(nil)
+	return ed25519.NewKeyFromSeed(edSeed), nil
+}
+
+// DeriveEncryptionKey derives a deterministic X25519 private key from a mnemonic at a specific index.
+// The key is derived via SHA256(MasterSeed || "/x25519/{index}").
+func DeriveEncryptionKey(mnemonic string, index int) (*ecdh.PrivateKey, error) {
+	seed, err := mnemonicToSeed(mnemonic)
+	if err != nil {
+		return nil, err
+	}
+
+	h := sha256.New()
+	h.Write(seed)
+	h.Write([]byte(fmt.Sprintf("/x25519/%d", index)))
+	xSeed := h.Sum(nil)
 	curve := ecdh.X25519()
 	xPriv, err := curve.NewPrivateKey(xSeed)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate X25519 key: %w", err)
+		return nil, fmt.Errorf("failed to generate X25519 key: %w", err)
 	}
 
-	return edPriv, xPriv, nil
+	return xPriv, nil
 }
 
 // MarshalPrivateKey PEM-encodes an Ed25519 or X25519 private key using PKCS#8.

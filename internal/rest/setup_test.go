@@ -51,9 +51,13 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 	if err != nil {
 		t.Fatalf("failed to generate mnemonic: %v", err)
 	}
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys: %v", err)
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
 	}
 	privPEM, _ := crypto.MarshalPrivateKey(edPriv)
 	pubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())

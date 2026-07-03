@@ -2,11 +2,12 @@ package rest
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/magicbox/core/internal/invite"
 )
 
 func TestCreateContact_Success(t *testing.T) {
@@ -23,17 +24,16 @@ func TestCreateContact_Success(t *testing.T) {
 		Path:  "/",
 	}
 
-	payload := map[string]string{
-		"multiaddr":   "QmPeerIDHere",
-		"user_id":     "alice-id",
-		"enc_pub_key": "test-enc-pub-key",
+	payload := &invite.Payload{
+		Multiaddr: "QmPeerIDHere",
+		UserID:    "alice-id",
+		EncPubKey: "test-enc-pub-key",
 	}
-	payloadBytes, _ := json.Marshal(payload)
-	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
+	inviteLink, _ := invite.Build(payload)
 
 	contactBody := map[string]string{
 		"display_name": "Alice",
-		"multiaddr":    "magicbox://invite/" + b64Payload,
+		"multiaddr":    inviteLink,
 	}
 	contactBytes, _ := json.Marshal(contactBody)
 	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))
@@ -159,12 +159,14 @@ func TestCreateContact_InvalidJSONPayloadFails(t *testing.T) {
 	token, _ := GenerateSessionToken(cfg.JWTSecret, userID, "omar", false)
 	cookie := &http.Cookie{Name: SessionCookieName, Value: token, Path: "/"}
 
-	// base64 encode a string that is not a valid JSON structure
-	b64Payload := base64.URLEncoding.EncodeToString([]byte("just plain text, not JSON"))
+	// Build a valid invite link prefix with invalid JSON content inside the base64.
+	// The base64 below decodes to "just plain text, not JSON" which will cause
+	// invite.Parse to fail during JSON unmarshal.
+	inviteLink := "magicbox://invite/" + "anVzdCBwbGFpbiB0ZXh0LCBub3QgSlNPTg=="
 
 	contactBody := map[string]string{
 		"display_name": "Alice",
-		"multiaddr":    "magicbox://invite/" + b64Payload,
+		"multiaddr":    inviteLink,
 	}
 	contactBytes, _ := json.Marshal(contactBody)
 	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))

@@ -1,15 +1,13 @@
 package rest
 
 import (
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/magicbox/core/internal/crypto"
+	"github.com/magicbox/core/internal/invite"
 )
 
 func (s *Server) handleListContacts(w http.ResponseWriter, r *http.Request) {
@@ -26,13 +24,6 @@ func (s *Server) handleListContacts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, contacts)
-}
-
-// InvitationPayload represents the fields encoded in the invitation link.
-type InvitationPayload struct {
-	Multiaddr string `json:"multiaddr"`
-	UserID    string `json:"user_id"`
-	EncPubKey string `json:"enc_pub_key"`
 }
 
 func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
@@ -56,26 +47,9 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !strings.HasPrefix(req.Multiaddr, "magicbox://invite/") {
-		writeError(w, http.StatusBadRequest, "invalid invite link: must start with magicbox://invite/")
-		return
-	}
-
-	b64Payload := strings.TrimPrefix(req.Multiaddr, "magicbox://invite/")
-	if b64Payload == "" {
-		writeError(w, http.StatusBadRequest, "invalid invite link: missing payload")
-		return
-	}
-
-	payloadBytes, err := base64.URLEncoding.DecodeString(b64Payload)
+	payload, err := invite.Parse(req.Multiaddr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid base64 payload: "+err.Error())
-		return
-	}
-
-	var payload InvitationPayload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid payload JSON: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid invite link: "+err.Error())
 		return
 	}
 
@@ -159,20 +133,17 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	hexPub := hex.EncodeToString(pubKey.Bytes())
 
-	payload := InvitationPayload{
+	payload := &invite.Payload{
 		Multiaddr: targetAddr,
 		UserID:    claims.UserID,
 		EncPubKey: hexPub,
 	}
 
-	payloadBytes, err := json.Marshal(payload)
+	inviteLink, err := invite.Build(payload)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to marshal invitation payload: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to build invitation link: "+err.Error())
 		return
 	}
-
-	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
-	inviteLink := fmt.Sprintf("magicbox://invite/%s", b64Payload)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"peer_id":      peerID,

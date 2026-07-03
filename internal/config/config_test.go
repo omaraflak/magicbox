@@ -128,14 +128,18 @@ func TestRecoverKeys_Success(t *testing.T) {
 	}
 
 	// Call RecoverKeys.
-	if err := RecoverKeys(tempDir, mnemonic, 0); err != nil {
+	if err := RecoverKeys(tempDir, mnemonic, 0, 0); err != nil {
 		t.Fatalf("RecoverKeys returned error: %v", err)
 	}
 
 	// Read back key files and compare with independent derivation.
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys: %v", err)
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
 	}
 
 	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
@@ -166,7 +170,7 @@ func TestRecoverKeys_InvalidMnemonicFails(t *testing.T) {
 	tempDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tempDir, "core"), 0750)
 
-	err := RecoverKeys(tempDir, "invalid mnemonic phrase", 0)
+	err := RecoverKeys(tempDir, "invalid mnemonic phrase", 0, 0)
 	if err == nil {
 		t.Error("expected error for invalid mnemonic, got nil")
 	}
@@ -182,14 +186,18 @@ func TestRecoverKeys_CustomIndexSuccess(t *testing.T) {
 		t.Fatalf("failed to generate mnemonic: %v", err)
 	}
 
-	if err := RecoverKeys(tempDir, mnemonic, 3); err != nil {
+	if err := RecoverKeys(tempDir, mnemonic, 3, 3); err != nil {
 		t.Fatalf("RecoverKeys returned error: %v", err)
 	}
 
 	// Read back key files and compare with independent derivation at index 3.
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 3)
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 3)
 	if err != nil {
-		t.Fatalf("failed to derive keys: %v", err)
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 3)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
 	}
 
 	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
@@ -242,9 +250,9 @@ func TestRotateEncryptionKey_Success(t *testing.T) {
 	}
 
 	// Deriving independently to verify correctness
-	_, xPriv, err := crypto.DeriveKeys(mnemonic, 5)
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 5)
 	if err != nil {
-		t.Fatalf("failed to derive keys: %v", err)
+		t.Fatalf("failed to derive encryption key: %v", err)
 	}
 	wantEncKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
 
@@ -252,5 +260,3 @@ func TestRotateEncryptionKey_Success(t *testing.T) {
 		t.Errorf("expected encryption key to match index 5 key")
 	}
 }
-
-

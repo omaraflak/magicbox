@@ -2,15 +2,14 @@ package p2p
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	internalcrypto "github.com/magicbox/core/internal/crypto"
+	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 )
 
@@ -20,9 +19,13 @@ func TestLibp2pServiceFlow(t *testing.T) {
 
 	// 1. Generate local identities
 	mnemonic1, _ := internalcrypto.GenerateMnemonic()
-	edPriv1, xPriv1, err := internalcrypto.DeriveKeys(mnemonic1, 0)
+	edPriv1, err := internalcrypto.DeriveIdentityKey(mnemonic1, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys 1: %v", err)
+		t.Fatalf("failed to derive identity key 1: %v", err)
+	}
+	xPriv1, err := internalcrypto.DeriveEncryptionKey(mnemonic1, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key 1: %v", err)
 	}
 	p2pKey1, err := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv1)
 	if err != nil {
@@ -30,9 +33,13 @@ func TestLibp2pServiceFlow(t *testing.T) {
 	}
 
 	mnemonic2, _ := internalcrypto.GenerateMnemonic()
-	edPriv2, xPriv2, err := internalcrypto.DeriveKeys(mnemonic2, 0)
+	edPriv2, err := internalcrypto.DeriveIdentityKey(mnemonic2, 0)
 	if err != nil {
-		t.Fatalf("failed to derive keys 2: %v", err)
+		t.Fatalf("failed to derive identity key 2: %v", err)
+	}
+	xPriv2, err := internalcrypto.DeriveEncryptionKey(mnemonic2, 0)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key 2: %v", err)
 	}
 	p2pKey2, err := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv2)
 	if err != nil {
@@ -88,15 +95,16 @@ func TestLibp2pServiceFlow(t *testing.T) {
 		break
 	}
 
-	// Create JSON payload and base64 encode it for the invite URL path
-	payload := map[string]string{
-		"multiaddr":   rawAddr,
-		"user_id":     "user-456",
-		"enc_pub_key": hex.EncodeToString(xPriv2.PublicKey().Bytes()),
+	// Create invite link using the invite package
+	invitePayload := &invite.Payload{
+		Multiaddr: rawAddr,
+		UserID:    "user-456",
+		EncPubKey: hex.EncodeToString(xPriv2.PublicKey().Bytes()),
 	}
-	payloadBytes, _ := json.Marshal(payload)
-	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
-	targetAddr := "magicbox://invite/" + b64Payload
+	targetAddr, err := invite.Build(invitePayload)
+	if err != nil {
+		t.Fatalf("failed to build invite link: %v", err)
+	}
 
 	testMsg := &Message{
 		AppID:        "com.magicbox.test",
@@ -134,11 +142,13 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 	defer cancel()
 
 	mnemonic1, _ := internalcrypto.GenerateMnemonic()
-	edPriv1, xPriv1, _ := internalcrypto.DeriveKeys(mnemonic1, 0)
+	edPriv1, _ := internalcrypto.DeriveIdentityKey(mnemonic1, 0)
+	xPriv1, _ := internalcrypto.DeriveEncryptionKey(mnemonic1, 0)
 	p2pKey1, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv1)
 
 	mnemonic2, _ := internalcrypto.GenerateMnemonic()
-	edPriv2, xPriv2, _ := internalcrypto.DeriveKeys(mnemonic2, 0)
+	edPriv2, _ := internalcrypto.DeriveIdentityKey(mnemonic2, 0)
+	xPriv2, _ := internalcrypto.DeriveEncryptionKey(mnemonic2, 0)
 	p2pKey2, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv2)
 
 	logger1, _ := logging.New(t.TempDir())
@@ -156,14 +166,12 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 
 	addrs2 := srv2.Multiaddrs()
 
-	payload := map[string]string{
-		"multiaddr":   addrs2[0],
-		"user_id":     "user-456",
-		"enc_pub_key": hex.EncodeToString(xPriv2.PublicKey().Bytes()),
+	invitePayload := &invite.Payload{
+		Multiaddr: addrs2[0],
+		UserID:    "user-456",
+		EncPubKey: hex.EncodeToString(xPriv2.PublicKey().Bytes()),
 	}
-	payloadBytes, _ := json.Marshal(payload)
-	b64Payload := base64.URLEncoding.EncodeToString(payloadBytes)
-	targetAddr := "magicbox://invite/" + b64Payload
+	targetAddr, _ := invite.Build(invitePayload)
 
 	testMsg := &Message{
 		AppID:        "com.magicbox.unhandled",

@@ -418,7 +418,7 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 
 	s.config.EncryptionKeyIndex = newIndex
 
-	_, xPriv, err := crypto.DeriveKeys(req.Mnemonic, newIndex)
+	xPriv, err := crypto.DeriveEncryptionKey(req.Mnemonic, newIndex)
 	if err != nil {
 		s.logger.Error("admin rotate encryption keys: failed to derive key", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -485,7 +485,7 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	if err := config.RecoverKeys(s.config.Root, mnemonic, 0); err != nil {
+	if err := config.RecoverKeys(s.config.Root, mnemonic, 0, 0); err != nil {
 		s.logger.Error("admin rotate identity keys: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return

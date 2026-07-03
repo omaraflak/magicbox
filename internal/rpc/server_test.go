@@ -2,8 +2,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"net"
 	"path/filepath"
 	"testing"
@@ -17,6 +15,7 @@ import (
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
+	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
@@ -42,13 +41,13 @@ func (m *MockP2PService) SendTo(ctx context.Context, dest string, msg *p2p.Messa
 
 // makeInviteLink builds a properly encoded magicbox://invite/<base64> link for testing.
 func makeInviteLink(multiaddr, userID, encPubKey string) string {
-	payload := map[string]string{
-		"multiaddr":   multiaddr,
-		"user_id":     userID,
-		"enc_pub_key": encPubKey,
+	payload := &invite.Payload{
+		Multiaddr: multiaddr,
+		UserID:    userID,
+		EncPubKey: encPubKey,
 	}
-	payloadBytes, _ := json.Marshal(payload)
-	return "magicbox://invite/" + base64.URLEncoding.EncodeToString(payloadBytes)
+	link, _ := invite.Build(payload)
+	return link
 }
 
 // setupGrpcTestServer initializes an in-memory gRPC server connection.

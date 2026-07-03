@@ -3,8 +3,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -19,6 +17,7 @@ import (
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
+	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
@@ -256,16 +255,8 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 	// The multiaddr is stored as a base64-encoded invite link, so we decode the payload
 	// to extract the raw multiaddr and check if it contains our local host peer ID.
 	isLocal := false
-	if strings.HasPrefix(contact.Multiaddr, "magicbox://invite/") {
-		b64 := strings.TrimPrefix(contact.Multiaddr, "magicbox://invite/")
-		if payloadBytes, err := base64.URLEncoding.DecodeString(b64); err == nil {
-			var payload struct {
-				Multiaddr string `json:"multiaddr"`
-			}
-			if err := json.Unmarshal(payloadBytes, &payload); err == nil {
-				isLocal = strings.Contains(payload.Multiaddr, s.p2pService.HostID())
-			}
-		}
+	if parsed, err := invite.Parse(contact.Multiaddr); err == nil {
+		isLocal = strings.Contains(parsed.Multiaddr, s.p2pService.HostID())
 	}
 	if isLocal {
 		s.logger.Info("SendToContact: target is a local contact, routing locally",

@@ -191,9 +191,13 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 	}
 
 	// Derive keys from mnemonic (always at index 0 initially)
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, 0)
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
-		return nil, nil, nil, nil, "", fmt.Errorf("failed to derive keys from mnemonic: %w", err)
+		return nil, nil, nil, nil, "", fmt.Errorf("failed to derive identity key from mnemonic: %w", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 0)
+	if err != nil {
+		return nil, nil, nil, nil, "", fmt.Errorf("failed to derive encryption key from mnemonic: %w", err)
 	}
 
 	// Marshal keys to PEM
@@ -231,18 +235,22 @@ func loadOrGenerateKeys(root string) (privPEM, pubPEM, encKeyPEM, encPubPEM []by
 	return privPEM, pubPEM, encKeyPEM, encPubPEM, mnemonic, nil
 }
 
-// RecoverKeys derives Ed25519/X25519 keys from a mnemonic at a specific index and overwrites all key files on disk.
+// RecoverKeys derives Ed25519/X25519 keys from a mnemonic at specific indices and overwrites all key files on disk.
 // It never saves the plaintext mnemonic phrase itself to disk.
-func RecoverKeys(root string, mnemonic string, index int) error {
+func RecoverKeys(root string, mnemonic string, identityIndex, encryptionIndex int) error {
 	privPath := filepath.Join(root, "core", "identity.key")
 	pubPath := filepath.Join(root, "core", "identity.pub")
 	encKeyPath := filepath.Join(root, "core", "encryption.key")
 	encPubPath := filepath.Join(root, "core", "encryption.pub")
 
-	// Derive keys from mnemonic (validates mnemonic internally).
-	edPriv, xPriv, err := crypto.DeriveKeys(mnemonic, index)
+	// Derive identity key from mnemonic (validates mnemonic internally).
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, identityIndex)
 	if err != nil {
-		return fmt.Errorf("failed to derive keys from mnemonic: %w", err)
+		return fmt.Errorf("failed to derive identity key from mnemonic: %w", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, encryptionIndex)
+	if err != nil {
+		return fmt.Errorf("failed to derive encryption key from mnemonic: %w", err)
 	}
 
 	// Marshal keys to PEM.
@@ -285,10 +293,10 @@ func RotateEncryptionKey(root string, mnemonic string, index int) error {
 	encKeyPath := filepath.Join(root, "core", "encryption.key")
 	encPubPath := filepath.Join(root, "core", "encryption.pub")
 
-	// Derive keys from mnemonic (index affects only the x25519 path).
-	_, xPriv, err := crypto.DeriveKeys(mnemonic, index)
+	// Derive encryption key from mnemonic at the given index.
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, index)
 	if err != nil {
-		return fmt.Errorf("failed to derive encryption keys from mnemonic: %w", err)
+		return fmt.Errorf("failed to derive encryption key from mnemonic: %w", err)
 	}
 
 	encKeyPEM, err := crypto.MarshalPrivateKey(xPriv)
