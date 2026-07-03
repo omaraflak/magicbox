@@ -17,7 +17,6 @@ import (
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
-	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
@@ -252,12 +251,7 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 	targetUserID := contact.TargetUserID
 
 	// Check if the contact's peer ID matches our local host ID (loopback/local transfer).
-	// The multiaddr is stored as a base64-encoded invite link, so we decode the payload
-	// to extract the raw multiaddr and check if it contains our local host peer ID.
-	isLocal := false
-	if parsed, err := invite.Parse(contact.Multiaddr); err == nil {
-		isLocal = strings.Contains(parsed.Multiaddr, s.p2pService.HostID())
-	}
+	isLocal := contact.PeerID == s.p2pService.HostID()
 	if isLocal {
 		s.logger.Info("SendToContact: target is a local contact, routing locally",
 			logging.F("user_id", claims.UserID),
@@ -288,7 +282,7 @@ func (s *RPCServer) SendToContact(ctx context.Context, req *pb.SendToContactRequ
 		Payload:      req.Payload,
 	}
 
-	err = s.p2pService.SendTo(ctx, contact.Multiaddr, msg)
+	err = s.p2pService.SendTo(ctx, contact.Multiaddr, contact.EncPubKey, msg)
 	if err != nil {
 		s.logger.Error("SendToContact failed",
 			logging.F("user_id", claims.UserID),

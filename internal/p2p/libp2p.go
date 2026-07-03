@@ -22,7 +22,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	corecrypto "github.com/magicbox/core/internal/crypto"
-	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -201,20 +200,17 @@ func (s *Libp2pService) SetDefaultHandler(handler Handler) {
 	s.defaultHandler = handler
 }
 
-// SendTo resolves the peer target (which must be a magicbox://invite link) and writes the message payload.
-func (s *Libp2pService) SendTo(ctx context.Context, target string, msg *Message) error {
+// SendTo dials a remote peer and sends an encrypted message.
+// peerMultiaddr is the libp2p multiaddress (e.g. /p2p/12D3.../p2p-circuit/p2p/...).
+// encPubKeyHex is the hex-encoded X25519 public key of the recipient.
+func (s *Libp2pService) SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *Message) error {
 	if s.host == nil {
 		return fmt.Errorf("libp2p: host not started")
 	}
 
-	payload, err := invite.Parse(target)
+	addr, err := multiaddr.NewMultiaddr(peerMultiaddr)
 	if err != nil {
-		return fmt.Errorf("libp2p: invalid invite link: %w", err)
-	}
-
-	addr, err := multiaddr.NewMultiaddr(payload.Multiaddr)
-	if err != nil {
-		return fmt.Errorf("libp2p: invalid multiaddress %q: %w", payload.Multiaddr, err)
+		return fmt.Errorf("libp2p: invalid multiaddress %q: %w", peerMultiaddr, err)
 	}
 
 	info, err := peer.AddrInfoFromP2pAddr(addr)
@@ -227,7 +223,7 @@ func (s *Libp2pService) SendTo(ctx context.Context, target string, msg *Message)
 		return fmt.Errorf("libp2p: failed to connect to peer: %w", err)
 	}
 
-	pubBytes, err := hex.DecodeString(payload.EncPubKey)
+	pubBytes, err := hex.DecodeString(encPubKeyHex)
 	if err != nil {
 		return fmt.Errorf("libp2p: invalid enc_pub_key hex string: %w", err)
 	}

@@ -210,7 +210,7 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 	}
 
 	// Add a contact to verify the propagation loop runs without crash
-	_ = database.AddContact("c1", "u1", "Friend", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key")
+	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key")
 
 	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"mnemonic": mnemonic,

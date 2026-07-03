@@ -15,7 +15,6 @@ import (
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
-	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
@@ -34,21 +33,11 @@ func (m *MockP2PService) Multiaddrs() []string {
 	return []string{"/ip4/127.0.0.1/tcp/4001/p2p/" + m.hostID}
 }
 func (m *MockP2PService) RegisterHandler(appID string, handler p2p.Handler) {}
-func (m *MockP2PService) SendTo(ctx context.Context, dest string, msg *p2p.Message) error {
+func (m *MockP2PService) SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *p2p.Message) error {
 	m.sent = true
 	return nil
 }
 
-// makeInviteLink builds a properly encoded magicbox://invite/<base64> link for testing.
-func makeInviteLink(multiaddr, userID, encPubKey string) string {
-	payload := &invite.Payload{
-		Multiaddr: multiaddr,
-		UserID:    userID,
-		EncPubKey: encPubKey,
-	}
-	link, _ := invite.Build(payload)
-	return link
-}
 
 // setupGrpcTestServer initializes an in-memory gRPC server connection.
 func setupGrpcTestServer(t *testing.T) (pb.MagicboxOSClient, *db.DB, *config.Config, *MockP2PService, func()) {
@@ -138,8 +127,7 @@ func TestGrpcListContacts(t *testing.T) {
 	database.InsertAppToken("com.example.app", userID, "app-secret")
 	database.InsertAppScope("com.example.app", userID, "contacts:read")
 
-	inviteLink := makeInviteLink("/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key")
-	database.AddContact("contact-1", userID, "Alice", inviteLink, "alice-id", "test-enc-pub-key")
+	database.AddContact("contact-1", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key")
 
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{"contacts:read"})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
@@ -162,8 +150,7 @@ func TestGrpcSendToContactRemote(t *testing.T) {
 	database.CreateUser(userID, "omar", "hash", false)
 	database.InsertAppToken("com.example.app", userID, "app-secret")
 
-	inviteLink := makeInviteLink("/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key")
-	database.AddContact("contact-1", userID, "Alice", inviteLink, "alice-id", "test-enc-pub-key")
+	database.AddContact("contact-1", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key")
 
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
@@ -193,9 +180,8 @@ func TestGrpcSendToContactLoopback(t *testing.T) {
 	database.CreateUser(userID, "omar", "hash", false)
 	database.InsertAppToken("com.example.app", userID, "app-secret")
 
-	// Multiaddress payload contains "local-host-id" to trigger loopback routing bypass
-	inviteLink := makeInviteLink("/ip4/127.0.0.1/tcp/4001/p2p/local-host-id", userID, "test-enc-pub-key")
-	database.AddContact("contact-1", userID, "Myself", inviteLink, userID, "test-enc-pub-key")
+	// Multiaddress contains "local-host-id" and peerID matches to trigger loopback routing bypass
+	database.AddContact("contact-1", userID, "Myself", "local-host-id", "/ip4/127.0.0.1/tcp/4001/p2p/local-host-id", userID, "test-enc-pub-key")
 
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))

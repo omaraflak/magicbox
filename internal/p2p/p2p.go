@@ -31,6 +31,8 @@ type Service interface {
 	// RegisterHandler registers a callback handler for a specific message protocol.
 	RegisterHandler(appID string, handler Handler)
 
-	// SendTo dials a remote peer using their multiaddress invitation and sends a message.
-	SendTo(ctx context.Context, destMultiaddr string, msg *Message) error
+	// SendTo dials a remote peer and sends an encrypted message.
+	// peerMultiaddr is the libp2p multiaddress (e.g. /p2p/12D3.../p2p-circuit/p2p/...).
+	// encPubKeyHex is the hex-encoded X25519 public key of the recipient.
+	SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *Message) error
 }

@@ -445,7 +445,7 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 			TargetUserID: contact.TargetUserID,
 			Payload:      []byte(pubHex),
 		}
-		_ = s.p2pService.SendTo(r.Context(), contact.Multiaddr, msg)
+		_ = s.p2pService.SendTo(r.Context(), contact.Multiaddr, contact.EncPubKey, msg)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{

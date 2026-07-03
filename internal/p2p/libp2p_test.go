@@ -9,7 +9,6 @@ import (
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	internalcrypto "github.com/magicbox/core/internal/crypto"
-	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 )
 
@@ -95,16 +94,7 @@ func TestLibp2pServiceFlow(t *testing.T) {
 		break
 	}
 
-	// Create invite link using the invite package
-	invitePayload := &invite.Payload{
-		Multiaddr: rawAddr,
-		UserID:    "user-456",
-		EncPubKey: hex.EncodeToString(xPriv2.PublicKey().Bytes()),
-	}
-	targetAddr, err := invite.Build(invitePayload)
-	if err != nil {
-		t.Fatalf("failed to build invite link: %v", err)
-	}
+	encPubKeyHex := hex.EncodeToString(xPriv2.PublicKey().Bytes())
 
 	testMsg := &Message{
 		AppID:        "com.magicbox.test",
@@ -112,7 +102,7 @@ func TestLibp2pServiceFlow(t *testing.T) {
 		Payload:      []byte("Hello from peer 1!"),
 	}
 
-	err = srv1.SendTo(ctx, targetAddr, testMsg)
+	err = srv1.SendTo(ctx, rawAddr, encPubKeyHex, testMsg)
 	if err != nil {
 		t.Fatalf("failed to send message: %v", err)
 	}
@@ -166,12 +156,7 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 
 	addrs2 := srv2.Multiaddrs()
 
-	invitePayload := &invite.Payload{
-		Multiaddr: addrs2[0],
-		UserID:    "user-456",
-		EncPubKey: hex.EncodeToString(xPriv2.PublicKey().Bytes()),
-	}
-	targetAddr, _ := invite.Build(invitePayload)
+	encPubKeyHex := hex.EncodeToString(xPriv2.PublicKey().Bytes())
 
 	testMsg := &Message{
 		AppID:        "com.magicbox.unhandled",
@@ -183,7 +168,7 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := srv1.SendTo(ctx, targetAddr, testMsg)
+		err := srv1.SendTo(ctx, addrs2[0], encPubKeyHex, testMsg)
 		if err != nil {
 			t.Errorf("unexpected error on unhandled protocol send: %v", err)
 		}

@@ -1,7 +1,10 @@
 package db
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,11 +64,12 @@ func (d *DB) Migrate() error {
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id),
 			display_name TEXT NOT NULL,
+			peer_id TEXT NOT NULL DEFAULT '',
 			multiaddr TEXT NOT NULL,
-			target_user_id TEXT NOT NULL,
+			target_user_id TEXT NOT NULL DEFAULT '',
 			enc_pub_key TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
-			UNIQUE(user_id, multiaddr)
+			UNIQUE(user_id, peer_id)
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS system_settings (
@@ -90,6 +94,10 @@ func (d *DB) Migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE apps ADD COLUMN webhook_path TEXT DEFAULT '/internal/magicbox-webhook'`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN target_user_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN enc_pub_key TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN peer_id TEXT NOT NULL DEFAULT ''`)
+
+	// Migrate existing contacts: extract peer_id and actual multiaddr from stored invite links.
+	d.migrateContactInviteLinks()
 
 	// Seed default system settings if they do not exist
 	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('identity_key_index', '0')`)
@@ -106,4 +114,46 @@ func (d *DB) Migrate() error {
 	}
 
 	return nil
+}
+
+func (d *DB) migrateContactInviteLinks() {
+	rows, err := d.conn.Query(`SELECT id, multiaddr FROM contacts WHERE peer_id = '' AND multiaddr LIKE 'magicbox://invite/%'`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type migrationRow struct {
+		id, multiaddr string
+	}
+	var toMigrate []migrationRow
+	for rows.Next() {
+		var r migrationRow
+		if err := rows.Scan(&r.id, &r.multiaddr); err != nil {
+			continue
+		}
+		toMigrate = append(toMigrate, r)
+	}
+	rows.Close()
+
+	for _, r := range toMigrate {
+		b64 := strings.TrimPrefix(r.multiaddr, "magicbox://invite/")
+		data, err := base64.URLEncoding.DecodeString(b64)
+		if err != nil {
+			continue
+		}
+		var payload struct {
+			Multiaddr string `json:"multiaddr"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			continue
+		}
+		peerID := ""
+		if idx := strings.LastIndex(payload.Multiaddr, "/p2p/"); idx >= 0 {
+			peerID = payload.Multiaddr[idx+5:]
+		}
+		if peerID != "" {
+			d.conn.Exec(`UPDATE contacts SET multiaddr = ?, peer_id = ? WHERE id = ?`, payload.Multiaddr, peerID, r.id)
+		}
+	}
 }

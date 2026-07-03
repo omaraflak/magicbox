@@ -24,7 +24,7 @@ func (m *MockP2PService) Stop() error                    { return nil }
 func (m *MockP2PService) HostID() string                 { return m.hostID }
 func (m *MockP2PService) Multiaddrs() []string           { return []string{"/ip4/127.0.0.1/tcp/4001/p2p/" + m.hostID} }
 func (m *MockP2PService) RegisterHandler(appID string, handler p2p.Handler) {}
-func (m *MockP2PService) SendTo(ctx context.Context, dest string, msg *p2p.Message) error {
+func (m *MockP2PService) SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *p2p.Message) error {
 	return nil
 }
 

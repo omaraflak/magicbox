@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -131,21 +130,28 @@ func run() error {
 		if msg.AppID == "system:key-update" {
 			logger.Info("Received encryption key rotation update from peer", logging.F("from_peer", fromPeerID))
 			newKeyHex := string(msg.Payload)
-			contacts, err := database.GetContacts(msg.TargetUserID)
+			contact, err := database.GetContactByPeerID(msg.TargetUserID, fromPeerID)
 			if err != nil {
-				logger.Error("Failed to fetch contacts to apply key update", logging.F("error", err.Error()))
+				logger.Error("Failed to look up contact by peer ID for key update",
+					logging.F("peer_id", fromPeerID),
+					logging.F("error", err.Error()))
 				return err
 			}
-			for _, contact := range contacts {
-				if strings.Contains(contact.Multiaddr, fromPeerID) {
-					err = database.UpdateContactEncPubKey(contact.ID, newKeyHex)
-					if err != nil {
-						logger.Error("Failed to update contact encryption key", logging.F("contact_id", contact.ID), logging.F("error", err.Error()))
-					} else {
-						logger.Info("Successfully updated contact encryption public key", logging.F("contact_id", contact.ID))
-					}
-				}
+			if contact == nil {
+				logger.Warn("Received key update from unknown peer, ignoring",
+					logging.F("peer_id", fromPeerID))
+				return nil
 			}
+			err = database.UpdateContactEncPubKey(contact.ID, newKeyHex)
+			if err != nil {
+				logger.Error("Failed to update contact encryption key",
+					logging.F("contact_id", contact.ID),
+					logging.F("error", err.Error()))
+				return err
+			}
+			logger.Info("Successfully updated contact encryption public key",
+				logging.F("contact_id", contact.ID),
+				logging.F("peer_id", fromPeerID))
 			return nil
 		}
 

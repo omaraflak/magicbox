@@ -120,10 +120,11 @@ func TestAddAndGetContact_Success(t *testing.T) {
 
 	contactID := "contact-456"
 	contactName := "Alice"
-	multiaddr := "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H?user_id=alice-id"
+	peerID := "12D3KooWTestPeerID"
+	multiaddr := "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWTestPeerID"
 	targetUserID := "alice-id"
 
-	if err := db.AddContact(contactID, userID, contactName, multiaddr, targetUserID, "test-enc-pub-key"); err != nil {
+	if err := db.AddContact(contactID, userID, contactName, peerID, multiaddr, targetUserID, "test-enc-pub-key"); err != nil {
 		t.Fatalf("AddContact failed: %v", err)
 	}
 
@@ -136,6 +137,56 @@ func TestAddAndGetContact_Success(t *testing.T) {
 	}
 	if contacts[0].DisplayName != contactName || contacts[0].TargetUserID != targetUserID {
 		t.Errorf("unexpected contact details: %+v", contacts[0])
+	}
+	if contacts[0].PeerID != peerID {
+		t.Errorf("expected PeerID %q, got %q", peerID, contacts[0].PeerID)
+	}
+}
+
+func TestGetContactByPeerID_Success(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	userID := "user-123"
+	if err := db.CreateUser(userID, "omar", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	peerID := "12D3KooWTestPeerID"
+	if err := db.AddContact("contact-1", userID, "Alice", peerID, "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWTestPeerID", "alice-id", "enc-key"); err != nil {
+		t.Fatalf("AddContact failed: %v", err)
+	}
+
+	contact, err := db.GetContactByPeerID(userID, peerID)
+	if err != nil {
+		t.Fatalf("GetContactByPeerID failed: %v", err)
+	}
+	if contact == nil {
+		t.Fatal("expected contact to be found, got nil")
+	}
+	if contact.PeerID != peerID {
+		t.Errorf("expected PeerID %q, got %q", peerID, contact.PeerID)
+	}
+	if contact.DisplayName != "Alice" {
+		t.Errorf("expected DisplayName %q, got %q", "Alice", contact.DisplayName)
+	}
+}
+
+func TestGetContactByPeerID_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	userID := "user-123"
+	if err := db.CreateUser(userID, "omar", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	contact, err := db.GetContactByPeerID(userID, "nonexistent-peer")
+	if err != nil {
+		t.Fatalf("GetContactByPeerID failed: %v", err)
+	}
+	if contact != nil {
+		t.Errorf("expected nil contact, got %+v", contact)
 	}
 }
 

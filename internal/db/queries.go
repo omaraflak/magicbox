@@ -47,6 +47,7 @@ type Contact struct {
 	ID           string `json:"id"`
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
+	PeerID       string `json:"peer_id"`
 	Multiaddr    string `json:"multiaddr"`
 	TargetUserID string `json:"target_user_id"`
 	EncPubKey    string `json:"enc_pub_key"`
@@ -472,7 +473,7 @@ func scanApps(rows *sql.Rows) ([]App, error) {
 
 // GetContacts returns all contacts for the given user.
 func (d *DB) GetContacts(userID string) ([]Contact, error) {
-	rows, err := d.conn.Query(`SELECT id, user_id, display_name, multiaddr, target_user_id, enc_pub_key, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +482,7 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		contacts = append(contacts, c)
@@ -491,9 +492,23 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 
 // GetContactByID fetches a contact by ID and owner userID.
 func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
-	row := d.conn.QueryRow(`SELECT id, user_id, display_name, multiaddr, target_user_id, enc_pub_key, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
 	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// GetContactByPeerID fetches a contact by the remote peer's libp2p peer ID and the owning user ID.
+func (d *DB) GetContactByPeerID(userID, peerID string) (*Contact, error) {
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at FROM contacts WHERE user_id = ? AND peer_id = ?`, userID, peerID)
+	var c Contact
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -504,11 +519,11 @@ func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
 }
 
 // AddContact inserts a new contact into the database.
-func (d *DB) AddContact(id, userID, displayName, multiaddr, targetUserID, encPubKey string) error {
+func (d *DB) AddContact(id, userID, displayName, peerID, multiaddr, targetUserID, encPubKey string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := d.conn.Exec(
-		`INSERT INTO contacts (id, user_id, display_name, multiaddr, target_user_id, enc_pub_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, userID, displayName, multiaddr, targetUserID, encPubKey, now,
+		`INSERT INTO contacts (id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, userID, displayName, peerID, multiaddr, targetUserID, encPubKey, now,
 	)
 	return err
 }

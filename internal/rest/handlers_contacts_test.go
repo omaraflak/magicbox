@@ -25,7 +25,7 @@ func TestCreateContact_Success(t *testing.T) {
 	}
 
 	payload := &invite.Payload{
-		Multiaddr: "QmPeerIDHere",
+		Multiaddr: "/ip4/127.0.0.1/tcp/4001/p2p/QmPeerIDHere",
 		UserID:    "alice-id",
 		EncPubKey: "test-enc-pub-key",
 	}
@@ -54,7 +54,7 @@ func TestListContacts_Success(t *testing.T) {
 	database.CreateUser(userID, "omar", "hash", false)
 
 	// Create a dummy contact in the DB directly
-	_ = database.AddContact("contact-id-123", userID, "Alice", "magicbox://invite/QmPeerIDHere", "target-user-id-123", "test-enc-pub-key")
+	_ = database.AddContact("contact-id-123", userID, "Alice", "QmPeerIDHere", "/ip4/127.0.0.1/tcp/4001/p2p/QmPeerIDHere", "target-user-id-123", "test-enc-pub-key")
 
 	token, _ := GenerateSessionToken(cfg.JWTSecret, userID, "omar", false)
 	cookie := &http.Cookie{

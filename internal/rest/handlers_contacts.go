@@ -53,6 +53,12 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	peerID := invite.ExtractPeerID(payload.Multiaddr)
+	if peerID == "" {
+		writeError(w, http.StatusBadRequest, "invalid invite link: could not extract peer ID from multiaddr")
+		return
+	}
+
 	targetUserID := payload.UserID
 	encPubKey := payload.EncPubKey
 
@@ -62,7 +68,7 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := uuid.NewString()
-	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, req.Multiaddr, targetUserID, encPubKey); err != nil {
+	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, peerID, payload.Multiaddr, targetUserID, encPubKey); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save contact: "+err.Error())
 		return
 	}
@@ -70,7 +76,8 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"id":             id,
 		"display_name":   req.DisplayName,
-		"multiaddr":      req.Multiaddr,
+		"peer_id":        peerID,
+		"multiaddr":      payload.Multiaddr,
 		"target_user_id": targetUserID,
 	})
 }
