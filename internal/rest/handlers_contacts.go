@@ -133,7 +133,7 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Unmarshal static X25519 public key and encode its raw bytes as hex
-	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.EncryptionPubPEM)
+	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.Keys.EncryptionPubPEM)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local encryption public key: "+err.Error())
 		return

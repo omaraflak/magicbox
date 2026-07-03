@@ -74,9 +74,9 @@ func TestAdminGetMnemonic_Success(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	// Set mnemonic directly in memory.
-	cfg.Mnemonic = "test mnemonic phrase"
-	cfg.IdentityKeyIndex = 0
-	cfg.EncryptionKeyIndex = 0
+	cfg.Keys.Mnemonic = "test mnemonic phrase"
+	cfg.Keys.IdentityKeyIndex = 0
+	cfg.Keys.EncryptionKeyIndex = 0
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
@@ -116,9 +116,9 @@ func TestAdminGetMnemonic_AfterAcknowledgment(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	// Ensure mnemonic is empty in memory.
-	cfg.Mnemonic = ""
-	cfg.IdentityKeyIndex = 0
-	cfg.EncryptionKeyIndex = 0
+	cfg.Keys.Mnemonic = ""
+	cfg.Keys.IdentityKeyIndex = 0
+	cfg.Keys.EncryptionKeyIndex = 0
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
@@ -170,7 +170,7 @@ func TestAdminAcknowledgeMnemonic_Success(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	// Set mnemonic directly in memory.
-	cfg.Mnemonic = "some mnemonic words"
+	cfg.Keys.Mnemonic = "some mnemonic words"
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
@@ -187,8 +187,8 @@ func TestAdminAcknowledgeMnemonic_Success(t *testing.T) {
 	}
 
 	// Verify the mnemonic was cleared from memory.
-	if cfg.Mnemonic != "" {
-		t.Errorf("expected Config.Mnemonic to be cleared in memory, but got %q", cfg.Mnemonic)
+	if cfg.Keys.Mnemonic != "" {
+		t.Errorf("expected Config.Keys.Mnemonic to be cleared in memory, but got %q", cfg.Keys.Mnemonic)
 	}
 }
 
@@ -224,8 +224,8 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 
-	if cfg.EncryptionKeyIndex != 1 {
-		t.Errorf("expected EncryptionKeyIndex to be 1, got %d", cfg.EncryptionKeyIndex)
+	if cfg.Keys.EncryptionKeyIndex != 1 {
+		t.Errorf("expected EncryptionKeyIndex to be 1, got %d", cfg.Keys.EncryptionKeyIndex)
 	}
 
 	val, err := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
@@ -282,7 +282,7 @@ func TestAdminRotateIdentityKeys_SuccessGenerated(t *testing.T) {
 		t.Errorf("expected generated mnemonic in response")
 	}
 
-	if cfg.IdentityKeyIndex != 0 || cfg.EncryptionKeyIndex != 0 {
+	if cfg.Keys.IdentityKeyIndex != 0 || cfg.Keys.EncryptionKeyIndex != 0 {
 		t.Errorf("expected indices to be reset to 0 in config")
 	}
 

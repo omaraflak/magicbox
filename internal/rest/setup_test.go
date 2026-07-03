@@ -10,6 +10,7 @@ import (
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
+	"github.com/magicbox/core/internal/keymanager"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
 )
@@ -65,14 +66,16 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 	encPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
 
 	cfg := &config.Config{
-		Root:             tempDir,
-		JWTSecret:        []byte("my-test-super-secret-key-signature-123"),
-		PrivateKeyPEM:    privPEM,
-		PublicKeyPEM:     pubPEM,
-		EncryptionKeyPEM: encKeyPEM,
-		EncryptionPubPEM: encPubPEM,
-		IdentityKeyIndex:   0,
-		EncryptionKeyIndex: 0,
+		Root:      tempDir,
+		JWTSecret: []byte("my-test-super-secret-key-signature-123"),
+		Keys: &keymanager.KeyState{
+			PrivateKeyPEM:      privPEM,
+			PublicKeyPEM:       pubPEM,
+			EncryptionKeyPEM:   encKeyPEM,
+			EncryptionPubPEM:   encPubPEM,
+			IdentityKeyIndex:   0,
+			EncryptionKeyIndex: 0,
+		},
 	}
 
 	p2pMock := &MockP2PService{hostID: "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"}

@@ -374,16 +374,16 @@ func (s *Server) handleAdminUpgrade(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminGetMnemonic(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"mnemonic":             s.config.Mnemonic,
-		"acknowledged":         s.config.Mnemonic == "",
-		"identity_key_index":   s.config.IdentityKeyIndex,
-		"encryption_key_index": s.config.EncryptionKeyIndex,
+		"mnemonic":             s.config.Keys.Mnemonic,
+		"acknowledged":         s.config.Keys.Mnemonic == "",
+		"identity_key_index":   s.config.Keys.IdentityKeyIndex,
+		"encryption_key_index": s.config.Keys.EncryptionKeyIndex,
 	})
 }
 
 func (s *Server) handleAdminAcknowledgeMnemonic(w http.ResponseWriter, r *http.Request) {
 	// Security: Wipe the in-memory plaintext mnemonic phrase.
-	s.config.Mnemonic = ""
+	s.config.Keys.Mnemonic = ""
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "mnemonic acknowledged and cleared from memory"})
 }
@@ -402,7 +402,7 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 		return
 	}
 
-	newIndex := s.config.EncryptionKeyIndex + 1
+	newIndex := s.config.Keys.EncryptionKeyIndex + 1
 
 	if err := config.RotateEncryptionKey(s.config.Root, req.Mnemonic, newIndex); err != nil {
 		s.logger.Error("admin rotate encryption keys: failed to rotate key", logging.F("error", err.Error()))
@@ -416,7 +416,7 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 		return
 	}
 
-	s.config.EncryptionKeyIndex = newIndex
+	s.config.Keys.EncryptionKeyIndex = newIndex
 
 	xPriv, err := crypto.DeriveEncryptionKey(req.Mnemonic, newIndex)
 	if err != nil {
@@ -502,9 +502,9 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.config.IdentityKeyIndex = 0
-	s.config.EncryptionKeyIndex = 0
-	s.config.Mnemonic = mnemonic
+	s.config.Keys.IdentityKeyIndex = 0
+	s.config.Keys.EncryptionKeyIndex = 0
+	s.config.Keys.Mnemonic = mnemonic
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"mnemonic": mnemonic,

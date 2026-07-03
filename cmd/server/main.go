@@ -59,15 +59,15 @@ func run() error {
 	// Read the active key indices from the database system_settings table.
 	idIndexVal, err := database.GetSystemSetting(db.SettingIdentityKeyIndex)
 	if err == nil && idIndexVal != "" {
-		fmt.Sscanf(idIndexVal, "%d", &cfg.IdentityKeyIndex)
+		fmt.Sscanf(idIndexVal, "%d", &cfg.Keys.IdentityKeyIndex)
 	}
 	encIndexVal, err := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
 	if err == nil && encIndexVal != "" {
-		fmt.Sscanf(encIndexVal, "%d", &cfg.EncryptionKeyIndex)
+		fmt.Sscanf(encIndexVal, "%d", &cfg.Keys.EncryptionKeyIndex)
 	}
 	logger.Info("loaded key indices from database",
-		logging.F("identity_index", cfg.IdentityKeyIndex),
-		logging.F("encryption_index", cfg.EncryptionKeyIndex),
+		logging.F("identity_index", cfg.Keys.IdentityKeyIndex),
+		logging.F("encryption_index", cfg.Keys.EncryptionKeyIndex),
 	)
 
 	// 4. Initialize Docker client.
@@ -109,12 +109,12 @@ func run() error {
 	logger.Info("cron jobs started")
 
 	// 9. Initialize and start P2P service.
-	p2pKey, err := p2p.ParsePEMToPrivKey(cfg.PrivateKeyPEM)
+	p2pKey, err := p2p.ParsePEMToPrivKey(cfg.Keys.PrivateKeyPEM)
 	if err != nil {
 		return fmt.Errorf("failed to parse identity key for P2P: %w", err)
 	}
 
-	encryptionPriv, err := p2p.ParsePEMToX25519PrivKey(cfg.EncryptionKeyPEM)
+	encryptionPriv, err := p2p.ParsePEMToX25519PrivKey(cfg.Keys.EncryptionKeyPEM)
 	if err != nil {
 		return fmt.Errorf("failed to parse encryption key for P2P: %w", err)
 	}
