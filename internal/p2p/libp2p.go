@@ -6,7 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 
-	"encoding/hex"
+
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -208,6 +208,7 @@ func (s *Libp2pService) SendTo(ctx context.Context, peerMultiaddr string, encPub
 		return fmt.Errorf("libp2p: host not started")
 	}
 
+	// Transport: resolve peer address and connect
 	addr, err := multiaddr.NewMultiaddr(peerMultiaddr)
 	if err != nil {
 		return fmt.Errorf("libp2p: invalid multiaddress %q: %w", peerMultiaddr, err)
@@ -217,47 +218,25 @@ func (s *Libp2pService) SendTo(ctx context.Context, peerMultiaddr string, encPub
 	if err != nil {
 		return fmt.Errorf("libp2p: failed to extract peer info: %w", err)
 	}
-	peerID := info.ID
 
 	if err := s.host.Connect(ctx, *info); err != nil {
 		return fmt.Errorf("libp2p: failed to connect to peer: %w", err)
 	}
 
-	pubBytes, err := hex.DecodeString(encPubKeyHex)
+	// Protocol: encrypt and sign the payload
+	encryptedMsg, err := encryptOutbound(s.privKey, encPubKeyHex, msg)
 	if err != nil {
-		return fmt.Errorf("libp2p: invalid enc_pub_key hex string: %w", err)
+		return fmt.Errorf("libp2p: %w", err)
 	}
 
-	curve := ecdh.X25519()
-	recipientXPub, err := curve.NewPublicKey(pubBytes)
-	if err != nil {
-		return fmt.Errorf("libp2p: failed to parse X25519 public key: %w", err)
-	}
-
-	senderEdPriv, err := getEd25519PrivKey(s.privKey)
-	if err != nil {
-		return fmt.Errorf("libp2p: failed to parse local signing key: %w", err)
-	}
-
-	encryptedPayload, err := corecrypto.EncryptAndSign(senderEdPriv, recipientXPub, msg.Payload)
-	if err != nil {
-		return fmt.Errorf("libp2p: failed to encrypt/sign payload: %w", err)
-	}
-
-	encryptedMsg := &Message{
-		AppID:        msg.AppID,
-		TargetUserID: msg.TargetUserID,
-		Payload:      encryptedPayload,
-	}
-
-	stream, err := s.host.NewStream(network.WithUseTransient(ctx, "transit"), peerID, ProtocolID)
+	// Transport: open stream and send
+	stream, err := s.host.NewStream(network.WithUseTransient(ctx, "transit"), info.ID, ProtocolID)
 	if err != nil {
 		return fmt.Errorf("libp2p: failed to open stream to peer: %w", err)
 	}
 	defer stream.Close()
 
-	encoder := json.NewEncoder(stream)
-	if err := encoder.Encode(encryptedMsg); err != nil {
+	if err := json.NewEncoder(stream).Encode(encryptedMsg); err != nil {
 		return fmt.Errorf("libp2p: failed to encode message: %w", err)
 	}
 
@@ -272,6 +251,7 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 	decoder := json.NewDecoder(stream)
 
 	for {
+		// Transport: read raw message from stream
 		var msg Message
 		err := decoder.Decode(&msg)
 		if err == io.EOF {
@@ -284,37 +264,13 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 			return
 		}
 
-		senderPeerID, err := peer.Decode(fromPeer)
-		if err != nil {
-			s.logger.Error("libp2p: failed to decode sender peer ID",
-				logging.F("from", fromPeer),
-				logging.F("error", err.Error()))
-			continue
-		}
-
-		// EXTRACT static signing key directly from Peer ID (Public Key Pinning / Cryptographic binding)
-		senderPubKey, err := senderPeerID.ExtractPublicKey()
-		if err != nil {
-			s.logger.Error("libp2p: failed to extract sender public key from peer ID",
-				logging.F("from", fromPeer),
-				logging.F("error", err.Error()))
-			continue
-		}
-
-		senderEdPub, err := getEd25519PubKey(senderPubKey)
-		if err != nil {
-			s.logger.Error("libp2p: failed to parse sender public key",
-				logging.F("from", fromPeer),
-				logging.F("error", err.Error()))
-			continue
-		}
-
+		// Protocol: decrypt and verify the payload
 		if s.encryptionPriv == nil {
 			s.logger.Error("libp2p: local encryption private key is nil")
 			continue
 		}
 
-		decryptedPayload, err := corecrypto.DecryptAndVerify(s.encryptionPriv, senderEdPub, msg.Payload)
+		decryptedMsg, err := decryptInbound(s.encryptionPriv, fromPeer, &msg)
 		if err != nil {
 			s.logger.Error("libp2p: failed to decrypt/verify incoming payload",
 				logging.F("from", fromPeer),
@@ -322,10 +278,9 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 			continue
 		}
 
-		msg.Payload = decryptedPayload
-
+		// Dispatch to registered handler
 		s.mu.RLock()
-		handler, exists := s.handlers[msg.AppID]
+		handler, exists := s.handlers[decryptedMsg.AppID]
 		if !exists {
 			handler = s.defaultHandler
 			exists = handler != nil
@@ -334,15 +289,15 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 
 		if !exists {
 			s.logger.Error("libp2p: unhandled protocol message type",
-				logging.F("type", msg.AppID),
+				logging.F("type", decryptedMsg.AppID),
 				logging.F("from", fromPeer))
 			continue
 		}
 
 		ctx := context.Background()
-		if err := handler(ctx, fromPeer, &msg); err != nil {
+		if err := handler(ctx, fromPeer, decryptedMsg); err != nil {
 			s.logger.Error("libp2p: handler failed for protocol type",
-				logging.F("type", msg.AppID),
+				logging.F("type", decryptedMsg.AppID),
 				logging.F("from", fromPeer),
 				logging.F("error", err.Error()))
 		}
@@ -371,26 +326,4 @@ func ParsePEMToX25519PrivKey(pemBytes []byte) (*ecdh.PrivateKey, error) {
 	return corecrypto.UnmarshalX25519PrivateKey(pemBytes)
 }
 
-func getEd25519PubKey(pubKey crypto.PubKey) (ed25519.PublicKey, error) {
-	rawPubBytes, err := pubKey.Raw()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get raw public key: %w", err)
-	}
-	if len(rawPubBytes) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("invalid Ed25519 public key size: %d", len(rawPubBytes))
-	}
-	return ed25519.PublicKey(rawPubBytes), nil
-}
-
-func getEd25519PrivKey(privKey crypto.PrivKey) (ed25519.PrivateKey, error) {
-	rawPriv, err := privKey.Raw()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get raw private key: %w", err)
-	}
-	// go-libp2p's Ed25519 private key Raw() returns the 64-byte private key (seed + pub)
-	if len(rawPriv) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("invalid Ed25519 private key size: %d", len(rawPriv))
-	}
-	return ed25519.PrivateKey(rawPriv), nil
-}
 
