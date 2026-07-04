@@ -17,10 +17,11 @@ import (
 
 // Env holds the default Magicbox injected environment variables.
 type Env struct {
-	ApiToken string
-	CoreURL  string
-	UserID   string
-	AppID    string
+	ApiToken      string
+	CoreURL       string
+	UserID        string
+	AppID         string
+	WebhookSecret string
 }
 
 // LoadEnv loads the injected environment variables.
@@ -29,16 +30,18 @@ func LoadEnv() (*Env, error) {
 	coreURL := os.Getenv("MAGICBOX_CORE_URL")
 	userID := os.Getenv("MAGICBOX_USER_ID")
 	appID := os.Getenv("MAGICBOX_APP_ID")
+	webhookSecret := os.Getenv("MAGICBOX_WEBHOOK_SECRET")
 
-	if apiToken == "" || coreURL == "" || userID == "" || appID == "" {
+	if apiToken == "" || coreURL == "" || userID == "" || appID == "" || webhookSecret == "" {
 		return nil, fmt.Errorf("missing one or more required Magicbox environment variables")
 	}
 
 	return &Env{
-		ApiToken: apiToken,
-		CoreURL:  coreURL,
-		UserID:   userID,
-		AppID:    appID,
+		ApiToken:      apiToken,
+		CoreURL:       coreURL,
+		UserID:        userID,
+		AppID:         appID,
+		WebhookSecret: webhookSecret,
 	}, nil
 }
 
@@ -119,4 +122,10 @@ func ParseWebhookMetadata(r *http.Request) *WebhookMetadata {
 		SourceUser: r.Header.Get("X-Magicbox-Source-User"),
 		SourceType: r.Header.Get("X-Magicbox-Source-Type"),
 	}
+}
+
+// VerifyWebhook checks if the incoming request has a valid X-Magicbox-Webhook-Secret header.
+func (e *Env) VerifyWebhook(r *http.Request) bool {
+	secret := r.Header.Get("X-Magicbox-Webhook-Secret")
+	return secret != "" && secret == e.WebhookSecret
 }

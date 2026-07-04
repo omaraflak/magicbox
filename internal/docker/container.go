@@ -33,20 +33,21 @@ type AppVolumeMount struct {
 // AppContainerConfig holds all parameters needed to create an app container.
 // This is a local type to avoid importing the core package.
 type AppContainerConfig struct {
-	AppID        string
-	AppName      string
-	Image        string
-	EntryPort    int
-	RouteSlug    string
-	Username     string
-	UserID       string
-	AppToken     string
-	CoreURL      string // e.g., "magicbox_core:50051"
-	MagicboxRoot string // e.g., "/opt/magicbox"
-	VolumeMounts []AppVolumeMount
-	MemoryMB     int
-	CPUCores     float64
-	Host         string
+	AppID         string
+	AppName       string
+	Image         string
+	EntryPort     int
+	RouteSlug     string
+	Username      string
+	UserID        string
+	AppToken      string
+	WebhookSecret string
+	CoreURL       string // e.g., "magicbox_core:50051"
+	MagicboxRoot  string // e.g., "/opt/magicbox"
+	VolumeMounts  []AppVolumeMount
+	MemoryMB      int
+	CPUCores      float64
+	Host          string
 }
 
 // CreateAndStartContainer creates and starts a new app container with the given configuration.
@@ -59,6 +60,7 @@ func (c *Client) CreateAndStartContainer(ctx context.Context, cfg *AppContainerC
 		"MAGICBOX_CORE_URL=" + cfg.CoreURL,
 		"MAGICBOX_USER_ID=" + cfg.UserID,
 		"MAGICBOX_APP_ID=" + cfg.AppID,
+		"MAGICBOX_WEBHOOK_SECRET=" + cfg.WebhookSecret,
 	}
 
 	// 2. Build volume binds.

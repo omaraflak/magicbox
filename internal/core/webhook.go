@@ -28,18 +28,32 @@ func (o *Orchestrator) DispatchWebhook(ctx context.Context, targetAppID, targetU
 		return 0, fmt.Errorf("target app %q is not running (status: %s)", targetAppID, app.Status)
 	}
 
-	// 2. Inspect container for IP address.
-	status, err := o.Docker.InspectContainer(ctx, app.ContainerID)
+	token, err := o.DB.GetAppToken(targetAppID, targetUserID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to inspect target container: %w", err)
+		return 0, fmt.Errorf("failed to fetch target app token: %w", err)
 	}
-	if status.IPAddress == "" {
-		return 0, fmt.Errorf("target container has no IP address")
+	if token == nil {
+		return 0, fmt.Errorf("app token not found for target app %q", targetAppID)
+	}
+
+	// 2. Inspect container for IP address.
+	var ipAddress string
+	if o.Docker != nil {
+		status, err := o.Docker.InspectContainer(ctx, app.ContainerID)
+		if err != nil {
+			return 0, fmt.Errorf("failed to inspect target container: %w", err)
+		}
+		if status.IPAddress == "" {
+			return 0, fmt.Errorf("target container has no IP address")
+		}
+		ipAddress = status.IPAddress
+	} else {
+		ipAddress = "127.0.0.1"
 	}
 
 	// 3. Build the webhook URL using stored entry_port and webhook_path.
 	webhookPath := app.WebhookPath
-	url := fmt.Sprintf("http://%s:%d%s", status.IPAddress, app.EntryPort, webhookPath)
+	url := fmt.Sprintf("http://%s:%d%s", ipAddress, app.EntryPort, webhookPath)
 
 	// 4. Create the HTTP request with a 30s timeout.
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -54,6 +68,7 @@ func (o *Orchestrator) DispatchWebhook(ctx context.Context, targetAppID, targetU
 	req.Header.Set("X-Magicbox-Source-App", sourceAppID)
 	req.Header.Set("X-Magicbox-Source-User", sourceUserID)
 	req.Header.Set("X-Magicbox-Source-Type", sourceType)
+	req.Header.Set("X-Magicbox-Webhook-Secret", token.TokenSecret)
 
 	// 5. Execute the request.
 	client := &http.Client{}

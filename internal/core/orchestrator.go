@@ -176,20 +176,21 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 		}
 
 		containerCfg := &docker.AppContainerConfig{
-			AppID:        manifest.AppID,
-			AppName:      manifest.Name,
-			Image:        manifest.Image,
-			EntryPort:    manifest.EntryPort,
-			RouteSlug:    manifest.RouteSlug,
-			Username:     user.Username,
-			UserID:       userID,
-			AppToken:     appToken,
-			CoreURL:      "magicbox_core:50051",
-			MagicboxRoot: o.Cfg.HostRoot,
-			VolumeMounts: volumeMounts,
-			MemoryMB:     manifest.ResourceLimits.MemoryMB,
-			CPUCores:     manifest.ResourceLimits.CPUCores,
-			Host:         manifest.Host,
+			AppID:         manifest.AppID,
+			AppName:       manifest.Name,
+			Image:         manifest.Image,
+			EntryPort:     manifest.EntryPort,
+			RouteSlug:     manifest.RouteSlug,
+			Username:      user.Username,
+			UserID:        userID,
+			AppToken:      appToken,
+			WebhookSecret: tokenSecret,
+			CoreURL:       "magicbox_core:50051",
+			MagicboxRoot:  o.Cfg.HostRoot,
+			VolumeMounts:  volumeMounts,
+			MemoryMB:      manifest.ResourceLimits.MemoryMB,
+			CPUCores:      manifest.ResourceLimits.CPUCores,
+			Host:          manifest.Host,
 		}
 
 		containerID, err := o.Docker.CreateAndStartContainer(bgCtx, containerCfg)
@@ -326,18 +327,19 @@ func (o *Orchestrator) Start(ctx context.Context, appDBID string) error {
 	}
 
 	containerCfg := &docker.AppContainerConfig{
-		AppID:        app.AppID,
-		AppName:      app.AppID, // Use appID as name fallback.
-		Image:        app.Image,
-		EntryPort:    app.EntryPort,
-		RouteSlug:    app.RouteSlug,
-		Username:     user.Username,
-		UserID:       app.UserID,
-		AppToken:     appJWT,
-		CoreURL:      "magicbox_core:50051",
-		MagicboxRoot: o.Cfg.HostRoot,
-		VolumeMounts: volumeMounts,
-		Host:         app.Host,
+		AppID:         app.AppID,
+		AppName:       app.AppID, // Use appID as name fallback.
+		Image:         app.Image,
+		EntryPort:     app.EntryPort,
+		RouteSlug:     app.RouteSlug,
+		Username:      user.Username,
+		UserID:        app.UserID,
+		AppToken:      appJWT,
+		WebhookSecret: token.TokenSecret,
+		CoreURL:       "magicbox_core:50051",
+		MagicboxRoot:  o.Cfg.HostRoot,
+		VolumeMounts:  volumeMounts,
+		Host:          app.Host,
 	}
 
 	var containerID string
