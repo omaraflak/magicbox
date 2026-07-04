@@ -66,3 +66,36 @@ func TestRotateEncryptionKey_Wrapper(t *testing.T) {
 		t.Fatalf("RotateEncryptionKey wrapper failed: %v", err)
 	}
 }
+
+func TestLoad_MnemonicStoreInitialization(t *testing.T) {
+	// Clean up any existing data dir before and after
+	_ = os.RemoveAll("./data")
+	defer func() {
+		_ = os.RemoveAll("./data")
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if cfg.MnemonicStore == nil {
+		t.Fatal("expected MnemonicStore to be initialized, got nil")
+	}
+
+	// Because keys were generated, mnemonic should be populated in MnemonicStore
+	mnemonic1 := cfg.MnemonicStore.Get()
+	if mnemonic1 == "" {
+		t.Fatal("expected MnemonicStore to have mnemonic after key generation, got empty")
+	}
+
+	// Reload config. This time, keys already exist, so mnemonic should be empty in MnemonicStore
+	cfg2, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed on second call: %v", err)
+	}
+	if cfg2.MnemonicStore.Get() != "" {
+		t.Errorf("expected MnemonicStore to be empty when loading existing keys, got %q", cfg2.MnemonicStore.Get())
+	}
+}
+

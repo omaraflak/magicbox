@@ -113,3 +113,23 @@ func (d *DB) WipeAllContactsAndRequests() error {
 	}
 	return nil
 }
+
+// GetAllContacts returns all contacts in the system.
+func (d *DB) GetAllContacts() ([]Contact, error) {
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at FROM contacts ORDER BY display_name ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contacts []Contact
+	for rows.Next() {
+		var c Contact
+		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		contacts = append(contacts, c)
+	}
+	return contacts, rows.Err()
+}
+

@@ -402,5 +402,122 @@ func TestAdminRestart_Success(t *testing.T) {
 	}
 }
 
+func TestAdminUnlockAndStatus(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	// Create admin user and get session cookie.
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	// Generate a fresh mnemonic to test unlocking
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master key: %v", err)
+	}
+	masterPubPEM, err := crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		t.Fatalf("failed to marshal master public key: %v", err)
+	}
+
+	// Update cfg with the master public key matching our test mnemonic
+	cfg.Keys.MasterPublicKeyPEM = masterPubPEM
+
+	// 1. Initial Status check - should be locked
+	{
+		req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+		req.AddCookie(adminCookie)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status code: %d", rr.Code)
+		}
+
+		var resp map[string]interface{}
+		json.NewDecoder(rr.Body).Decode(&resp)
+		if resp["unlocked"] != false {
+			t.Errorf("expected unlocked=false, got %v", resp["unlocked"])
+		}
+		if int(resp["identity_index"].(float64)) != 1 {
+			t.Errorf("expected identity_index=1, got %v", resp["identity_index"])
+		}
+	}
+
+	// 2. Unlock with Mismatch Mnemonic
+	{
+		mismatchMnemonic, _ := crypto.GenerateMnemonic()
+		body, _ := json.Marshal(map[string]string{"mnemonic": mismatchMnemonic})
+		req := httptest.NewRequest("POST", "/api/v1/admin/unlock", bytes.NewReader(body))
+		req.AddCookie(adminCookie)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 Bad Request, got %d", rr.Code)
+		}
+	}
+
+	// 3. Unlock with Invalid Mnemonic Phrase
+	{
+		body, _ := json.Marshal(map[string]string{"mnemonic": "invalid mnemonic"})
+		req := httptest.NewRequest("POST", "/api/v1/admin/unlock", bytes.NewReader(body))
+		req.AddCookie(adminCookie)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 Bad Request, got %d", rr.Code)
+		}
+	}
+
+	// 4. Success Unlock
+	{
+		body, _ := json.Marshal(map[string]string{"mnemonic": mnemonic})
+		req := httptest.NewRequest("POST", "/api/v1/admin/unlock", bytes.NewReader(body))
+		req.AddCookie(adminCookie)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200 OK, got %d (body: %s)", rr.Code, rr.Body.String())
+		}
+
+		var resp map[string]string
+		json.NewDecoder(rr.Body).Decode(&resp)
+		if resp["message"] != "system unlocked successfully" {
+			t.Errorf("expected unlock message, got %q", resp["message"])
+		}
+
+		if cfg.MnemonicStore.Get() != mnemonic {
+			t.Errorf("expected MnemonicStore to be set to %q, got %q", mnemonic, cfg.MnemonicStore.Get())
+		}
+	}
+
+	// 5. Status check - should be unlocked
+	{
+		req := httptest.NewRequest("GET", "/api/v1/admin/status", nil)
+		req.AddCookie(adminCookie)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status code: %d", rr.Code)
+		}
+
+		var resp map[string]interface{}
+		json.NewDecoder(rr.Body).Decode(&resp)
+		if resp["unlocked"] != true {
+			t.Errorf("expected unlocked=true, got %v", resp["unlocked"])
+		}
+	}
+}
+
+
 
 

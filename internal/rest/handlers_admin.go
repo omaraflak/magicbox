@@ -2,6 +2,7 @@ package rest
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -639,5 +640,54 @@ func (s *Server) handleAdminRestart(w http.ResponseWriter, r *http.Request) {
 		s.onRestart()
 	}()
 }
+
+func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mnemonic string `json:"mnemonic"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Mnemonic == "" || !bip39.IsMnemonicValid(req.Mnemonic) {
+		writeError(w, http.StatusBadRequest, "invalid mnemonic phrase")
+		return
+	}
+
+	masterPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, 0)
+	if err != nil {
+		s.logger.Error("admin unlock: failed to derive master key", logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, "invalid mnemonic")
+		return
+	}
+
+	masterPubPEM, err := crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		s.logger.Error("admin unlock: failed to marshal master public key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if !bytes.Equal(masterPubPEM, s.config.Keys.MasterPublicKeyPEM) {
+		s.logger.Warn("admin unlock: mnemonic does not match master public key")
+		writeError(w, http.StatusBadRequest, "mnemonic mismatch")
+		return
+	}
+
+	s.config.MnemonicStore.Set(req.Mnemonic)
+	s.logger.Info("admin unlock: system unlocked successfully")
+	writeJSON(w, http.StatusOK, map[string]string{"message": "system unlocked successfully"})
+}
+
+func (s *Server) handleAdminStatus(w http.ResponseWriter, r *http.Request) {
+	unlocked := s.config.MnemonicStore.Get() != ""
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"unlocked":         unlocked,
+		"identity_index":   s.config.Keys.IdentityKeyIndex,
+		"encryption_index": s.config.Keys.EncryptionKeyIndex,
+	})
+}
+
 
 

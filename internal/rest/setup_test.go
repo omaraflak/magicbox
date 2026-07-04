@@ -82,7 +82,9 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 			IdentityKeyIndex:   1,
 			EncryptionKeyIndex: 1,
 		},
+		MnemonicStore: keymanager.NewMnemonicStore(),
 	}
+
 
 	p2pMock := &MockP2PService{hostID: "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"}
 	orch := core.NewOrchestrator(database, nil, cfg, logger, GenerateAppToken)

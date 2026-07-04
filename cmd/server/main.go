@@ -113,6 +113,10 @@ func run() error {
 	}
 	defer p2pService.Stop()
 
+	stopRotation := cron.StartKeyRotationJobs(database, p2pService, cfg, logger)
+	defer stopRotation()
+
+
 	// Register system protocol handlers (key rotation, etc.).
 	protocol.RegisterSystemHandlers(p2pService, database, logger)
 
@@ -194,7 +198,9 @@ func run() error {
 	// Stop cron jobs.
 	stopTransit()
 	stopBackup()
+	stopRotation()
 	stopQueue()
+
 
 	logger.Info("shutdown complete")
 	return nil

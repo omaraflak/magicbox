@@ -324,3 +324,17 @@ func TestRotateIdentity_Success(t *testing.T) {
 		t.Errorf("expected identity index on disk to be 5, got %d", index)
 	}
 }
+
+func TestMnemonicStore(t *testing.T) {
+	store := NewMnemonicStore()
+	if store.Get() != "" {
+		t.Errorf("expected initial store to be empty, got %q", store.Get())
+	}
+
+	mnemonic := "apple banana cherry dog elephant fox grape horse ink juice king lemon"
+	store.Set(mnemonic)
+	if store.Get() != mnemonic {
+		t.Errorf("expected store to return %q, got %q", mnemonic, store.Get())
+	}
+}
+

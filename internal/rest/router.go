@@ -90,6 +90,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/admin/keys/rotate-encryption", auth(admin(http.HandlerFunc(s.handleAdminRotateEncryptionKeys))))
 	mux.Handle("POST /api/v1/admin/keys/rotate-identity", auth(admin(http.HandlerFunc(s.handleAdminRotateIdentityKeys))))
 	mux.Handle("POST /api/v1/admin/keys/reset-identity", auth(admin(http.HandlerFunc(s.handleAdminResetIdentityKeys))))
+	mux.Handle("POST /api/v1/admin/unlock", auth(admin(http.HandlerFunc(s.handleAdminUnlock))))
+	mux.Handle("GET /api/v1/admin/status", auth(admin(http.HandlerFunc(s.handleAdminStatus))))
+
 
 	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
 	mux.Handle("/u/", auth(AppAccessMiddleware()(http.HandlerFunc(s.handleAppProxy))))

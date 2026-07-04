@@ -124,3 +124,32 @@ func TestUpdateContactIdentity(t *testing.T) {
 		t.Errorf("expected enc_pub_key enc-new, got %s", contact.EncPubKey)
 	}
 }
+
+func TestGetAllContacts(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	if err := db.CreateUser("u1", "alice", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	if err := db.CreateUser("u2", "bob", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	_ = db.AddContact("c1", "u1", "Charlie", "peer1", "/ip4/1.1.1.1/tcp/4001/p2p/peer1", "char-uid", "enc1", "master1")
+	_ = db.AddContact("c2", "u2", "Dave", "peer2", "/ip4/1.1.1.2/tcp/4001/p2p/peer2", "dave-uid", "enc2", "master2")
+
+	contacts, err := db.GetAllContacts()
+	if err != nil {
+		t.Fatalf("GetAllContacts failed: %v", err)
+	}
+	if len(contacts) != 2 {
+		t.Fatalf("expected 2 contacts, got %d", len(contacts))
+	}
+
+	// Verify order by display_name
+	if contacts[0].DisplayName != "Charlie" || contacts[1].DisplayName != "Dave" {
+		t.Errorf("unexpected sorting: %s, %s", contacts[0].DisplayName, contacts[1].DisplayName)
+	}
+}
+

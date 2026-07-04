@@ -14,19 +14,25 @@ import (
 
 // Config holds the runtime configuration for Magicbox.
 type Config struct {
-	Root     string
-	HostRoot string
-	Port     string
-	JWTSecret []byte
-	DBPath    string
-	Keys     *keymanager.KeyState
+	Root          string
+	HostRoot      string
+	Port          string
+	JWTSecret     []byte
+	DBPath        string
+	Keys          *keymanager.KeyState
+	MnemonicStore *keymanager.MnemonicStore
 }
 
 // Load reads configuration from environment variables and initializes
 // all required directories and secrets.
 func Load() (*Config, error) {
-	root := "/opt/magicbox"
-	if err := os.MkdirAll(root, 0750); err != nil {
+	mnemonicStore := keymanager.NewMnemonicStore()
+
+	root := os.Getenv("MAGICBOX_ROOT")
+	if root == "" {
+		root = "/opt/magicbox"
+	}
+	if err := os.MkdirAll(root, 0750); err != nil || !isWritable(root) {
 		root = "./data"
 		if err := os.MkdirAll(root, 0750); err != nil {
 			return nil, fmt.Errorf("failed to create root directory: %w", err)
@@ -72,18 +78,23 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load/generate keys: %w", err)
 	}
 
+	if keys.Mnemonic != "" {
+		mnemonicStore.Set(keys.Mnemonic)
+	}
+
 	hostRoot := os.Getenv("MAGICBOX_HOST_ROOT")
 	if hostRoot == "" {
 		hostRoot = root
 	}
 
 	return &Config{
-		Root:     root,
-		HostRoot: hostRoot,
-		Port:     port,
-		JWTSecret: jwtSecret,
-		DBPath:   filepath.Join(root, "core", "magicbox.db"),
-		Keys:     keys,
+		Root:          root,
+		HostRoot:      hostRoot,
+		Port:          port,
+		JWTSecret:     jwtSecret,
+		DBPath:        filepath.Join(root, "core", "magicbox.db"),
+		Keys:          keys,
+		MnemonicStore: mnemonicStore,
 	}, nil
 }
 
@@ -166,3 +177,13 @@ func RecoverKeys(root string, mnemonic string, identityIndex, encryptionIndex in
 func RotateEncryptionKey(root string, mnemonic string) error {
 	return keymanager.RotateEncryption(keymanager.NewKeyPaths(root), mnemonic)
 }
+
+func isWritable(dir string) bool {
+	testFile := filepath.Join(dir, ".writable_test")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		return false
+	}
+	_ = os.Remove(testFile)
+	return true
+}
+

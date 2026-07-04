@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/magicbox/core/internal/crypto"
 )
@@ -317,5 +318,30 @@ func RotateIdentity(paths *KeyPaths, mnemonic string) error {
 	}
 
 	return nil
+}
+
+// MnemonicStore holds a mnemonic in memory.
+type MnemonicStore struct {
+	mu       sync.RWMutex
+	mnemonic string
+}
+
+// NewMnemonicStore creates a new empty MnemonicStore.
+func NewMnemonicStore() *MnemonicStore {
+	return &MnemonicStore{}
+}
+
+// Set stores the mnemonic in memory.
+func (s *MnemonicStore) Set(mnemonic string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mnemonic = mnemonic
+}
+
+// Get retrieves the mnemonic from memory.
+func (s *MnemonicStore) Get() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.mnemonic
 }
 
