@@ -579,34 +579,29 @@ export default function App() {
         }, 1500);
     };
 
-    // Rotate/Recover Encryption Keys
-    const handleRotateEncryptionKeys = async () => {
-        const { status, data } = await callAPI('POST', '/admin/keys/rotate-encryption');
-        if (status === 200) {
-            loadMnemonic();
-            setTimeout(triggerSystemRestart, 1500);
-            return { success: true, message: 'Encryption keys rotated successfully! Restarting Magicbox to apply changes...' };
-        } else {
-            return { success: false, error: data?.error || 'Rotation failed' };
-        }
-    };
-
-    // Rotate Identity Keys (Hygiene)
-    const handleRotateIdentityKeys = async () => {
+    // Rotate Keys (Unified)
+    const handleRotateKeys = async (rotateEncryption, rotateIdentity) => {
         return new Promise((resolve) => {
+            const confirmMsg = rotateIdentity 
+                ? "Are you sure you want to rotate your keys? If rotating identity, succession certificates will be automatically generated and queued for all your contacts so they can update your address. This will restart Magicbox to apply changes."
+                : "Are you sure you want to rotate your encryption keys? This will restart Magicbox to apply changes.";
+            
             showConfirm(
-                "Are you sure you want to rotate your P2P identity keys? Succession certificates will be automatically generated and queued for all your contacts so they can update your address. This will restart Magicbox to apply changes.",
+                confirmMsg,
                 async () => {
-                    const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity');
+                    const { status, data } = await callAPI('POST', '/admin/keys/rotate', {
+                        rotate_encryption: rotateEncryption,
+                        rotate_identity: rotateIdentity
+                    });
                     if (status === 200) {
                         loadMnemonic();
-                        setTimeout(triggerSystemRestart, 1500); // restart immediately
-                        resolve({ success: true, message: 'Identity keys rotated successfully! Restarting Magicbox to apply changes...' });
+                        setTimeout(triggerSystemRestart, 1500);
+                        resolve({ success: true, message: data?.message || 'Keys rotated successfully! Restarting Magicbox...' });
                     } else {
                         resolve({ success: false, error: data?.error || 'Rotation failed' });
                     }
                 },
-                "Confirm Identity Rotation",
+                "Confirm Key Rotation",
                 () => resolve({ success: false, cancelled: true })
             );
         });
@@ -632,12 +627,12 @@ export default function App() {
     };
 
     // Reset & Re-create P2P Identity (Danger Zone)
-    const handleResetIdentityKeys = async (mnemonic) => {
+    const handleResetIdentityKeys = async () => {
         return new Promise((resolve) => {
             showConfirm(
-                "⚠️ WARNING: This will completely RESET your cryptographic identity. You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?",
+                "⚠️ WARNING: This will completely reset your cryptographic identity. This generates a brand new Master Key and resets key indexes. It will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity. Are you sure you want to proceed?",
                 async () => {
-                    const { status, data } = await callAPI('POST', '/admin/keys/reset-identity', { mnemonic });
+                    const { status, data } = await callAPI('POST', '/admin/keys/reset-identity', {});
                     if (status === 200) {
                         if (data?.mnemonic) {
                             // If a new mnemonic was generated, show the modal so they can copy it!
@@ -780,8 +775,7 @@ export default function App() {
                         upgradeError={upgradeError}
                         upgradeStatus={upgradeStatus}
                         mnemonicData={mnemonicData}
-                        onRotateEncryption={handleRotateEncryptionKeys}
-                        onRotateIdentity={handleRotateIdentityKeys}
+                        onRotateKeys={handleRotateKeys}
                         onResetIdentity={handleResetIdentityKeys}
                         onUnlock={handleUnlockSystem}
                         onGetStatus={handleGetSystemStatus}

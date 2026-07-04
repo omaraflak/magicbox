@@ -40,8 +40,7 @@ export default function SettingsView({
     upgradeError,
     upgradeStatus,
     mnemonicData,
-  onRotateEncryption,
-  onRotateIdentity,
+  onRotateKeys,
   onResetIdentity,
   onUnlock,
   onGetStatus
@@ -195,8 +194,7 @@ export default function SettingsView({
                         )}
                         {adminTab === 'keys' && (
                             <AdminKeysTab
-                                onRotateEncryption={onRotateEncryption}
-                                onRotateIdentity={onRotateIdentity}
+                                onRotateKeys={onRotateKeys}
                                 onResetIdentity={onResetIdentity}
                                 onUnlock={onUnlock}
                                 onGetStatus={onGetStatus}

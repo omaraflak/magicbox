@@ -1,23 +1,18 @@
 import React, { useState, useEffect } from 'react';
 
-export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onResetIdentity, onUnlock, onGetStatus }) {
+export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, onGetStatus }) {
     const [unlocked, setUnlocked] = useState(false);
     const [unlockMnemonic, setUnlockMnemonic] = useState('');
     const [unlockLoading, setUnlockLoading] = useState(false);
     const [unlockError, setUnlockError] = useState('');
     const [unlockSuccess, setUnlockSuccess] = useState('');
 
-    const [resetMnemonic, setResetMnemonic] = useState('');
-
-    // Local state for Section 1 (Rotate Encryption Keys)
-    const [encLoading, setEncLoading] = useState(false);
-    const [encError, setEncError] = useState('');
-    const [encStatus, setEncStatus] = useState('');
-
-    // Local state for Section 2 (Rotate Identity Keys - Hygiene)
-    const [idLoading, setIdLoading] = useState(false);
-    const [idError, setIdError] = useState('');
-    const [idStatus, setIdStatus] = useState('');
+    // Local state for key rotation
+    const [rotateLoading, setRotateLoading] = useState(false);
+    const [rotateError, setRotateError] = useState('');
+    const [rotateStatus, setRotateStatus] = useState('');
+    const [rotateEncryption, setRotateEncryption] = useState(true);
+    const [rotateIdentity, setRotateIdentity] = useState(false);
 
     // Local state for Section 3 (Reset P2P Identity - Emergency)
     const [resetLoading, setResetLoading] = useState(false);
@@ -63,54 +58,31 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
         }
     };
 
-    const handleRotateEncryptionSubmit = async (e) => {
+    const handleRotateSubmit = async (e) => {
         e.preventDefault();
-
-        setEncError('');
-        setEncStatus('');
-        setIdError('');
-        setIdStatus('');
-        setResetError('');
-        setResetStatus('');
-
-        setEncLoading(true);
-        try {
-            const result = await onRotateEncryption();
-            if (result.success) {
-                setEncStatus(result.message);
-            } else {
-                setEncError(result.error);
-            }
-        } catch (err) {
-            setEncError(err.message || 'Operation failed');
-        } finally {
-            setEncLoading(false);
+        if (!rotateEncryption && !rotateIdentity) {
+            setRotateError('At least one key type must be selected for rotation.');
+            return;
         }
-    };
 
-    const handleRotateIdentitySubmit = async (e) => {
-        e.preventDefault();
-
-        setIdError('');
-        setIdStatus('');
-        setEncError('');
-        setEncStatus('');
+        setRotateError('');
+        setRotateStatus('');
         setResetError('');
         setResetStatus('');
 
-        setIdLoading(true);
+        setRotateLoading(true);
         try {
-            const result = await onRotateIdentity();
+            const result = await onRotateKeys(rotateEncryption, rotateIdentity);
             if (result.cancelled) return;
             if (result.success) {
-                setIdStatus(result.message);
+                setRotateStatus(result.message);
             } else {
-                setIdError(result.error);
+                setRotateError(result.error);
             }
         } catch (err) {
-            setIdError(err.message || 'Operation failed');
+            setRotateError(err.message || 'Operation failed');
         } finally {
-            setIdLoading(false);
+            setRotateLoading(false);
         }
     };
 
@@ -119,18 +91,15 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
 
         setResetError('');
         setResetStatus('');
-        setEncError('');
-        setEncStatus('');
-        setIdError('');
-        setIdStatus('');
+        setRotateError('');
+        setRotateStatus('');
 
         setResetLoading(true);
         try {
-            const result = await onResetIdentity(resetMnemonic.trim() || null);
+            const result = await onResetIdentity();
             if (result.cancelled) return;
             if (result.success) {
                 setResetStatus(result.message);
-                setResetMnemonic('');
             } else {
                 setResetError(result.error);
             }
@@ -141,7 +110,7 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
         }
     };
 
-    const isAnyLoading = encLoading || idLoading || resetLoading || unlockLoading;
+    const isAnyLoading = rotateLoading || resetLoading || unlockLoading;
 
     return (
         <div className="admin-tab-content active" style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
@@ -250,7 +219,7 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
                 )}
             </div>
 
-            {/* Section 1: Rotate Encryption Keys */}
+            {/* Rotate Keys Section */}
             <div style={{
                 background: 'rgba(255, 255, 255, 0.01)',
                 padding: '24px',
@@ -259,32 +228,53 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
             }}>
                 <div className="tab-header" style={{ marginBottom: '16px', textAlign: 'left' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        Rotate Encryption Keys
+                        Rotate Keys
                     </h3>
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    This will rotate the cryptographic keys used to encrypt and decrypt message payloads. 
-                    It automatically and silently updates all your contacts with your new encryption key over the P2P network. 
-                    <strong> No action is required from your contacts</strong>, and your public Identity remains the same.
+                    Rotate your cryptographic encryption and/or P2P identity keys. Selecting <strong>Encryption</strong> will rotate the payload encryption keys and update your contacts silently. Selecting <strong>Identity</strong> will rotate your public P2P Identity key and queue succession certificates for your contacts to trust the update.
                 </p>
 
-                <form onSubmit={handleRotateEncryptionSubmit} style={{ maxWidth: '500px' }}>
-                    {(encError || encStatus) && (
+                <form onSubmit={handleRotateSubmit} style={{ maxWidth: '500px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                            <input
+                                type="checkbox"
+                                checked={rotateEncryption}
+                                onChange={(e) => setRotateEncryption(e.target.checked)}
+                                disabled={isAnyLoading}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            Rotate Encryption Keys
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                            <input
+                                type="checkbox"
+                                checked={rotateIdentity}
+                                onChange={(e) => setRotateIdentity(e.target.checked)}
+                                disabled={isAnyLoading}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            Rotate Identity Keys
+                        </label>
+                    </div>
+
+                    {(rotateError || rotateStatus) && (
                         <div style={{
                             padding: '12px 16px',
-                            border: `1px solid ${encError ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
-                            background: encError ? 'rgba(239, 68, 68, 0.02)' : 'rgba(16, 185, 129, 0.02)',
+                            border: `1px solid ${rotateError ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
+                            background: rotateError ? 'rgba(239, 68, 68, 0.02)' : 'rgba(16, 185, 129, 0.02)',
                             borderRadius: 'var(--radius-md)',
                             fontSize: '0.85rem',
-                            color: encError ? 'var(--accent-error)' : 'var(--accent-success)',
+                            color: rotateError ? 'var(--accent-error)' : 'var(--accent-success)',
                             marginBottom: '20px',
                             textAlign: 'left',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '10px'
                         }}>
-                            <span>{encError ? `❌ ${encError}` : `✅ ${encStatus}`}</span>
+                            <span>{rotateError ? `❌ ${rotateError}` : `✅ ${rotateStatus}`}</span>
                         </div>
                     )}
 
@@ -297,68 +287,15 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
                     <button
                         type="submit"
                         className="btn btn-primary"
-                        disabled={isAnyLoading || !unlocked}
+                        disabled={isAnyLoading || !unlocked || (!rotateEncryption && !rotateIdentity)}
                         style={{ padding: '10px 24px', fontSize: '0.9rem' }}
                     >
-                        {encLoading ? 'Rotating...' : 'Rotate Encryption Keys'}
+                        {rotateLoading ? 'Rotating...' : 'Rotate Selected Keys'}
                     </button>
                 </form>
             </div>
 
-            {/* Section 2: Rotate Identity Keys (Hygiene) */}
-            <div style={{
-                background: 'rgba(255, 255, 255, 0.01)',
-                padding: '24px',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)'
-            }}>
-                <div className="tab-header" style={{ marginBottom: '16px', textAlign: 'left' }}>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        Rotate Identity Keys
-                    </h3>
-                </div>
-
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    This will rotate your public P2P Identity key. It automatically signs a succession certificate using your Master Key and queues it to all your contacts so they can update your address without losing connection. Your contacts will automatically trust the update, preserving your secure channels. This is also the correct recovery action if your operational key on disk was compromised but your mnemonic is secure.
-                </p>
-
-                <form onSubmit={handleRotateIdentitySubmit} style={{ maxWidth: '500px' }}>
-                    {(idError || idStatus) && (
-                        <div style={{
-                            padding: '12px 16px',
-                            border: `1px solid ${idError ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
-                            background: idError ? 'rgba(239, 68, 68, 0.02)' : 'rgba(16, 185, 129, 0.02)',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: '0.85rem',
-                            color: idError ? 'var(--accent-error)' : 'var(--accent-success)',
-                            marginBottom: '20px',
-                            textAlign: 'left',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px'
-                        }}>
-                            <span>{idError ? `❌ ${idError}` : `✅ ${idStatus}`}</span>
-                        </div>
-                    )}
-
-                    {!unlocked && (
-                        <p style={{ color: 'var(--accent-error)', fontSize: '0.85rem', marginBottom: '16px' }}>
-                            Unlock system to enable key rotation.
-                        </p>
-                    )}
-
-                    <button
-                        type="submit"
-                        className="btn btn-primary"
-                        disabled={isAnyLoading || !unlocked}
-                        style={{ padding: '10px 24px', fontSize: '0.9rem' }}
-                    >
-                        {idLoading ? 'Rotating...' : 'Rotate Identity Keys'}
-                    </button>
-                </form>
-            </div>
-
-            {/* Section 3: Danger Zone - Reset Identity */}
+            {/* Danger Zone - Reset Identity */}
             <div style={{
                 background: 'rgba(239, 68, 68, 0.02)',
                 padding: '24px',
@@ -374,34 +311,10 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    Warning: Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a new mnemonic. This generates a brand new Master Key, resets key indexes, and wipes all contacts and pending requests from your database. Your contacts will NOT accept automatic updates and you must re-add them manually.
+                    Warning: Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a brand new mnemonic and identity. This generates a brand new Master Key and resets key indexes. It will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity. Contacts are preserved.
                 </p>
 
                 <form onSubmit={handleResetIdentitySubmit} style={{ maxWidth: '500px' }}>
-                    <div className="form-group" style={{ marginBottom: '20px' }}>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '8px' }}>
-                            Mnemonic Phrase (Optional)
-                        </label>
-                        <textarea
-                            value={resetMnemonic}
-                            onChange={(e) => setResetMnemonic(e.target.value)}
-                            placeholder="Leave empty to generate a brand new random identity mnemonic..."
-                            rows={2}
-                            style={{
-                                width: '100%',
-                                padding: '12px 16px',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: 'var(--radius-md)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                fontFamily: 'monospace',
-                                fontSize: '0.9rem',
-                                resize: 'none',
-                            }}
-                            disabled={isAnyLoading}
-                        />
-                    </div>
-
                     {(resetError || resetStatus) && (
                         <div style={{
                             padding: '12px 16px',
@@ -434,3 +347,4 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
         </div>
     );
 }
+

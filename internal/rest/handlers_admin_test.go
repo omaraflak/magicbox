@@ -192,7 +192,7 @@ func TestAdminAcknowledgeMnemonic_Success(t *testing.T) {
 	}
 }
 
-func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
+func TestAdminRotateKeys_EncryptionOnly(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	// Create core directory so keys can be written.
@@ -221,7 +221,11 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 
 	cfg.MnemonicStore.Set(mnemonic)
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-encryption", nil)
+	body, _ := json.Marshal(map[string]bool{
+		"rotate_encryption": true,
+		"rotate_identity":   false,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate", bytes.NewReader(body))
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -244,7 +248,7 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 	}
 }
 
-func TestAdminRotateEncryptionKeys_Locked(t *testing.T) {
+func TestAdminRotateKeys_Locked(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	// Ensure system is locked (mnemonic store is empty)
@@ -255,7 +259,11 @@ func TestAdminRotateEncryptionKeys_Locked(t *testing.T) {
 	_ = database.CreateUser("u1", "admin", string(hash), true)
 	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-encryption", nil)
+	body, _ := json.Marshal(map[string]bool{
+		"rotate_encryption": true,
+		"rotate_identity":   false,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate", bytes.NewReader(body))
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -264,6 +272,7 @@ func TestAdminRotateEncryptionKeys_Locked(t *testing.T) {
 		t.Errorf("expected 412 Precondition Failed, got %d", rr.Code)
 	}
 }
+
 
 func TestAdminResetIdentityKeys_SuccessionRecovery(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
@@ -527,7 +536,7 @@ func TestAdminResetIdentityKeys_NuclearReset_EmptyBody(t *testing.T) {
 	}
 }
 
-func TestAdminRotateIdentityKeys_Success(t *testing.T) {
+func TestAdminRotateKeys_IdentityOnly(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
@@ -550,7 +559,11 @@ func TestAdminRotateIdentityKeys_Success(t *testing.T) {
 
 	cfg.MnemonicStore.Set(mnemonic)
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-identity", nil)
+	body, _ := json.Marshal(map[string]bool{
+		"rotate_encryption": false,
+		"rotate_identity":   true,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate", bytes.NewReader(body))
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -710,6 +723,80 @@ func TestAdminUnlockAndStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminRotateKeys_Both(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
+
+	// Create admin user
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	// Pre-populate settings and contact
+	mnemonic, _ := crypto.GenerateMnemonic()
+	cfg.Keys.IdentityKeyIndex = 1
+	cfg.Keys.EncryptionKeyIndex = 1
+	cfg.Keys.Mnemonic = mnemonic
+
+	// We must write dummy keys first so keymanager can do things
+	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 1, 1)
+	if err != nil {
+		t.Fatalf("failed to setup keys: %v", err)
+	}
+
+	cfg.MnemonicStore.Set(mnemonic)
+
+	body, _ := json.Marshal(map[string]bool{
+		"rotate_encryption": true,
+		"rotate_identity":   true,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate", bytes.NewReader(body))
+	req.AddCookie(adminCookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	idVal, _ := os.ReadFile(paths.IdentityIndexPath)
+	encVal, _ := os.ReadFile(paths.EncryptionIndexPath)
+	if string(idVal) != "2" || string(encVal) != "2" {
+		t.Errorf("expected identity and encryption indices on disk to be 2, got identity=%s, encryption=%s", string(idVal), string(encVal))
+	}
+	if cfg.Keys.IdentityKeyIndex != 2 || cfg.Keys.EncryptionKeyIndex != 2 {
+		t.Errorf("expected indices in config to be 2, got identity=%d, encryption=%d", cfg.Keys.IdentityKeyIndex, cfg.Keys.EncryptionKeyIndex)
+	}
+}
+
+func TestAdminRotateKeys_NoneSelected(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	// Create admin user
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	mnemonic, _ := crypto.GenerateMnemonic()
+	cfg.MnemonicStore.Set(mnemonic)
+
+	body, _ := json.Marshal(map[string]bool{
+		"rotate_encryption": false,
+		"rotate_identity":   false,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate", bytes.NewReader(body))
+	req.AddCookie(adminCookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d", rr.Code)
+	}
+}
+
 
 
 
