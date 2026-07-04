@@ -30,9 +30,12 @@ export default function SettingsView({
     onLogLevelChange,
     onRefreshLogs,
     contacts = [],
+    contactRequests = [],
     invitationInfo = null,
     onAddContact,
     onDeleteContact,
+    onAcceptContactRequest,
+    onRejectContactRequest,
     onUpgradeCore,
     upgradeError,
     upgradeStatus,
@@ -99,9 +102,12 @@ export default function SettingsView({
                 {activeSection === 'contacts' && (
                     <ContactsTab 
                         contacts={contacts}
+                        contactRequests={contactRequests}
                         invitationInfo={invitationInfo}
                         onAddContact={onAddContact}
                         onDeleteContact={onDeleteContact}
+                        onAcceptContactRequest={onAcceptContactRequest}
+                        onRejectContactRequest={onRejectContactRequest}
                         error={error}
                         loading={loading}
                     />

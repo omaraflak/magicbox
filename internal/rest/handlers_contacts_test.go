@@ -10,7 +10,7 @@ import (
 	"github.com/magicbox/core/internal/invite"
 )
 
-func TestCreateContact_Success(t *testing.T) {
+func TestSendContactRequest_Success(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	// Create user in DB to satisfy database references
@@ -36,13 +36,25 @@ func TestCreateContact_Success(t *testing.T) {
 		"multiaddr":    inviteLink,
 	}
 	contactBytes, _ := json.Marshal(contactBody)
-	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))
+	req := httptest.NewRequest("POST", "/api/v1/contacts/request", bytes.NewReader(contactBytes))
 	req.AddCookie(cookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	// Verify outgoing request was stored.
+	reqs, err := database.GetContactRequests(userID, "outgoing")
+	if err != nil {
+		t.Fatalf("GetContactRequests failed: %v", err)
+	}
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 outgoing request, got %d", len(reqs))
+	}
+	if reqs[0].DisplayName != "Alice" {
+		t.Errorf("expected display_name Alice, got %s", reqs[0].DisplayName)
 	}
 }
 
@@ -82,7 +94,7 @@ func TestListContacts_Success(t *testing.T) {
 	}
 }
 
-func TestCreateContact_MissingFieldsFails(t *testing.T) {
+func TestSendContactRequest_MissingFieldsFails(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	userID := "user-123"
@@ -95,7 +107,7 @@ func TestCreateContact_MissingFieldsFails(t *testing.T) {
 		"multiaddr":    "magicbox://invite/anything",
 	}
 	contactBytes, _ := json.Marshal(contactBody)
-	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))
+	req := httptest.NewRequest("POST", "/api/v1/contacts/request", bytes.NewReader(contactBytes))
 	req.AddCookie(cookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -105,7 +117,7 @@ func TestCreateContact_MissingFieldsFails(t *testing.T) {
 	}
 }
 
-func TestCreateContact_InvalidPrefixFails(t *testing.T) {
+func TestSendContactRequest_InvalidPrefixFails(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	userID := "user-123"
@@ -118,7 +130,7 @@ func TestCreateContact_InvalidPrefixFails(t *testing.T) {
 		"multiaddr":    "http://some-url/invite/anything",
 	}
 	contactBytes, _ := json.Marshal(contactBody)
-	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))
+	req := httptest.NewRequest("POST", "/api/v1/contacts/request", bytes.NewReader(contactBytes))
 	req.AddCookie(cookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -128,7 +140,7 @@ func TestCreateContact_InvalidPrefixFails(t *testing.T) {
 	}
 }
 
-func TestCreateContact_InvalidBase64PayloadFails(t *testing.T) {
+func TestSendContactRequest_InvalidBase64PayloadFails(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	userID := "user-123"
@@ -141,7 +153,7 @@ func TestCreateContact_InvalidBase64PayloadFails(t *testing.T) {
 		"multiaddr":    "magicbox://invite/not-valid-base64-payload!!!",
 	}
 	contactBytes, _ := json.Marshal(contactBody)
-	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))
+	req := httptest.NewRequest("POST", "/api/v1/contacts/request", bytes.NewReader(contactBytes))
 	req.AddCookie(cookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -151,7 +163,7 @@ func TestCreateContact_InvalidBase64PayloadFails(t *testing.T) {
 	}
 }
 
-func TestCreateContact_InvalidJSONPayloadFails(t *testing.T) {
+func TestSendContactRequest_InvalidJSONPayloadFails(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	userID := "user-123"
@@ -160,8 +172,6 @@ func TestCreateContact_InvalidJSONPayloadFails(t *testing.T) {
 	cookie := &http.Cookie{Name: SessionCookieName, Value: token, Path: "/"}
 
 	// Build a valid invite link prefix with invalid JSON content inside the base64.
-	// The base64 below decodes to "just plain text, not JSON" which will cause
-	// invite.Parse to fail during JSON unmarshal.
 	inviteLink := "magicbox://invite/" + "anVzdCBwbGFpbiB0ZXh0LCBub3QgSlNPTg=="
 
 	contactBody := map[string]string{
@@ -169,7 +179,7 @@ func TestCreateContact_InvalidJSONPayloadFails(t *testing.T) {
 		"multiaddr":    inviteLink,
 	}
 	contactBytes, _ := json.Marshal(contactBody)
-	req := httptest.NewRequest("POST", "/api/v1/contacts", bytes.NewReader(contactBytes))
+	req := httptest.NewRequest("POST", "/api/v1/contacts/request", bytes.NewReader(contactBytes))
 	req.AddCookie(cookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

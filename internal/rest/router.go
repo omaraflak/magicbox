@@ -62,17 +62,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/apps/{id}/rebuild", auth(http.HandlerFunc(s.handleRebuildApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rotate-token", auth(http.HandlerFunc(s.handleRotateToken)))
 
-	// Contacts & P2P invitation routes.
+	// Contact routes.
 	mux.Handle("GET /api/v1/contacts", auth(http.HandlerFunc(s.handleListContacts)))
-	mux.Handle("POST /api/v1/contacts", auth(http.HandlerFunc(s.handleCreateContact)))
 	mux.Handle("DELETE /api/v1/contacts/{id}", auth(http.HandlerFunc(s.handleDeleteContact)))
-	mux.Handle("GET /api/v1/me/invitation", auth(http.HandlerFunc(s.handleGetInvitation)))
-
-	// Contact request/accept routes.
 	mux.Handle("POST /api/v1/contacts/request", auth(http.HandlerFunc(s.handleSendContactRequest)))
 	mux.Handle("GET /api/v1/contacts/requests", auth(http.HandlerFunc(s.handleListContactRequests)))
 	mux.Handle("POST /api/v1/contacts/requests/{id}/accept", auth(http.HandlerFunc(s.handleAcceptContactRequest)))
 	mux.Handle("POST /api/v1/contacts/requests/{id}/reject", auth(http.HandlerFunc(s.handleRejectContactRequest)))
+
+	// Contact P2P invitation link
+	mux.Handle("GET /api/v1/me/invitation", auth(http.HandlerFunc(s.handleGetInvitation)))
 
 	// Admin-only routes — require both AuthMiddleware and AdminMiddleware.
 	admin := AdminMiddleware()

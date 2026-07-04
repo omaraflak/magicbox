@@ -38,6 +38,7 @@ export default function App() {
     const [logs, setLogs] = useState([]);
     const [logLevel, setLogLevel] = useState('');
     const [contacts, setContacts] = useState([]);
+    const [contactRequests, setContactRequests] = useState([]);
     const [invitationInfo, setInvitationInfo] = useState(null);
 
     // Loadings
@@ -225,6 +226,11 @@ export default function App() {
         if (status === 200) setContacts(data || []);
     };
 
+    const loadContactRequests = async () => {
+        const { status, data } = await callAPI('GET', '/contacts/requests');
+        if (status === 200) setContactRequests(data || []);
+    };
+
     const loadInvitationInfo = async () => {
         const { status, data } = await callAPI('GET', '/me/invitation');
         if (status === 200) setInvitationInfo(data);
@@ -244,6 +250,7 @@ export default function App() {
                 loadMnemonic();
             } else if (settingsSection === 'contacts') {
                 loadContacts();
+                loadContactRequests();
                 loadInvitationInfo();
             }
         }
@@ -470,17 +477,18 @@ export default function App() {
         }, "Remove Registry");
     };
 
-    // Contacts: Add
+    // Contacts: Add/Request
     const handleAddContact = async ({ displayName, multiaddr }) => {
         setActionLoading(true);
         setActionError('');
-        const { status, data } = await callAPI('POST', '/contacts', { display_name: displayName, multiaddr });
+        const { status, data } = await callAPI('POST', '/contacts/request', { display_name: displayName, multiaddr });
         setActionLoading(false);
         if (status === 201) {
             loadContacts();
+            loadContactRequests();
             return true;
         } else {
-            setActionError(data?.error || "Failed to add contact");
+            setActionError(data?.error || "Failed to send contact request");
             return false;
         }
     };
@@ -495,6 +503,37 @@ export default function App() {
                 showAlert(data?.error || "Failed to delete contact", "Error");
             }
         }, "Delete Contact");
+    };
+
+    // Contacts: Accept request
+    const handleAcceptContactRequest = async (id) => {
+        setActionLoading(true);
+        setActionError('');
+        const { status, data } = await callAPI('POST', `/contacts/requests/${id}/accept`);
+        setActionLoading(false);
+        if (status === 200) {
+            loadContacts();
+            loadContactRequests();
+            return true;
+        } else {
+            setActionError(data?.error || "Failed to accept contact request");
+            return false;
+        }
+    };
+
+    // Contacts: Reject request
+    const handleRejectContactRequest = async (id) => {
+        setActionLoading(true);
+        setActionError('');
+        const { status, data } = await callAPI('POST', `/contacts/requests/${id}/reject`);
+        setActionLoading(false);
+        if (status === 200) {
+            loadContactRequests();
+            return true;
+        } else {
+            setActionError(data?.error || "Failed to reject contact request");
+            return false;
+        }
     };
 
     // Filter Logs
@@ -691,9 +730,12 @@ export default function App() {
                         onLogLevelChange={handleLogLevelChange}
                         onRefreshLogs={() => loadLogs(logLevel)}
                         contacts={contacts}
+                        contactRequests={contactRequests}
                         invitationInfo={invitationInfo}
                         onAddContact={handleAddContact}
                         onDeleteContact={handleDeleteContact}
+                        onAcceptContactRequest={handleAcceptContactRequest}
+                        onRejectContactRequest={handleRejectContactRequest}
                         onUpgradeCore={handleUpgradeCore}
                         upgradeError={upgradeError}
                         upgradeStatus={upgradeStatus}

@@ -30,62 +30,6 @@ func (s *Server) handleListContacts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, contacts)
 }
 
-func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	if claims == nil {
-		writeError(w, http.StatusUnauthorized, "authentication required")
-		return
-	}
-
-	var req struct {
-		DisplayName string `json:"display_name"`
-		Multiaddr   string `json:"multiaddr"`
-	}
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	if req.DisplayName == "" || req.Multiaddr == "" {
-		writeError(w, http.StatusBadRequest, "display_name and multiaddr are required")
-		return
-	}
-
-	payload, err := invite.Parse(req.Multiaddr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid invite link: "+err.Error())
-		return
-	}
-
-	peerID := invite.ExtractPeerID(payload.Multiaddr)
-	if peerID == "" {
-		writeError(w, http.StatusBadRequest, "invalid invite link: could not extract peer ID from multiaddr")
-		return
-	}
-
-	targetUserID := payload.UserID
-	encPubKey := payload.EncPubKey
-
-	if targetUserID == "" {
-		writeError(w, http.StatusBadRequest, "invalid invite link: missing user_id")
-		return
-	}
-
-	id := uuid.NewString()
-	if err := s.db.AddContact(id, claims.UserID, req.DisplayName, peerID, payload.Multiaddr, targetUserID, encPubKey); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save contact: "+err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, map[string]string{
-		"id":             id,
-		"display_name":   req.DisplayName,
-		"peer_id":        peerID,
-		"multiaddr":      payload.Multiaddr,
-		"target_user_id": targetUserID,
-	})
-}
-
 func (s *Server) handleDeleteContact(w http.ResponseWriter, r *http.Request) {
 	claims := GetUserFromContext(r)
 	if claims == nil {

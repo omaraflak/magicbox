@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 
 export default function ContactsTab({ 
     contacts = [], 
+    contactRequests = [],
     invitationInfo = null, 
     onAddContact, 
     onDeleteContact, 
+    onAcceptContactRequest,
+    onRejectContactRequest,
     error, 
     loading 
 }) {
@@ -36,6 +39,9 @@ export default function ContactsTab({
             setTimeout(() => setCopySuccess(false), 2000);
         });
     };
+
+    const incomingRequests = contactRequests.filter(r => r.direction === 'incoming');
+    const outgoingRequests = contactRequests.filter(r => r.direction === 'outgoing');
 
     return (
         <div>
@@ -88,7 +94,7 @@ export default function ContactsTab({
                         </div>
                         <div style={{ flex: '0 0 auto', alignSelf: 'flex-end', marginBottom: '16px' }}>
                             <button type="submit" className="btn btn-primary" disabled={loading} style={{ padding: '10px 24px', height: '42px', fontSize: '0.9rem', fontWeight: 500 }}>
-                                {loading ? 'Saving...' : 'Add Contact'}
+                                {loading ? 'Sending Request...' : 'Send Request'}
                             </button>
                         </div>
                     </div>
@@ -101,12 +107,78 @@ export default function ContactsTab({
                 </form>
             </div>
 
+            {/* Pending Requests Section */}
+            {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
+                <div style={{ marginBottom: '40px' }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>Pending Requests</h3>
+                    
+                    {incomingRequests.length > 0 && (
+                        <div style={{ marginBottom: '24px' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '12px' }}>Incoming (Action Required)</h4>
+                            <div className="card" style={{ padding: '0' }}>
+                                {incomingRequests.map((req, idx) => (
+                                    <div key={req.id} style={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center', 
+                                        padding: '16px 20px', 
+                                        borderBottom: idx === incomingRequests.length - 1 ? 'none' : '1px solid var(--border-color)' 
+                                    }}>
+                                        <div>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{req.display_name}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                                {req.multiaddr}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                                            <button className="btn btn-primary btn-sm" onClick={() => onAcceptContactRequest(req.id)} style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+                                                Accept
+                                            </button>
+                                            <button className="btn btn-secondary btn-sm" onClick={() => onRejectContactRequest(req.id)} style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+                                                Reject
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {outgoingRequests.length > 0 && (
+                        <div>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '12px' }}>Sent Requests</h4>
+                            <div className="card" style={{ padding: '0' }}>
+                                {outgoingRequests.map((req, idx) => (
+                                    <div key={req.id} style={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center', 
+                                        padding: '16px 20px', 
+                                        borderBottom: idx === outgoingRequests.length - 1 ? 'none' : '1px solid var(--border-color)' 
+                                    }}>
+                                        <div>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{req.display_name}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                                {req.multiaddr}
+                                            </div>
+                                        </div>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => onRejectContactRequest(req.id)} style={{ padding: '6px 12px', fontSize: '0.85rem', flexShrink: 0 }}>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Contacts Directory List Section */}
             <div style={{ marginBottom: '24px' }}>
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>Contacts</h3>
                 {contacts.length === 0 ? (
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic', padding: '24px 0', borderTop: '1px solid var(--border-color)' }}>
-                        No contacts added yet. Add a contact above to start sharing files and communicating!
+                        No contacts added yet. Use the invite link or send a contact request to start sharing!
                     </div>
                 ) : (
                     <div className="table-container card">
@@ -114,7 +186,7 @@ export default function ContactsTab({
                             <thead>
                                 <tr>
                                     <th style={{ width: '200px' }}>Name</th>
-                                    <th>Invitation Link / Peer ID</th>
+                                    <th>Address / Peer ID</th>
                                     <th className="text-right" style={{ width: '120px' }}>Actions</th>
                                 </tr>
                             </thead>
