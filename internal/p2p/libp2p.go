@@ -219,6 +219,34 @@ func (s *Libp2pService) SendTo(ctx context.Context, peerMultiaddr string, encPub
 		return fmt.Errorf("libp2p: failed to extract peer info: %w", err)
 	}
 
+	if info.ID == s.host.ID() {
+		s.logger.Info("Bypassing P2P transport network dial for local loopback delivery",
+			logging.F("peer_id", info.ID.String()),
+			logging.F("app_id", msg.AppID))
+		go func() {
+			s.mu.RLock()
+			handler, exists := s.handlers[msg.AppID]
+			if !exists {
+				handler = s.defaultHandler
+				exists = handler != nil
+			}
+			s.mu.RUnlock()
+
+			if exists {
+				ctx := context.Background()
+				if err := handler(ctx, s.host.ID().String(), msg); err != nil {
+					s.logger.Error("libp2p: local loopback handler failed",
+						logging.F("type", msg.AppID),
+						logging.F("error", err.Error()))
+				}
+			} else {
+				s.logger.Error("libp2p: unhandled local loopback protocol message",
+					logging.F("type", msg.AppID))
+			}
+		}()
+		return nil
+	}
+
 	if err := s.host.Connect(ctx, *info); err != nil {
 		return fmt.Errorf("libp2p: failed to connect to peer: %w", err)
 	}

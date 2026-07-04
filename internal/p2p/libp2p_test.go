@@ -175,3 +175,68 @@ func TestLibp2pServiceUnhandledProtocol(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestLibp2pServiceLoopback(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	mnemonic, _ := internalcrypto.GenerateMnemonic()
+	edPriv, _ := internalcrypto.DeriveIdentityKey(mnemonic, 0)
+	xPriv, _ := internalcrypto.DeriveEncryptionKey(mnemonic, 0)
+	p2pKey, _ := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv)
+
+	logger, _ := logging.New(t.TempDir())
+	defer logger.Close()
+
+	srv := NewLibp2pService(p2pKey, xPriv, []string{"/ip4/127.0.0.1/tcp/0"}, logger)
+	if err := srv.Start(ctx); err != nil {
+		t.Fatalf("failed to start: %v", err)
+	}
+	defer srv.Stop()
+
+	receivedPayload := make(chan []byte, 1)
+	receivedSender := make(chan string, 1)
+
+	srv.RegisterHandler("com.magicbox.loopback", func(ctx context.Context, fromPeerID string, msg *Message) error {
+		receivedSender <- fromPeerID
+		receivedPayload <- msg.Payload
+		return nil
+	})
+
+	addrs := srv.Multiaddrs()
+	if len(addrs) == 0 {
+		t.Fatalf("no listening addresses")
+	}
+
+	encPubKeyHex := hex.EncodeToString(xPriv.PublicKey().Bytes())
+	testMsg := &Message{
+		AppID:        "com.magicbox.loopback",
+		TargetUserID: "user-123",
+		Payload:      []byte("Hello self!"),
+	}
+
+	// Send to our own listening multiaddress
+	err := srv.SendTo(ctx, addrs[0], encPubKeyHex, testMsg)
+	if err != nil {
+		t.Fatalf("failed to send: %v", err)
+	}
+
+	select {
+	case sender := <-receivedSender:
+		if sender != srv.HostID() {
+			t.Errorf("expected sender %q, got %q", srv.HostID(), sender)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for loopback sender ID")
+	}
+
+	select {
+	case payload := <-receivedPayload:
+		if string(payload) != "Hello self!" {
+			t.Errorf("expected payload %q, got %q", "Hello self!", string(payload))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for loopback payload")
+	}
+}
+
