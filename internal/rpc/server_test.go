@@ -127,7 +127,7 @@ func TestGrpcListContacts(t *testing.T) {
 	database.InsertAppToken("com.example.app", userID, "app-secret")
 	database.InsertAppScope("com.example.app", userID, "contacts:read")
 
-	database.AddContact("contact-1", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key")
+	database.AddContact("contact-1", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key", "alice-master-pub")
 
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{"contacts:read"})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
@@ -150,7 +150,7 @@ func TestGrpcSendToContactRemote(t *testing.T) {
 	database.CreateUser(userID, "omar", "hash", false)
 	database.InsertAppToken("com.example.app", userID, "app-secret")
 
-	database.AddContact("contact-1", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key")
+	database.AddContact("contact-1", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key", "alice-master-pub")
 
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
@@ -181,7 +181,7 @@ func TestGrpcSendToContactLoopback(t *testing.T) {
 	database.InsertAppToken("com.example.app", userID, "app-secret")
 
 	// Multiaddress contains "local-host-id" and peerID matches to trigger loopback routing bypass
-	database.AddContact("contact-1", userID, "Myself", "local-host-id", "/ip4/127.0.0.1/tcp/4001/p2p/local-host-id", userID, "test-enc-pub-key")
+	database.AddContact("contact-1", userID, "Myself", "local-host-id", "/ip4/127.0.0.1/tcp/4001/p2p/local-host-id", userID, "test-enc-pub-key", "myself-master-pub")
 
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))

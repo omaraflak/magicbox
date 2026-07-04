@@ -10,7 +10,7 @@ func TestEnqueueMessage_Success(t *testing.T) {
 	defer db.conn.Close()
 
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 
 	err := db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("new-key-hex"), 5)
 	if err != nil {
@@ -23,7 +23,7 @@ func TestGetPendingMessages_Success(t *testing.T) {
 	defer db.conn.Close()
 
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 
 	err := db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("new-key-hex"), 5)
 	if err != nil {
@@ -47,7 +47,7 @@ func TestDeleteMessage_Success(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
 
 	if err := db.DeleteMessage("msg-1"); err != nil {
@@ -59,7 +59,7 @@ func TestDeleteMessage_RemovesFromPending(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
 
 	if err := db.DeleteMessage("msg-1"); err != nil {
@@ -79,7 +79,7 @@ func TestIncrementMessageAttempts_Success(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
 
 	futureTime := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
@@ -92,7 +92,7 @@ func TestIncrementMessageAttempts_SchedulesFuture(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
 
 	futureTime := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
@@ -123,7 +123,7 @@ func TestCleanExpiredMessages_RemovesExpired(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 1)
 
 	db.IncrementMessageAttempts("msg-1", time.Now().UTC().Format(time.RFC3339))
@@ -141,7 +141,7 @@ func TestGetPendingMessages_DeletedContactExcluded(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex", "master-hex")
 	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
 
 	db.DeleteContact("contact-1", "user-1")
@@ -157,7 +157,7 @@ func TestGetPendingMessages_ContactRequests(t *testing.T) {
 	defer db.conn.Close()
 
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.InsertContactRequest("req-1", "user-1", "outgoing", "Bob", "peer-bob", "/ip4/127.0.0.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	db.InsertContactRequest("req-1", "user-1", "outgoing", "Bob", "peer-bob", "/ip4/127.0.0.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 	db.EnqueueMessage("msg-1", "req-1", "system:contact-request", []byte("payload"), 5)
 
 	msgs, err := db.GetPendingMessages()

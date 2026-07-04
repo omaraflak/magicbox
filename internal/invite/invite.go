@@ -11,9 +11,10 @@ const Prefix = "magicbox://invite/"
 
 // Payload represents the fields encoded in a magicbox invite link.
 type Payload struct {
-	Multiaddr string `json:"multiaddr"`
-	UserID    string `json:"user_id"`
-	EncPubKey string `json:"enc_pub_key"`
+	Multiaddr    string `json:"multiaddr"`
+	UserID       string `json:"user_id"`
+	EncPubKey    string `json:"enc_pub_key"`
+	MasterPubKey string `json:"master_pub_key"`
 }
 
 // Parse decodes a magicbox://invite/<base64> link into its payload components.

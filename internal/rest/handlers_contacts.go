@@ -88,10 +88,18 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	hexPub := hex.EncodeToString(pubKey.Bytes())
 
+	masterPub, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse local master public key: "+err.Error())
+		return
+	}
+	hexMasterPub := hex.EncodeToString(masterPub)
+
 	payload := &invite.Payload{
-		Multiaddr: targetAddr,
-		UserID:    claims.UserID,
-		EncPubKey: hexPub,
+		Multiaddr:    targetAddr,
+		UserID:       claims.UserID,
+		EncPubKey:    hexPub,
+		MasterPubKey: hexMasterPub,
 	}
 
 	inviteLink, err := invite.Build(payload)
@@ -153,7 +161,7 @@ func (s *Server) handleSendContactRequest(w http.ResponseWriter, r *http.Request
 	reqID := uuid.NewString()
 	if err := s.db.InsertContactRequest(
 		reqID, claims.UserID, "outgoing", req.DisplayName,
-		peerID, payload.Multiaddr, payload.UserID, payload.EncPubKey,
+		peerID, payload.Multiaddr, payload.UserID, payload.EncPubKey, payload.MasterPubKey,
 	); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to store contact request: "+err.Error())
 		return
@@ -179,11 +187,19 @@ func (s *Server) handleSendContactRequest(w http.ResponseWriter, r *http.Request
 	}
 	ourEncPubHex := hex.EncodeToString(pubKey.Bytes())
 
+	ourMasterPubKey, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse local master public key: "+err.Error())
+		return
+	}
+	ourMasterPubHex := hex.EncodeToString(ourMasterPubKey)
+
 	requestPayload, _ := json.Marshal(protocol.ContactRequestPayload{
-		DisplayName: claims.Username,
-		Multiaddr:   ourMultiaddr,
-		EncPubKey:   ourEncPubHex,
-		UserID:      claims.UserID,
+		DisplayName:  claims.Username,
+		Multiaddr:    ourMultiaddr,
+		EncPubKey:    ourEncPubHex,
+		UserID:       claims.UserID,
+		MasterPubKey: ourMasterPubHex,
 	})
 
 	// Enqueue the request message for delivery.
@@ -259,7 +275,7 @@ func (s *Server) handleAcceptContactRequest(w http.ResponseWriter, r *http.Reque
 	if err := s.db.AddContact(
 		contactID, claims.UserID, req.DisplayName,
 		req.PeerID, req.Multiaddr,
-		req.TargetUserID, req.EncPubKey,
+		req.TargetUserID, req.EncPubKey, req.MasterPubKey,
 	); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create contact: "+err.Error())
 		return
@@ -282,11 +298,19 @@ func (s *Server) handleAcceptContactRequest(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
+		ourMasterPubKey, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
+		if err != nil {
+			s.logger.Error("failed to parse local master public key for accept message", logging.F("error", err.Error()))
+			return
+		}
+		ourMasterPubHex := hex.EncodeToString(ourMasterPubKey)
+
 		acceptPayload, _ := json.Marshal(protocol.ContactAcceptPayload{
-			DisplayName: claims.Username,
-			Multiaddr:   ourMultiaddr,
-			EncPubKey:   hex.EncodeToString(pubKey.Bytes()),
-			UserID:      claims.UserID,
+			DisplayName:  claims.Username,
+			Multiaddr:    ourMultiaddr,
+			EncPubKey:    hex.EncodeToString(pubKey.Bytes()),
+			UserID:       claims.UserID,
+			MasterPubKey: ourMasterPubHex,
 		})
 
 		// Use the newly created contact to enqueue the accept message.

@@ -52,14 +52,19 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 	if err != nil {
 		t.Fatalf("failed to generate mnemonic: %v", err)
 	}
-	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master identity key: %v", err)
+	}
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 1)
 	if err != nil {
 		t.Fatalf("failed to derive identity key: %v", err)
 	}
-	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 0)
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 1)
 	if err != nil {
 		t.Fatalf("failed to derive encryption key: %v", err)
 	}
+	masterPubPEM, _ := crypto.MarshalPublicKey(masterPriv.Public())
 	privPEM, _ := crypto.MarshalPrivateKey(edPriv)
 	pubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
 	encKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
@@ -69,12 +74,13 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 		Root:      tempDir,
 		JWTSecret: []byte("my-test-super-secret-key-signature-123"),
 		Keys: &keymanager.KeyState{
+			MasterPublicKeyPEM: masterPubPEM,
 			PrivateKeyPEM:      privPEM,
 			PublicKeyPEM:       pubPEM,
 			EncryptionKeyPEM:   encKeyPEM,
 			EncryptionPubPEM:   encPubPEM,
-			IdentityKeyIndex:   0,
-			EncryptionKeyIndex: 0,
+			IdentityKeyIndex:   1,
+			EncryptionKeyIndex: 1,
 		},
 	}
 

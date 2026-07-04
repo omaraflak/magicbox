@@ -12,8 +12,8 @@ func TestGetSystemSetting_Default(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get default identity key index: %v", err)
 	}
-	if idIdx != "0" {
-		t.Errorf("expected default identity key index to be '0', got %q", idIdx)
+	if idIdx != "1" {
+		t.Errorf("expected default identity key index to be '1', got %q", idIdx)
 	}
 }
 

@@ -31,8 +31,8 @@ func TestEnqueueForContacts(t *testing.T) {
 	database, _ := setupTest(t)
 
 	database.CreateUser("user-1", "alice", "hash", false)
-	database.AddContact("c-1", "user-1", "Bob", "peer-1", "/ip4/1.1.1.1/tcp/4001/p2p/peer-1", "bob-uid", "enc1")
-	database.AddContact("c-2", "user-1", "Carol", "peer-2", "/ip4/2.2.2.2/tcp/4001/p2p/peer-2", "carol-uid", "enc2")
+	database.AddContact("c-1", "user-1", "Bob", "peer-1", "/ip4/1.1.1.1/tcp/4001/p2p/peer-1", "bob-uid", "enc1", "master1")
+	database.AddContact("c-2", "user-1", "Carol", "peer-2", "/ip4/2.2.2.2/tcp/4001/p2p/peer-2", "carol-uid", "enc2", "master2")
 
 	contacts, err := database.GetContacts("user-1")
 	if err != nil {

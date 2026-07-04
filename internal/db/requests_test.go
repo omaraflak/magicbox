@@ -9,7 +9,7 @@ func TestInsertContactRequest_Success(t *testing.T) {
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
 
-	err := db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	err := db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 	if err != nil {
 		t.Fatalf("InsertContactRequest failed: %v", err)
 	}
@@ -20,7 +20,7 @@ func TestGetContactRequests_Success(t *testing.T) {
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
 
-	err := db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	err := db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 	if err != nil {
 		t.Fatalf("InsertContactRequest failed: %v", err)
 	}
@@ -35,13 +35,16 @@ func TestGetContactRequests_Success(t *testing.T) {
 	if reqs[0].DisplayName != "Bob" {
 		t.Errorf("expected display_name Bob, got %s", reqs[0].DisplayName)
 	}
+	if reqs[0].MasterPubKey != "master-bob" {
+		t.Errorf("expected master_pub_key master-bob, got %s", reqs[0].MasterPubKey)
+	}
 }
 
 func TestGetContactRequest(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 
 	req, err := db.GetContactRequest("user-1", "req-1")
 	if err != nil {
@@ -56,7 +59,7 @@ func TestGetContactRequestByPeerID(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.InsertContactRequest("req-1", "user-1", "outgoing", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	db.InsertContactRequest("req-1", "user-1", "outgoing", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 
 	req, err := db.GetContactRequestByPeerID("user-1", "peer-bob")
 	if err != nil {
@@ -71,7 +74,7 @@ func TestDeleteContactRequest_Success(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 
 	if err := db.DeleteContactRequest("user-1", "req-1"); err != nil {
 		t.Fatalf("DeleteContactRequest failed: %v", err)
@@ -82,7 +85,7 @@ func TestDeleteContactRequest_RemovesRequest(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 	db.CreateUser("user-1", "alice", "hash", false)
-	db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	db.InsertContactRequest("req-1", "user-1", "incoming", "Bob", "peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob", "master-bob")
 
 	if err := db.DeleteContactRequest("user-1", "req-1"); err != nil {
 		t.Fatalf("DeleteContactRequest failed: %v", err)

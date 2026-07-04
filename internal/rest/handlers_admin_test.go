@@ -211,7 +211,7 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 	}
 
 	// Add a contact to verify the propagation loop runs without crash
-	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key")
+	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key", "friend-master-pub-key")
 
 	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"mnemonic": mnemonic,
@@ -225,16 +225,16 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 
-	if cfg.Keys.EncryptionKeyIndex != 1 {
-		t.Errorf("expected EncryptionKeyIndex to be 1, got %d", cfg.Keys.EncryptionKeyIndex)
+	if cfg.Keys.EncryptionKeyIndex != 2 {
+		t.Errorf("expected EncryptionKeyIndex to be 2, got %d", cfg.Keys.EncryptionKeyIndex)
 	}
 
 	val, err := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
 	if err != nil {
 		t.Fatalf("failed to get db setting: %v", err)
 	}
-	if val != "1" {
-		t.Errorf("expected db setting to be '1', got %q", val)
+	if val != "2" {
+		t.Errorf("expected db setting to be '2', got %q", val)
 	}
 }
 
@@ -283,14 +283,14 @@ func TestAdminResetIdentityKeys_SuccessGenerated(t *testing.T) {
 		t.Errorf("expected generated mnemonic in response")
 	}
 
-	if cfg.Keys.IdentityKeyIndex != 0 || cfg.Keys.EncryptionKeyIndex != 0 {
-		t.Errorf("expected indices to be reset to 0 in config")
+	if cfg.Keys.IdentityKeyIndex != 1 || cfg.Keys.EncryptionKeyIndex != 1 {
+		t.Errorf("expected indices to be reset to 1 in config")
 	}
 
 	val1, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
 	val2, _ := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
-	if val1 != "0" || val2 != "0" {
-		t.Errorf("expected indices to be reset to '0' in db")
+	if val1 != "1" || val2 != "1" {
+		t.Errorf("expected indices to be reset to '1' in db")
 	}
 }
 
@@ -336,12 +336,12 @@ func TestAdminRotateIdentityKeys_Success(t *testing.T) {
 
 	// Pre-populate settings and contact
 	mnemonic, _ := crypto.GenerateMnemonic()
-	_ = database.SetSystemSetting(db.SettingIdentityKeyIndex, "0")
-	cfg.Keys.IdentityKeyIndex = 0
+	_ = database.SetSystemSetting(db.SettingIdentityKeyIndex, "1")
+	cfg.Keys.IdentityKeyIndex = 1
 	cfg.Keys.Mnemonic = mnemonic
 
-	// We must write dummy keys first so keymanager can do things (actually RotateIdentity overwrites them anyway, but it validates the mnemonic)
-	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 0, 0)
+	// We must write dummy keys first so keymanager can do things
+	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 1, 1)
 	if err != nil {
 		t.Fatalf("failed to setup keys: %v", err)
 	}
@@ -360,11 +360,11 @@ func TestAdminRotateIdentityKeys_Success(t *testing.T) {
 	}
 
 	val, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
-	if val != "1" {
-		t.Errorf("expected identity key index in DB to be updated to 1, got %s", val)
+	if val != "2" {
+		t.Errorf("expected identity key index in DB to be updated to 2, got %s", val)
 	}
-	if cfg.Keys.IdentityKeyIndex != 1 {
-		t.Errorf("expected identity key index in config to be updated to 1, got %d", cfg.Keys.IdentityKeyIndex)
+	if cfg.Keys.IdentityKeyIndex != 2 {
+		t.Errorf("expected identity key index in config to be updated to 2, got %d", cfg.Keys.IdentityKeyIndex)
 	}
 }
 

@@ -12,25 +12,28 @@ import (
 
 // KeyPaths holds the filesystem paths for all key files.
 type KeyPaths struct {
-	IdentityKeyPath   string
-	IdentityPubPath   string
-	EncryptionKeyPath string
-	EncryptionPubPath string
+	MasterIdentityPubPath string
+	IdentityKeyPath       string
+	IdentityPubPath       string
+	EncryptionKeyPath     string
+	EncryptionPubPath     string
 }
 
 // NewKeyPaths returns the standard key file paths under the given root directory.
 func NewKeyPaths(root string) *KeyPaths {
 	return &KeyPaths{
-		IdentityKeyPath:   filepath.Join(root, "core", "identity.key"),
-		IdentityPubPath:   filepath.Join(root, "core", "identity.pub"),
-		EncryptionKeyPath: filepath.Join(root, "core", "encryption.key"),
-		EncryptionPubPath: filepath.Join(root, "core", "encryption.pub"),
+		MasterIdentityPubPath: filepath.Join(root, "core", "master_identity.pub"),
+		IdentityKeyPath:       filepath.Join(root, "core", "identity.key"),
+		IdentityPubPath:       filepath.Join(root, "core", "identity.pub"),
+		EncryptionKeyPath:     filepath.Join(root, "core", "encryption.key"),
+		EncryptionPubPath:     filepath.Join(root, "core", "encryption.pub"),
 	}
 }
 
 // KeyState holds the PEM-encoded key bytes, the optional mnemonic used for derivation,
 // and the current derivation indices for identity and encryption keys.
 type KeyState struct {
+	MasterPublicKeyPEM []byte `json:"-"`
 	PrivateKeyPEM      []byte `json:"-"`
 	PublicKeyPEM       []byte `json:"-"`
 	EncryptionKeyPEM   []byte `json:"-"`
@@ -45,19 +48,21 @@ type KeyState struct {
 // If keys are generated, the mnemonic is returned in-memory only (never written to disk).
 func LoadOrGenerate(paths *KeyPaths) (*KeyState, error) {
 	// Try reading all cached key files first
+	masterPubPEM, err0 := os.ReadFile(paths.MasterIdentityPubPath)
 	privPEM, err1 := os.ReadFile(paths.IdentityKeyPath)
 	pubPEM, err2 := os.ReadFile(paths.IdentityPubPath)
 	encKeyPEM, err3 := os.ReadFile(paths.EncryptionKeyPath)
 	encPubPEM, err4 := os.ReadFile(paths.EncryptionPubPath)
 
-	if err1 == nil && err2 == nil && err3 == nil && err4 == nil {
-		// Key indices default to 0 here; the caller must load the actual
+	if err0 == nil && err1 == nil && err2 == nil && err3 == nil && err4 == nil {
+		// Key indices default to 0/1; the caller must load the actual
 		// indices from the database and set them on the returned KeyState.
 		return &KeyState{
-			PrivateKeyPEM:    privPEM,
-			PublicKeyPEM:     pubPEM,
-			EncryptionKeyPEM: encKeyPEM,
-			EncryptionPubPEM: encPubPEM,
+			MasterPublicKeyPEM: masterPubPEM,
+			PrivateKeyPEM:      privPEM,
+			PublicKeyPEM:       pubPEM,
+			EncryptionKeyPEM:   encKeyPEM,
+			EncryptionPubPEM:   encPubPEM,
 		}, nil
 	}
 
@@ -67,17 +72,29 @@ func LoadOrGenerate(paths *KeyPaths) (*KeyState, error) {
 		return nil, fmt.Errorf("failed to generate mnemonic: %w", err)
 	}
 
-	// Derive keys from mnemonic (always at index 0 initially)
-	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	// Derive master identity key from mnemonic (always at index 0 initially)
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive master identity key from mnemonic: %w", err)
+	}
+
+	// Derive operational identity key from mnemonic (at index 1 initially)
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive identity key from mnemonic: %w", err)
 	}
-	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 0)
+
+	// Derive encryption key from mnemonic (at index 1 initially)
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive encryption key from mnemonic: %w", err)
 	}
 
 	// Marshal keys to PEM
+	masterPubPEM, err = crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		return nil, err
+	}
 	privPEM, err = crypto.MarshalPrivateKey(edPriv)
 	if err != nil {
 		return nil, err
@@ -96,6 +113,9 @@ func LoadOrGenerate(paths *KeyPaths) (*KeyState, error) {
 	}
 
 	// Save all key files to disk
+	if err := os.WriteFile(paths.MasterIdentityPubPath, masterPubPEM, 0644); err != nil {
+		return nil, err
+	}
 	if err := os.WriteFile(paths.IdentityKeyPath, privPEM, 0600); err != nil {
 		return nil, err
 	}
@@ -110,19 +130,26 @@ func LoadOrGenerate(paths *KeyPaths) (*KeyState, error) {
 	}
 
 	return &KeyState{
+		MasterPublicKeyPEM: masterPubPEM,
 		PrivateKeyPEM:      privPEM,
 		PublicKeyPEM:       pubPEM,
 		EncryptionKeyPEM:   encKeyPEM,
 		EncryptionPubPEM:   encPubPEM,
 		Mnemonic:           mnemonic,
-		IdentityKeyIndex:   0,
-		EncryptionKeyIndex: 0,
+		IdentityKeyIndex:   1,
+		EncryptionKeyIndex: 1,
 	}, nil
 }
 
 // RecoverAll derives both identity and encryption keys from a mnemonic at the given indices
 // and writes all key files to disk.
 func RecoverAll(paths *KeyPaths, mnemonic string, identityIndex, encryptionIndex int) error {
+	// Derive master identity at index 0
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		return fmt.Errorf("failed to derive master identity key from mnemonic: %w", err)
+	}
+
 	// Derive identity key from mnemonic (validates mnemonic internally).
 	edPriv, err := crypto.DeriveIdentityKey(mnemonic, identityIndex)
 	if err != nil {
@@ -134,6 +161,10 @@ func RecoverAll(paths *KeyPaths, mnemonic string, identityIndex, encryptionIndex
 	}
 
 	// Marshal keys to PEM.
+	masterPubPEM, err := crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		return fmt.Errorf("failed to marshal master public key: %w", err)
+	}
 	privPEM, err := crypto.MarshalPrivateKey(edPriv)
 	if err != nil {
 		return fmt.Errorf("failed to marshal identity private key: %w", err)
@@ -152,6 +183,9 @@ func RecoverAll(paths *KeyPaths, mnemonic string, identityIndex, encryptionIndex
 	}
 
 	// Write all key files.
+	if err := os.WriteFile(paths.MasterIdentityPubPath, masterPubPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write master public key: %w", err)
+	}
 	if err := os.WriteFile(paths.IdentityKeyPath, privPEM, 0600); err != nil {
 		return fmt.Errorf("failed to write identity private key: %w", err)
 	}

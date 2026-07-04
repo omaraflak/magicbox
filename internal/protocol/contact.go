@@ -12,18 +12,20 @@ import (
 
 // ContactRequestPayload is the data sent in a system:contact-request message.
 type ContactRequestPayload struct {
-	DisplayName string `json:"display_name"`
-	Multiaddr   string `json:"multiaddr"`
-	EncPubKey   string `json:"enc_pub_key"`
-	UserID      string `json:"user_id"`
+	DisplayName  string `json:"display_name"`
+	Multiaddr    string `json:"multiaddr"`
+	EncPubKey    string `json:"enc_pub_key"`
+	UserID       string `json:"user_id"`
+	MasterPubKey string `json:"master_pub_key"`
 }
 
 // ContactAcceptPayload is the data sent in a system:contact-accept message.
 type ContactAcceptPayload struct {
-	DisplayName string `json:"display_name"`
-	Multiaddr   string `json:"multiaddr"`
-	EncPubKey   string `json:"enc_pub_key"`
-	UserID      string `json:"user_id"`
+	DisplayName  string `json:"display_name"`
+	Multiaddr    string `json:"multiaddr"`
+	EncPubKey    string `json:"enc_pub_key"`
+	UserID       string `json:"user_id"`
+	MasterPubKey string `json:"master_pub_key"`
 }
 
 // newContactRequestHandler returns a handler for the system:contact-request protocol.
@@ -46,7 +48,7 @@ func newContactRequestHandler(database *db.DB, logger *logging.Logger) p2p.Handl
 		if err := database.InsertContactRequest(
 			id, msg.TargetUserID, "incoming",
 			payload.DisplayName, fromPeerID, payload.Multiaddr,
-			payload.UserID, payload.EncPubKey,
+			payload.UserID, payload.EncPubKey, payload.MasterPubKey,
 		); err != nil {
 			logger.Error("Failed to store contact request",
 				logging.F("from_peer", fromPeerID),
@@ -97,7 +99,7 @@ func newContactAcceptHandler(database *db.DB, logger *logging.Logger) p2p.Handle
 		if err := database.AddContact(
 			contactID, req.UserID, req.DisplayName,
 			req.PeerID, req.Multiaddr,
-			req.TargetUserID, req.EncPubKey,
+			req.TargetUserID, req.EncPubKey, req.MasterPubKey,
 		); err != nil {
 			logger.Error("Failed to create contact from accepted request",
 				logging.F("from_peer", fromPeerID),

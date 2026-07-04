@@ -19,8 +19,12 @@ func TestLoadOrGenerate_CreatesKeysAndMnemonic(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(keys.PrivateKeyPEM) == 0 || len(keys.PublicKeyPEM) == 0 || len(keys.EncryptionKeyPEM) == 0 || len(keys.EncryptionPubPEM) == 0 {
-		t.Errorf("expected all 4 keys to be generated and populated")
+	if len(keys.MasterPublicKeyPEM) == 0 || len(keys.PrivateKeyPEM) == 0 || len(keys.PublicKeyPEM) == 0 || len(keys.EncryptionKeyPEM) == 0 || len(keys.EncryptionPubPEM) == 0 {
+		t.Errorf("expected all keys (including master public key) to be generated and populated")
+	}
+
+	if keys.IdentityKeyIndex != 1 || keys.EncryptionKeyIndex != 1 {
+		t.Errorf("expected initial indices to be 1, got identity=%d, encryption=%d", keys.IdentityKeyIndex, keys.EncryptionKeyIndex)
 	}
 
 	if keys.Mnemonic == "" {
@@ -31,6 +35,9 @@ func TestLoadOrGenerate_CreatesKeysAndMnemonic(t *testing.T) {
 	coreDir := filepath.Join(tempDir, "core")
 	if _, err := os.Stat(filepath.Join(coreDir, "mnemonic")); err == nil || !os.IsNotExist(err) {
 		t.Errorf("expected mnemonic file to NOT exist on disk")
+	}
+	if _, err := os.Stat(paths.MasterIdentityPubPath); os.IsNotExist(err) {
+		t.Errorf("expected master identity public key file to exist")
 	}
 	if _, err := os.Stat(paths.IdentityKeyPath); os.IsNotExist(err) {
 		t.Errorf("expected identity private key file to exist")
@@ -66,6 +73,9 @@ func TestLoadOrGenerate_ReadsExistingKeys(t *testing.T) {
 		t.Errorf("expected mnemonic1 to not be empty")
 	}
 
+	if !bytes.Equal(keys1.MasterPublicKeyPEM, keys2.MasterPublicKeyPEM) {
+		t.Errorf("expected master public keys to be identical")
+	}
 	if !bytes.Equal(keys1.PrivateKeyPEM, keys2.PrivateKeyPEM) {
 		t.Errorf("expected identity private keys to be identical")
 	}
@@ -94,30 +104,39 @@ func TestRecoverAll_Success(t *testing.T) {
 	paths := NewKeyPaths(tempDir)
 
 	// Call RecoverAll.
-	if err := RecoverAll(paths, mnemonic, 0, 0); err != nil {
+	if err := RecoverAll(paths, mnemonic, 1, 1); err != nil {
 		t.Fatalf("RecoverAll returned error: %v", err)
 	}
 
 	// Read back key files and compare with independent derivation.
-	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master identity key: %v", err)
+	}
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 1)
 	if err != nil {
 		t.Fatalf("failed to derive identity key: %v", err)
 	}
-	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 0)
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 1)
 	if err != nil {
 		t.Fatalf("failed to derive encryption key: %v", err)
 	}
 
+	wantMasterPubPEM, _ := crypto.MarshalPublicKey(masterPriv.Public())
 	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
 	wantPubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
 	wantEncKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
 	wantEncPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
 
+	gotMasterPubPEM, _ := os.ReadFile(paths.MasterIdentityPubPath)
 	gotPrivPEM, _ := os.ReadFile(paths.IdentityKeyPath)
 	gotPubPEM, _ := os.ReadFile(paths.IdentityPubPath)
 	gotEncKeyPEM, _ := os.ReadFile(paths.EncryptionKeyPath)
 	gotEncPubPEM, _ := os.ReadFile(paths.EncryptionPubPath)
 
+	if !bytes.Equal(wantMasterPubPEM, gotMasterPubPEM) {
+		t.Errorf("master public key mismatch")
+	}
 	if !bytes.Equal(wantPrivPEM, gotPrivPEM) {
 		t.Errorf("identity private key mismatch")
 	}
@@ -159,7 +178,11 @@ func TestRecoverAll_CustomIndexSuccess(t *testing.T) {
 		t.Fatalf("RecoverAll returned error: %v", err)
 	}
 
-	// Read back key files and compare with independent derivation at index 3.
+	// Read back key files and compare with independent derivation.
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master identity key: %v", err)
+	}
 	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 3)
 	if err != nil {
 		t.Fatalf("failed to derive identity key: %v", err)
@@ -169,16 +192,21 @@ func TestRecoverAll_CustomIndexSuccess(t *testing.T) {
 		t.Fatalf("failed to derive encryption key: %v", err)
 	}
 
+	wantMasterPubPEM, _ := crypto.MarshalPublicKey(masterPriv.Public())
 	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
 	wantPubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
 	wantEncKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
 	wantEncPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
 
+	gotMasterPubPEM, _ := os.ReadFile(paths.MasterIdentityPubPath)
 	gotPrivPEM, _ := os.ReadFile(paths.IdentityKeyPath)
 	gotPubPEM, _ := os.ReadFile(paths.IdentityPubPath)
 	gotEncKeyPEM, _ := os.ReadFile(paths.EncryptionKeyPath)
 	gotEncPubPEM, _ := os.ReadFile(paths.EncryptionPubPath)
 
+	if !bytes.Equal(wantMasterPubPEM, gotMasterPubPEM) {
+		t.Errorf("master public key mismatch")
+	}
 	if !bytes.Equal(wantPrivPEM, gotPrivPEM) {
 		t.Errorf("identity private key mismatch")
 	}

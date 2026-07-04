@@ -15,16 +15,17 @@ type ContactRequest struct {
 	Multiaddr    string `json:"multiaddr"`
 	TargetUserID string `json:"target_user_id"`
 	EncPubKey    string `json:"enc_pub_key"`
+	MasterPubKey string `json:"master_pub_key"`
 	CreatedAt    string `json:"created_at"`
 }
 
 // InsertContactRequest stores a new contact request.
-func (d *DB) InsertContactRequest(id, userID, direction, displayName, peerID, multiaddr, targetUserID, encPubKey string) error {
+func (d *DB) InsertContactRequest(id, userID, direction, displayName, peerID, multiaddr, targetUserID, encPubKey, masterPubKey string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := d.conn.Exec(
-		`INSERT OR IGNORE INTO contact_requests (id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, userID, direction, displayName, peerID, multiaddr, targetUserID, encPubKey, now,
+		`INSERT OR IGNORE INTO contact_requests (id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, userID, direction, displayName, peerID, multiaddr, targetUserID, encPubKey, masterPubKey, now,
 	)
 	return err
 }
@@ -35,13 +36,13 @@ func (d *DB) GetContactRequests(userID, direction string) ([]ContactRequest, err
 	var err error
 	if direction != "" {
 		rows, err = d.conn.Query(
-			`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at
+			`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at
 			 FROM contact_requests WHERE user_id = ? AND direction = ? ORDER BY created_at DESC`,
 			userID, direction,
 		)
 	} else {
 		rows, err = d.conn.Query(
-			`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at
+			`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at
 			 FROM contact_requests WHERE user_id = ? ORDER BY created_at DESC`,
 			userID,
 		)
@@ -54,7 +55,7 @@ func (d *DB) GetContactRequests(userID, direction string) ([]ContactRequest, err
 	var requests []ContactRequest
 	for rows.Next() {
 		var r ContactRequest
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Direction, &r.DisplayName, &r.PeerID, &r.Multiaddr, &r.TargetUserID, &r.EncPubKey, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Direction, &r.DisplayName, &r.PeerID, &r.Multiaddr, &r.TargetUserID, &r.EncPubKey, &r.MasterPubKey, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		requests = append(requests, r)
@@ -65,12 +66,12 @@ func (d *DB) GetContactRequests(userID, direction string) ([]ContactRequest, err
 // GetContactRequest returns a single contact request by ID for a user.
 func (d *DB) GetContactRequest(userID, id string) (*ContactRequest, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at
+		`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at
 		 FROM contact_requests WHERE user_id = ? AND id = ?`,
 		userID, id,
 	)
 	var r ContactRequest
-	if err := row.Scan(&r.ID, &r.UserID, &r.Direction, &r.DisplayName, &r.PeerID, &r.Multiaddr, &r.TargetUserID, &r.EncPubKey, &r.CreatedAt); err != nil {
+	if err := row.Scan(&r.ID, &r.UserID, &r.Direction, &r.DisplayName, &r.PeerID, &r.Multiaddr, &r.TargetUserID, &r.EncPubKey, &r.MasterPubKey, &r.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -82,12 +83,12 @@ func (d *DB) GetContactRequest(userID, id string) (*ContactRequest, error) {
 // GetContactRequestByPeerID looks up an outgoing request by peer ID for the accept handler.
 func (d *DB) GetContactRequestByPeerID(userID, peerID string) (*ContactRequest, error) {
 	row := d.conn.QueryRow(
-		`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, created_at
+		`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at
 		 FROM contact_requests WHERE user_id = ? AND peer_id = ? AND direction = 'outgoing'`,
 		userID, peerID,
 	)
 	var r ContactRequest
-	if err := row.Scan(&r.ID, &r.UserID, &r.Direction, &r.DisplayName, &r.PeerID, &r.Multiaddr, &r.TargetUserID, &r.EncPubKey, &r.CreatedAt); err != nil {
+	if err := row.Scan(&r.ID, &r.UserID, &r.Direction, &r.DisplayName, &r.PeerID, &r.Multiaddr, &r.TargetUserID, &r.EncPubKey, &r.MasterPubKey, &r.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

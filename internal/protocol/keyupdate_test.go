@@ -11,7 +11,7 @@ func TestKeyUpdateHandler_Success(t *testing.T) {
 	database, logger := setupTest(t)
 
 	database.CreateUser("user-1", "alice", "hash", false)
-	database.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-id", "old-enc-key-hex")
+	database.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-id", "old-enc-key-hex", "bob-master-pub")
 
 	handler := newKeyUpdateHandler(database, logger)
 	msg := &p2p.Message{

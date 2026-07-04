@@ -15,10 +15,11 @@ func TestContactRequestHandler_StoresIncomingRequest(t *testing.T) {
 	handler := newContactRequestHandler(database, logger)
 
 	payload, _ := json.Marshal(ContactRequestPayload{
-		DisplayName: "Bob",
-		Multiaddr:   "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob",
-		EncPubKey:   "bob-enc-pub",
-		UserID:      "bob-uid",
+		DisplayName:  "Bob",
+		Multiaddr:    "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob",
+		EncPubKey:    "bob-enc-pub",
+		UserID:       "bob-uid",
+		MasterPubKey: "bob-master-pub",
 	})
 
 	msg := &p2p.Message{
@@ -44,6 +45,9 @@ func TestContactRequestHandler_StoresIncomingRequest(t *testing.T) {
 	if reqs[0].PeerID != "peer-bob" {
 		t.Errorf("expected peer_id peer-bob, got %s", reqs[0].PeerID)
 	}
+	if reqs[0].MasterPubKey != "bob-master-pub" {
+		t.Errorf("expected master_pub_key bob-master-pub, got %s", reqs[0].MasterPubKey)
+	}
 }
 
 func TestContactAcceptHandler_CreatesContact(t *testing.T) {
@@ -54,16 +58,17 @@ func TestContactAcceptHandler_CreatesContact(t *testing.T) {
 	database.InsertContactRequest(
 		"req-1", "user-1", "outgoing", "Bob",
 		"peer-bob", "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob",
-		"bob-uid", "bob-enc-pub",
+		"bob-uid", "bob-enc-pub", "bob-master-pub",
 	)
 
 	handler := newContactAcceptHandler(database, logger)
 
 	payload, _ := json.Marshal(ContactAcceptPayload{
-		DisplayName: "Bob",
-		Multiaddr:   "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob",
-		EncPubKey:   "bob-enc-pub",
-		UserID:      "bob-uid",
+		DisplayName:  "Bob",
+		Multiaddr:    "/ip4/1.1.1.1/tcp/4001/p2p/peer-bob",
+		EncPubKey:    "bob-enc-pub",
+		UserID:       "bob-uid",
+		MasterPubKey: "bob-master-pub",
 	})
 
 	msg := &p2p.Message{
@@ -86,6 +91,9 @@ func TestContactAcceptHandler_CreatesContact(t *testing.T) {
 	}
 	if contacts[0].DisplayName != "Bob" {
 		t.Errorf("expected display_name Bob, got %s", contacts[0].DisplayName)
+	}
+	if contacts[0].MasterPubKey != "bob-master-pub" {
+		t.Errorf("expected master_pub_key bob-master-pub, got %s", contacts[0].MasterPubKey)
 	}
 
 	// Verify outgoing request was deleted.

@@ -68,6 +68,7 @@ func (d *DB) Migrate() error {
 			multiaddr TEXT NOT NULL,
 			target_user_id TEXT NOT NULL DEFAULT '',
 			enc_pub_key TEXT NOT NULL DEFAULT '',
+			master_pub_key TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			UNIQUE(user_id, peer_id)
 		)`,
@@ -97,6 +98,7 @@ func (d *DB) Migrate() error {
 			multiaddr TEXT NOT NULL,
 			target_user_id TEXT NOT NULL,
 			enc_pub_key TEXT NOT NULL,
+			master_pub_key TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
 	}
@@ -118,12 +120,14 @@ func (d *DB) Migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN target_user_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN enc_pub_key TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN peer_id TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN master_pub_key TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.conn.Exec(`ALTER TABLE contact_requests ADD COLUMN master_pub_key TEXT NOT NULL DEFAULT ''`)
 
 	// Migrate existing contacts: extract peer_id and actual multiaddr from stored invite links.
 	d.migrateContactInviteLinks()
 
 	// Seed default system settings if they do not exist
-	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('identity_key_index', '0')`)
+	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('identity_key_index', '1')`)
 	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('encryption_key_index', '0')`)
 
 	// Seed default allowed registry.

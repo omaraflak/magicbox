@@ -2,6 +2,7 @@ package rest
 
 import (
 	"bufio"
+	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -483,25 +484,31 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	if err := config.RecoverKeys(s.config.Root, mnemonic, 0, 0); err != nil {
+	if err := config.RecoverKeys(s.config.Root, mnemonic, 1, 1); err != nil {
 		s.logger.Error("admin reset identity keys: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return
 	}
 
-	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "0"); err != nil {
+	if err := s.db.WipeAllContactsAndRequests(); err != nil {
+		s.logger.Error("admin reset identity keys: failed to wipe contacts and requests", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "1"); err != nil {
 		s.logger.Error("admin reset identity keys: database error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "0"); err != nil {
+	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "1"); err != nil {
 		s.logger.Error("admin reset identity keys: database error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	s.config.Keys.IdentityKeyIndex = 0
-	s.config.Keys.EncryptionKeyIndex = 0
+	s.config.Keys.IdentityKeyIndex = 1
+	s.config.Keys.EncryptionKeyIndex = 1
 	s.config.Keys.Mnemonic = mnemonic
 
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -524,6 +531,15 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 	}
 
 	newIndex := s.config.Keys.IdentityKeyIndex + 1
+
+	masterPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, 0)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to derive master identity key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	masterPubBytes := masterPriv.Public().(ed25519.PublicKey)
+	masterPubKeyHex := hex.EncodeToString(masterPubBytes)
 
 	oldPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, s.config.Keys.IdentityKeyIndex)
 	if err != nil {
@@ -582,7 +598,7 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 	}
 	pubHex := hex.EncodeToString(xPriv.PublicKey().Bytes())
 
-	cert, err := protocol.SignSuccessionCertificate(oldPriv, oldPeerID.String(), newPeerID.String(), newMultiaddr, pubHex)
+	cert, err := protocol.SignSuccessionCertificate(masterPriv, masterPubKeyHex, oldPeerID.String(), newPeerID.String(), newMultiaddr, pubHex)
 	if err != nil {
 		s.logger.Error("admin rotate identity keys: failed to sign succession certificate", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
