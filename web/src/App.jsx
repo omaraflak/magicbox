@@ -580,8 +580,8 @@ export default function App() {
     };
 
     // Rotate/Recover Encryption Keys
-    const handleRotateEncryptionKeys = async (mnemonic) => {
-        const { status, data } = await callAPI('POST', '/admin/keys/rotate-encryption', { mnemonic });
+    const handleRotateEncryptionKeys = async () => {
+        const { status, data } = await callAPI('POST', '/admin/keys/rotate-encryption');
         if (status === 200) {
             loadMnemonic();
             setTimeout(triggerSystemRestart, 1500);
@@ -592,12 +592,12 @@ export default function App() {
     };
 
     // Rotate Identity Keys (Hygiene)
-    const handleRotateIdentityKeys = async (mnemonic) => {
+    const handleRotateIdentityKeys = async () => {
         return new Promise((resolve) => {
             showConfirm(
                 "Are you sure you want to rotate your P2P identity keys? Succession certificates will be automatically generated and queued for all your contacts so they can update your address. This will restart Magicbox to apply changes.",
                 async () => {
-                    const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
+                    const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity');
                     if (status === 200) {
                         loadMnemonic();
                         setTimeout(triggerSystemRestart, 1500); // restart immediately
@@ -610,6 +610,25 @@ export default function App() {
                 () => resolve({ success: false, cancelled: true })
             );
         });
+    };
+
+    // Unlock System
+    const handleUnlockSystem = async (mnemonic) => {
+        const { status, data } = await callAPI('POST', '/admin/unlock', { mnemonic });
+        if (status === 200) {
+            return { success: true };
+        } else {
+            return { success: false, error: data?.error || 'Unlock failed' };
+        }
+    };
+
+    // Get System Unlock Status
+    const handleGetSystemStatus = async () => {
+        const { status, data } = await callAPI('GET', '/admin/status');
+        if (status === 200) {
+            return data;
+        }
+        return null;
     };
 
     // Reset & Re-create P2P Identity (Danger Zone)
@@ -764,6 +783,8 @@ export default function App() {
                         onRotateEncryption={handleRotateEncryptionKeys}
                         onRotateIdentity={handleRotateIdentityKeys}
                         onResetIdentity={handleResetIdentityKeys}
+                        onUnlock={handleUnlockSystem}
+                        onGetStatus={handleGetSystemStatus}
                     />
                 )}
             </div>

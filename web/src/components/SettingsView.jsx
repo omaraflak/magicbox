@@ -42,7 +42,9 @@ export default function SettingsView({
     mnemonicData,
   onRotateEncryption,
   onRotateIdentity,
-  onResetIdentity
+  onResetIdentity,
+  onUnlock,
+  onGetStatus
 }) {
     return (
         <div className="admin-layout animate-fade-in">
@@ -193,9 +195,11 @@ export default function SettingsView({
                         )}
                         {adminTab === 'keys' && (
                             <AdminKeysTab
-                  onRotateEncryption={onRotateEncryption}
-                  onRotateIdentity={onRotateIdentity}
-                  onResetIdentity={onResetIdentity}
+                                onRotateEncryption={onRotateEncryption}
+                                onRotateIdentity={onRotateIdentity}
+                                onResetIdentity={onResetIdentity}
+                                onUnlock={onUnlock}
+                                onGetStatus={onGetStatus}
                             />
                         )}
                     </div>

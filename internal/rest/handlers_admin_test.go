@@ -219,10 +219,9 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 	// Add a contact to verify the propagation loop runs without crash
 	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key", "friend-master-pub-key")
 
-	bodyBytes, _ := json.Marshal(map[string]interface{}{
-		"mnemonic": mnemonic,
-	})
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-encryption", bytes.NewReader(bodyBytes))
+	cfg.MnemonicStore.Set(mnemonic)
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-encryption", nil)
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -245,24 +244,24 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 	}
 }
 
-func TestAdminRotateEncryptionKeys_InvalidMnemonic(t *testing.T) {
-	handler, database, _ := setupTestServer(t)
+func TestAdminRotateEncryptionKeys_Locked(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	// Ensure system is locked (mnemonic store is empty)
+	cfg.MnemonicStore.Set("")
 
 	// Create admin user and get session cookie.
 	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	_ = database.CreateUser("u1", "admin", string(hash), true)
 	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
 
-	bodyBytes, _ := json.Marshal(map[string]interface{}{
-		"mnemonic": "invalid mnemonic words here",
-	})
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-encryption", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-encryption", nil)
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusPreconditionFailed {
+		t.Errorf("expected 412 Precondition Failed, got %d", rr.Code)
 	}
 }
 
@@ -353,11 +352,9 @@ func TestAdminRotateIdentityKeys_Success(t *testing.T) {
 		t.Fatalf("failed to setup keys: %v", err)
 	}
 
-	bodyBytes, _ := json.Marshal(map[string]interface{}{
-		"mnemonic": mnemonic,
-	})
+	cfg.MnemonicStore.Set(mnemonic)
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-identity", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-identity", nil)
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

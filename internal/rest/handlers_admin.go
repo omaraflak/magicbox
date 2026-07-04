@@ -391,23 +391,16 @@ func (s *Server) handleAdminAcknowledgeMnemonic(w http.ResponseWriter, r *http.R
 }
 
 func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Mnemonic string `json:"mnemonic"`
-	}
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	if req.Mnemonic == "" || !bip39.IsMnemonicValid(req.Mnemonic) {
-		writeError(w, http.StatusBadRequest, "invalid mnemonic phrase")
+	mnemonic := s.config.MnemonicStore.Get()
+	if mnemonic == "" {
+		writeError(w, http.StatusPreconditionFailed, "system is locked")
 		return
 	}
 
 	newIndex := s.config.Keys.EncryptionKeyIndex + 1
 
 	paths := keymanager.NewKeyPaths(s.config.Root)
-	if err := keymanager.RotateEncryption(paths, req.Mnemonic); err != nil {
+	if err := keymanager.RotateEncryption(paths, mnemonic); err != nil {
 		s.logger.Error("admin rotate encryption keys: failed to rotate key", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to rotate encryption keys: "+err.Error())
 		return
@@ -415,7 +408,7 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 
 	s.config.Keys.EncryptionKeyIndex = newIndex
 
-	xPriv, err := crypto.DeriveEncryptionKey(req.Mnemonic, newIndex)
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, newIndex)
 	if err != nil {
 		s.logger.Error("admin rotate encryption keys: failed to derive key", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -501,21 +494,15 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Mnemonic string `json:"mnemonic"`
-	}
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if req.Mnemonic == "" || !bip39.IsMnemonicValid(req.Mnemonic) {
-		writeError(w, http.StatusBadRequest, "invalid mnemonic phrase")
+	mnemonic := s.config.MnemonicStore.Get()
+	if mnemonic == "" {
+		writeError(w, http.StatusPreconditionFailed, "system is locked")
 		return
 	}
 
 	newIndex := s.config.Keys.IdentityKeyIndex + 1
 
-	masterPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, 0)
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
 	if err != nil {
 		s.logger.Error("admin rotate identity keys: failed to derive master identity key", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -524,14 +511,14 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 	masterPubBytes := masterPriv.Public().(ed25519.PublicKey)
 	masterPubKeyHex := hex.EncodeToString(masterPubBytes)
 
-	oldPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, s.config.Keys.IdentityKeyIndex)
+	oldPriv, err := crypto.DeriveIdentityKey(mnemonic, s.config.Keys.IdentityKeyIndex)
 	if err != nil {
 		s.logger.Error("admin rotate identity keys: failed to derive old identity key", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	newPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, newIndex)
+	newPriv, err := crypto.DeriveIdentityKey(mnemonic, newIndex)
 	if err != nil {
 		s.logger.Error("admin rotate identity keys: failed to derive new identity key", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -573,7 +560,7 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 	oldMultiaddr := addrs[0]
 	newMultiaddr := strings.ReplaceAll(oldMultiaddr, oldPeerID.String(), newPeerID.String())
 
-	xPriv, err := crypto.DeriveEncryptionKey(req.Mnemonic, s.config.Keys.EncryptionKeyIndex)
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, s.config.Keys.EncryptionKeyIndex)
 	if err != nil {
 		s.logger.Error("admin rotate identity keys: failed to derive encryption key", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -595,7 +582,7 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 	}
 
 	paths := keymanager.NewKeyPaths(s.config.Root)
-	if err := keymanager.RotateIdentity(paths, req.Mnemonic); err != nil {
+	if err := keymanager.RotateIdentity(paths, mnemonic); err != nil {
 		s.logger.Error("admin rotate identity keys: failed to rotate identity key on disk", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
