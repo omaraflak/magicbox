@@ -87,6 +87,18 @@ func (d *DB) Migrate() error {
 			max_attempts INTEGER NOT NULL DEFAULT 10,
 			created_at TEXT NOT NULL
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS contact_requests (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			direction TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			peer_id TEXT NOT NULL,
+			multiaddr TEXT NOT NULL,
+			target_user_id TEXT NOT NULL,
+			enc_pub_key TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range statements {

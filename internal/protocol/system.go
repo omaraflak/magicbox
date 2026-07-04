@@ -25,11 +25,11 @@ const (
 // without a manual switch/if-else chain.
 func RegisterSystemHandlers(service p2p.Service, database *db.DB, logger *logging.Logger) {
 	service.RegisterHandler(AppIDKeyUpdate, newKeyUpdateHandler(database, logger))
+	service.RegisterHandler(AppIDContactRequest, newContactRequestHandler(database, logger))
+	service.RegisterHandler(AppIDContactAccept, newContactAcceptHandler(database, logger))
 
 	// Future system handlers:
-	// service.RegisterHandler("system:key-succession", newKeySuccessionHandler(...))
-	// service.RegisterHandler("system:contact-request", newContactRequestHandler(...))
-	// service.RegisterHandler("system:contact-accept", newContactAcceptHandler(...))
+	// service.RegisterHandler(AppIDKeySuccession, newKeySuccessionHandler(...))
 }
 
 // newKeyUpdateHandler returns a handler for the system:key-update protocol.

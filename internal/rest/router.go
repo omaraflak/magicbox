@@ -68,6 +68,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/contacts/{id}", auth(http.HandlerFunc(s.handleDeleteContact)))
 	mux.Handle("GET /api/v1/me/invitation", auth(http.HandlerFunc(s.handleGetInvitation)))
 
+	// Contact request/accept routes.
+	mux.Handle("POST /api/v1/contacts/request", auth(http.HandlerFunc(s.handleSendContactRequest)))
+	mux.Handle("GET /api/v1/contacts/requests", auth(http.HandlerFunc(s.handleListContactRequests)))
+	mux.Handle("POST /api/v1/contacts/requests/{id}/accept", auth(http.HandlerFunc(s.handleAcceptContactRequest)))
+	mux.Handle("POST /api/v1/contacts/requests/{id}/reject", auth(http.HandlerFunc(s.handleRejectContactRequest)))
+
 	// Admin-only routes — require both AuthMiddleware and AdminMiddleware.
 	admin := AdminMiddleware()
 

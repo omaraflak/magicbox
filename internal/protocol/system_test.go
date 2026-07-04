@@ -82,8 +82,10 @@ func TestRegisterSystemHandlers_DoesNotPanic(t *testing.T) {
 	mock := &mockP2PService{handlers: make(map[string]p2p.Handler)}
 	RegisterSystemHandlers(mock, database, logger)
 
-	if _, ok := mock.handlers[AppIDKeyUpdate]; !ok {
-		t.Error("expected system:key-update handler to be registered")
+	for _, appID := range []string{AppIDKeyUpdate, AppIDContactRequest, AppIDContactAccept} {
+		if _, ok := mock.handlers[appID]; !ok {
+			t.Errorf("expected %s handler to be registered", appID)
+		}
 	}
 }
 
