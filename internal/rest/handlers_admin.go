@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -21,9 +20,7 @@ import (
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/crypto"
-	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/keymanager"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/protocol"
@@ -408,15 +405,10 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 
 	newIndex := s.config.Keys.EncryptionKeyIndex + 1
 
-	if err := config.RotateEncryptionKey(s.config.Root, req.Mnemonic, newIndex); err != nil {
+	paths := keymanager.NewKeyPaths(s.config.Root)
+	if err := keymanager.RotateEncryption(paths, req.Mnemonic); err != nil {
 		s.logger.Error("admin rotate encryption keys: failed to rotate key", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to rotate encryption keys: "+err.Error())
-		return
-	}
-
-	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, fmt.Sprintf("%d", newIndex)); err != nil {
-		s.logger.Error("admin rotate encryption keys: database error", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
@@ -484,7 +476,8 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	if err := config.RecoverKeys(s.config.Root, mnemonic, 1, 1); err != nil {
+	paths := keymanager.NewKeyPaths(s.config.Root)
+	if err := keymanager.RecoverAll(paths, mnemonic, 1, 1); err != nil {
 		s.logger.Error("admin reset identity keys: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return
@@ -492,17 +485,6 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 
 	if err := s.db.WipeAllContactsAndRequests(); err != nil {
 		s.logger.Error("admin reset identity keys: failed to wipe contacts and requests", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "1"); err != nil {
-		s.logger.Error("admin reset identity keys: database error", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "1"); err != nil {
-		s.logger.Error("admin reset identity keys: database error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -611,14 +593,9 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := keymanager.RotateIdentity(keymanager.NewKeyPaths(s.config.Root), req.Mnemonic, newIndex); err != nil {
+	paths := keymanager.NewKeyPaths(s.config.Root)
+	if err := keymanager.RotateIdentity(paths, req.Mnemonic); err != nil {
 		s.logger.Error("admin rotate identity keys: failed to rotate identity key on disk", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, fmt.Sprintf("%d", newIndex)); err != nil {
-		s.logger.Error("admin rotate identity keys: database error setting identity key index", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

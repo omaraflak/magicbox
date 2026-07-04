@@ -59,7 +59,10 @@ func TestRotateEncryptionKey_Wrapper(t *testing.T) {
 	tempDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tempDir, "core"), 0750)
 	mnemonic, _ := crypto.GenerateMnemonic()
-	if err := RotateEncryptionKey(tempDir, mnemonic, 5); err != nil {
+	if err := RecoverKeys(tempDir, mnemonic, 1, 1); err != nil {
+		t.Fatalf("RecoverKeys failed: %v", err)
+	}
+	if err := RotateEncryptionKey(tempDir, mnemonic); err != nil {
 		t.Fatalf("RotateEncryptionKey wrapper failed: %v", err)
 	}
 }

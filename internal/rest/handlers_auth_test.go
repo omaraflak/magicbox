@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/magicbox/core/internal/crypto"
-	"github.com/magicbox/core/internal/db"
+	"github.com/magicbox/core/internal/keymanager"
 )
 
 func TestSetupFlow_Success(t *testing.T) {
@@ -279,11 +279,12 @@ func TestSetupRecover_Success(t *testing.T) {
 		t.Errorf("expected 1 user in database, got %d", count)
 	}
 
-	// Check system settings
-	val1, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
-	val2, _ := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
-	if val1 != "0" || val2 != "0" {
-		t.Errorf("expected key indices to be initialized to '0', got identity=%q encryption=%q", val1, val2)
+	// Check system settings on disk
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	idIdx, _ := os.ReadFile(paths.IdentityIndexPath)
+	encIdx, _ := os.ReadFile(paths.EncryptionIndexPath)
+	if string(idIdx) != "0" || string(encIdx) != "0" {
+		t.Errorf("expected key indices on disk to be initialized to '0', got identity=%q encryption=%q", string(idIdx), string(encIdx))
 	}
 }
 

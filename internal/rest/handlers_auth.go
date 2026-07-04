@@ -9,7 +9,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/magicbox/core/internal/config"
-	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/logging"
 )
 
@@ -132,17 +131,6 @@ func (s *Server) handleSetupRecover(w http.ResponseWriter, r *http.Request) {
 	userID := uuid.NewString()
 	if err := s.db.CreateUser(userID, req.Username, string(hash), true); err != nil {
 		s.logger.Error("setup recover: failed to create user", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "0"); err != nil {
-		s.logger.Error("setup recover: failed to set identity key index", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "0"); err != nil {
-		s.logger.Error("setup recover: failed to set encryption key index", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

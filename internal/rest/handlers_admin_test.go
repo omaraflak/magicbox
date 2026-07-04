@@ -12,7 +12,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/magicbox/core/internal/crypto"
-	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/keymanager"
 )
 
@@ -210,6 +209,13 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 		t.Fatalf("failed to generate mnemonic: %v", err)
 	}
 
+	// Pre-populate keys on disk so RotateEncryption can read the index
+	err = keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 1, 1)
+	if err != nil {
+		t.Fatalf("failed to setup keys: %v", err)
+	}
+	cfg.Keys.EncryptionKeyIndex = 1
+
 	// Add a contact to verify the propagation loop runs without crash
 	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key", "friend-master-pub-key")
 
@@ -229,12 +235,13 @@ func TestAdminRotateEncryptionKeys_Success(t *testing.T) {
 		t.Errorf("expected EncryptionKeyIndex to be 2, got %d", cfg.Keys.EncryptionKeyIndex)
 	}
 
-	val, err := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	val, err := os.ReadFile(paths.EncryptionIndexPath)
 	if err != nil {
-		t.Fatalf("failed to get db setting: %v", err)
+		t.Fatalf("failed to read encryption index file: %v", err)
 	}
-	if val != "2" {
-		t.Errorf("expected db setting to be '2', got %q", val)
+	if string(val) != "2" {
+		t.Errorf("expected encryption index file content to be '2', got %q", string(val))
 	}
 }
 
@@ -287,10 +294,11 @@ func TestAdminResetIdentityKeys_SuccessGenerated(t *testing.T) {
 		t.Errorf("expected indices to be reset to 1 in config")
 	}
 
-	val1, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
-	val2, _ := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
-	if val1 != "1" || val2 != "1" {
-		t.Errorf("expected indices to be reset to '1' in db")
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	idIdx, _ := os.ReadFile(paths.IdentityIndexPath)
+	encIdx, _ := os.ReadFile(paths.EncryptionIndexPath)
+	if string(idIdx) != "1" || string(encIdx) != "1" {
+		t.Errorf("expected indices to be reset to '1' on disk, got identity=%s, encryption=%s", string(idIdx), string(encIdx))
 	}
 }
 
@@ -336,7 +344,6 @@ func TestAdminRotateIdentityKeys_Success(t *testing.T) {
 
 	// Pre-populate settings and contact
 	mnemonic, _ := crypto.GenerateMnemonic()
-	_ = database.SetSystemSetting(db.SettingIdentityKeyIndex, "1")
 	cfg.Keys.IdentityKeyIndex = 1
 	cfg.Keys.Mnemonic = mnemonic
 
@@ -359,9 +366,10 @@ func TestAdminRotateIdentityKeys_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 
-	val, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
-	if val != "2" {
-		t.Errorf("expected identity key index in DB to be updated to 2, got %s", val)
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	val, _ := os.ReadFile(paths.IdentityIndexPath)
+	if string(val) != "2" {
+		t.Errorf("expected identity key index on disk to be updated to 2, got %q", string(val))
 	}
 	if cfg.Keys.IdentityKeyIndex != 2 {
 		t.Errorf("expected identity key index in config to be updated to 2, got %d", cfg.Keys.IdentityKeyIndex)

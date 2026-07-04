@@ -161,8 +161,8 @@ func RecoverKeys(root string, mnemonic string, identityIndex, encryptionIndex in
 	return keymanager.RecoverAll(keymanager.NewKeyPaths(root), mnemonic, identityIndex, encryptionIndex)
 }
 
-// RotateEncryptionKey rotates the encryption key to a new index.
+// RotateEncryptionKey rotates the encryption key.
 // This is a convenience wrapper around keymanager.RotateEncryption.
-func RotateEncryptionKey(root string, mnemonic string, index int) error {
-	return keymanager.RotateEncryption(keymanager.NewKeyPaths(root), mnemonic, index)
+func RotateEncryptionKey(root string, mnemonic string) error {
+	return keymanager.RotateEncryption(keymanager.NewKeyPaths(root), mnemonic)
 }

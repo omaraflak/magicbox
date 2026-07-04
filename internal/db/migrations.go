@@ -73,11 +73,6 @@ func (d *DB) Migrate() error {
 			UNIQUE(user_id, peer_id)
 		)`,
 
-		`CREATE TABLE IF NOT EXISTS system_settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		)`,
-
 		`CREATE TABLE IF NOT EXISTS message_queue (
 			id TEXT PRIMARY KEY,
 			contact_id TEXT NOT NULL,
@@ -125,10 +120,6 @@ func (d *DB) Migrate() error {
 
 	// Migrate existing contacts: extract peer_id and actual multiaddr from stored invite links.
 	d.migrateContactInviteLinks()
-
-	// Seed default system settings if they do not exist
-	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('identity_key_index', '1')`)
-	_, _ = d.conn.Exec(`INSERT OR IGNORE INTO system_settings (key, value) VALUES ('encryption_key_index', '0')`)
 
 	// Seed default allowed registry.
 	now := time.Now().UTC().Format(time.RFC3339)

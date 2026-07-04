@@ -233,8 +233,12 @@ func TestRotateEncryption_Success(t *testing.T) {
 
 	paths := NewKeyPaths(tempDir)
 
-	// Rotate encryption key to index 5
-	if err := RotateEncryption(paths, mnemonic, 5); err != nil {
+	if err := writeIndex(paths.EncryptionIndexPath, 4); err != nil {
+		t.Fatalf("failed to write initial encryption index: %v", err)
+	}
+
+	// Rotate encryption key (4 -> 5)
+	if err := RotateEncryption(paths, mnemonic); err != nil {
 		t.Fatalf("RotateEncryption failed: %v", err)
 	}
 
@@ -257,5 +261,66 @@ func TestRotateEncryption_Success(t *testing.T) {
 
 	if !bytes.Equal(wantEncKeyPEM, gotEncKeyPEM) {
 		t.Errorf("expected encryption key to match index 5 key")
+	}
+
+	// Verify index on disk is now 5
+	index, err := readIndex(paths.EncryptionIndexPath)
+	if err != nil {
+		t.Fatalf("failed to read index: %v", err)
+	}
+	if index != 5 {
+		t.Errorf("expected encryption index on disk to be 5, got %d", index)
+	}
+}
+
+func TestRotateIdentity_Success(t *testing.T) {
+	tempDir := t.TempDir()
+	coreDir := filepath.Join(tempDir, "core")
+	_ = os.MkdirAll(coreDir, 0750)
+
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+
+	paths := NewKeyPaths(tempDir)
+
+	if err := writeIndex(paths.IdentityIndexPath, 4); err != nil {
+		t.Fatalf("failed to write initial identity index: %v", err)
+	}
+
+	// Rotate identity key (4 -> 5)
+	if err := RotateIdentity(paths, mnemonic); err != nil {
+		t.Fatalf("RotateIdentity failed: %v", err)
+	}
+
+	// Verify identity key files exist, but encryption key files DO NOT exist
+	if _, err := os.Stat(paths.EncryptionKeyPath); !os.IsNotExist(err) {
+		t.Errorf("expected encryption.key to NOT be created by RotateIdentity")
+	}
+
+	gotPrivPEM, err := os.ReadFile(paths.IdentityKeyPath)
+	if err != nil {
+		t.Fatalf("failed to read identity.key: %v", err)
+	}
+
+	// Deriving independently to verify correctness
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 5)
+	if err != nil {
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	wantPrivPEM, _ := crypto.MarshalPrivateKey(edPriv)
+
+	if !bytes.Equal(wantPrivPEM, gotPrivPEM) {
+		t.Errorf("expected identity key to match index 5 key")
+	}
+
+	// Verify index on disk is now 5
+	index, err := readIndex(paths.IdentityIndexPath)
+	if err != nil {
+		t.Fatalf("failed to read index: %v", err)
+	}
+	if index != 5 {
+		t.Errorf("expected identity index on disk to be 5, got %d", index)
 	}
 }

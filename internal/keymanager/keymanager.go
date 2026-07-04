@@ -17,6 +17,8 @@ type KeyPaths struct {
 	IdentityPubPath       string
 	EncryptionKeyPath     string
 	EncryptionPubPath     string
+	IdentityIndexPath     string
+	EncryptionIndexPath   string
 }
 
 // NewKeyPaths returns the standard key file paths under the given root directory.
@@ -27,6 +29,8 @@ func NewKeyPaths(root string) *KeyPaths {
 		IdentityPubPath:       filepath.Join(root, "core", "identity.pub"),
 		EncryptionKeyPath:     filepath.Join(root, "core", "encryption.key"),
 		EncryptionPubPath:     filepath.Join(root, "core", "encryption.pub"),
+		IdentityIndexPath:     filepath.Join(root, "core", "identity.index"),
+		EncryptionIndexPath:   filepath.Join(root, "core", "encryption.index"),
 	}
 }
 
@@ -43,6 +47,22 @@ type KeyState struct {
 	EncryptionKeyIndex int    `json:"encryption_key_index"`
 }
 
+func readIndex(path string) (int, error) {
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	var index int
+	if _, err := fmt.Sscanf(string(bytes), "%d", &index); err != nil {
+		return 0, err
+	}
+	return index, nil
+}
+
+func writeIndex(path string, index int) error {
+	return os.WriteFile(path, []byte(fmt.Sprintf("%d", index)), 0644)
+}
+
 // LoadOrGenerate loads existing keys from disk, or generates new ones from a fresh mnemonic.
 // If keys already exist on disk, they are loaded and the returned mnemonic will be empty.
 // If keys are generated, the mnemonic is returned in-memory only (never written to disk).
@@ -55,14 +75,23 @@ func LoadOrGenerate(paths *KeyPaths) (*KeyState, error) {
 	encPubPEM, err4 := os.ReadFile(paths.EncryptionPubPath)
 
 	if err0 == nil && err1 == nil && err2 == nil && err3 == nil && err4 == nil {
-		// Key indices default to 0/1; the caller must load the actual
-		// indices from the database and set them on the returned KeyState.
+		identityIndex, err := readIndex(paths.IdentityIndexPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read identity index: %w", err)
+		}
+		encryptionIndex, err := readIndex(paths.EncryptionIndexPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read encryption index: %w", err)
+		}
+
 		return &KeyState{
 			MasterPublicKeyPEM: masterPubPEM,
 			PrivateKeyPEM:      privPEM,
 			PublicKeyPEM:       pubPEM,
 			EncryptionKeyPEM:   encKeyPEM,
 			EncryptionPubPEM:   encPubPEM,
+			IdentityKeyIndex:   identityIndex,
+			EncryptionKeyIndex: encryptionIndex,
 		}, nil
 	}
 
@@ -127,6 +156,12 @@ func LoadOrGenerate(paths *KeyPaths) (*KeyState, error) {
 	}
 	if err := os.WriteFile(paths.EncryptionPubPath, encPubPEM, 0644); err != nil {
 		return nil, err
+	}
+	if err := writeIndex(paths.IdentityIndexPath, 1); err != nil {
+		return nil, fmt.Errorf("failed to write initial identity index: %w", err)
+	}
+	if err := writeIndex(paths.EncryptionIndexPath, 1); err != nil {
+		return nil, fmt.Errorf("failed to write initial encryption index: %w", err)
 	}
 
 	return &KeyState{
@@ -199,12 +234,25 @@ func RecoverAll(paths *KeyPaths, mnemonic string, identityIndex, encryptionIndex
 		return fmt.Errorf("failed to write encryption public key: %w", err)
 	}
 
+	if err := writeIndex(paths.IdentityIndexPath, identityIndex); err != nil {
+		return fmt.Errorf("failed to write identity index: %w", err)
+	}
+	if err := writeIndex(paths.EncryptionIndexPath, encryptionIndex); err != nil {
+		return fmt.Errorf("failed to write encryption index: %w", err)
+	}
+
 	return nil
 }
 
-// RotateEncryption derives a new X25519 encryption key at the given index
+// RotateEncryption derives a new X25519 encryption key after incrementing the index on disk,
 // and writes only the encryption key files to disk. Identity keys are not affected.
-func RotateEncryption(paths *KeyPaths, mnemonic string, index int) error {
+func RotateEncryption(paths *KeyPaths, mnemonic string) error {
+	index, err := readIndex(paths.EncryptionIndexPath)
+	if err != nil {
+		return fmt.Errorf("failed to read encryption index: %w", err)
+	}
+	index++
+
 	// Derive encryption key from mnemonic at the given index.
 	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, index)
 	if err != nil {
@@ -227,12 +275,22 @@ func RotateEncryption(paths *KeyPaths, mnemonic string, index int) error {
 		return fmt.Errorf("failed to write encryption public key: %w", err)
 	}
 
+	if err := writeIndex(paths.EncryptionIndexPath, index); err != nil {
+		return fmt.Errorf("failed to write encryption index: %w", err)
+	}
+
 	return nil
 }
 
-// RotateIdentity derives a new Ed25519 identity key at the given index
+// RotateIdentity derives a new Ed25519 identity key after incrementing the index on disk,
 // and writes only the identity key files to disk. Encryption keys are not affected.
-func RotateIdentity(paths *KeyPaths, mnemonic string, index int) error {
+func RotateIdentity(paths *KeyPaths, mnemonic string) error {
+	index, err := readIndex(paths.IdentityIndexPath)
+	if err != nil {
+		return fmt.Errorf("failed to read identity index: %w", err)
+	}
+	index++
+
 	edPriv, err := crypto.DeriveIdentityKey(mnemonic, index)
 	if err != nil {
 		return fmt.Errorf("failed to derive identity key from mnemonic: %w", err)
@@ -252,6 +310,10 @@ func RotateIdentity(paths *KeyPaths, mnemonic string, index int) error {
 	}
 	if err := os.WriteFile(paths.IdentityPubPath, pubPEM, 0644); err != nil {
 		return fmt.Errorf("failed to write identity public key: %w", err)
+	}
+
+	if err := writeIndex(paths.IdentityIndexPath, index); err != nil {
+		return fmt.Errorf("failed to write identity index: %w", err)
 	}
 
 	return nil

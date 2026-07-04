@@ -57,19 +57,6 @@ func run() error {
 	}
 	logger.Info("database initialized")
 
-	// Read the active key indices from the database system_settings table.
-	idIndexVal, err := database.GetSystemSetting(db.SettingIdentityKeyIndex)
-	if err == nil && idIndexVal != "" {
-		fmt.Sscanf(idIndexVal, "%d", &cfg.Keys.IdentityKeyIndex)
-	}
-	encIndexVal, err := database.GetSystemSetting(db.SettingEncryptionKeyIndex)
-	if err == nil && encIndexVal != "" {
-		fmt.Sscanf(encIndexVal, "%d", &cfg.Keys.EncryptionKeyIndex)
-	}
-	logger.Info("loaded key indices from database",
-		logging.F("identity_index", cfg.Keys.IdentityKeyIndex),
-		logging.F("encryption_index", cfg.Keys.EncryptionKeyIndex),
-	)
 
 	// 4. Initialize Docker client.
 	dockerClient, err := docker.New()
