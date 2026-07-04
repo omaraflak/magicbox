@@ -2,7 +2,8 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/web
 COPY web/package*.json ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm \
+    npm install
 COPY web/ ./
 RUN npm run build
 
@@ -16,13 +17,16 @@ WORKDIR /app
 
 # Copy dependency files and download
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy the rest of the source code
 COPY . .
 
 # Build the main server binary with cgo enabled
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o magicbox cmd/server/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o magicbox cmd/server/main.go
 
 # Stage 3: Create the runner image
 FROM alpine:3.19

@@ -27,4 +27,3 @@ func RegisterSystemHandlers(service p2p.Service, database *db.DB, logger *loggin
 	service.RegisterHandler(AppIDContactAccept, newContactAcceptHandler(database, logger))
 	service.RegisterHandler(AppIDKeySuccession, newKeySuccessionHandler(database, logger))
 }
-

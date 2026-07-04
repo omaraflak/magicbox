@@ -2,7 +2,8 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/web
 COPY apps/ai/web/package*.json ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm \
+    npm install
 COPY apps/ai/web/ ./
 RUN npm run build
 
@@ -18,10 +19,13 @@ COPY api/proto/v1/ /magicbox/api/proto/v1/
 COPY sdk/ /magicbox/sdk/
 # Copy module configuration
 COPY apps/ai/go.mod apps/ai/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 # Copy local source file
 COPY apps/ai/*.go ./
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o ai .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o ai .
 
 # Stage 3: Runtime
 FROM alpine:3.19
