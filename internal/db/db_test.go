@@ -461,3 +461,27 @@ func TestUpdateContactIdentity(t *testing.T) {
 	}
 }
 
+func TestGetPendingMessages_ContactRequests(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.InsertContactRequest("req-1", "user-1", "outgoing", "Bob", "peer-bob", "/ip4/127.0.0.1/tcp/4001/p2p/peer-bob", "bob-uid", "enc-bob")
+	db.EnqueueMessage("msg-1", "req-1", "system:contact-request", []byte("payload"), 5)
+
+	msgs, err := db.GetPendingMessages()
+	if err != nil {
+		t.Fatalf("GetPendingMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message targeting request, got %d", len(msgs))
+	}
+	if msgs[0].Multiaddr != "/ip4/127.0.0.1/tcp/4001/p2p/peer-bob" {
+		t.Errorf("expected multiaddr /ip4/127.0.0.1/tcp/4001/p2p/peer-bob, got %s", msgs[0].Multiaddr)
+	}
+	if msgs[0].EncPubKey != "enc-bob" {
+		t.Errorf("expected enc_pub_key enc-bob, got %s", msgs[0].EncPubKey)
+	}
+}
+
+

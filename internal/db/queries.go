@@ -609,10 +609,15 @@ func (d *DB) GetPendingMessages() ([]QueuedMessage, error) {
 	rows, err := d.conn.Query(
 		`SELECT mq.id, mq.contact_id, mq.app_id, mq.payload, mq.next_retry_at,
 		        mq.attempts, mq.max_attempts, mq.created_at,
-		        c.multiaddr, c.enc_pub_key, c.target_user_id
+		        COALESCE(c.multiaddr, cr.multiaddr) as multiaddr,
+		        COALESCE(c.enc_pub_key, cr.enc_pub_key) as enc_pub_key,
+		        COALESCE(c.target_user_id, cr.target_user_id) as target_user_id
 		 FROM message_queue mq
-		 JOIN contacts c ON mq.contact_id = c.id
-		 WHERE mq.attempts < mq.max_attempts AND mq.next_retry_at <= ?
+		 LEFT JOIN contacts c ON mq.contact_id = c.id
+		 LEFT JOIN contact_requests cr ON mq.contact_id = cr.id
+		 WHERE mq.attempts < mq.max_attempts 
+		   AND mq.next_retry_at <= ?
+		   AND (c.id IS NOT NULL OR cr.id IS NOT NULL)
 		 ORDER BY mq.next_retry_at ASC`,
 		now,
 	)
