@@ -265,52 +265,42 @@ func TestAdminRotateEncryptionKeys_Locked(t *testing.T) {
 	}
 }
 
-func TestAdminResetIdentityKeys_SuccessGenerated(t *testing.T) {
+func TestAdminResetIdentityKeys_SuccessionRecovery(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
 
-	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
-	_ = database.CreateUser("u1", "admin", string(hash), true)
-	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
-
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/reset-identity", bytes.NewReader([]byte("{}")))
-	req.AddCookie(adminCookie)
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
-	}
-
-	var resp map[string]string
-	json.NewDecoder(rr.Body).Decode(&resp)
-	if resp["mnemonic"] == "" {
-		t.Errorf("expected generated mnemonic in response")
-	}
-
-	if cfg.Keys.IdentityKeyIndex != 1 || cfg.Keys.EncryptionKeyIndex != 1 {
-		t.Errorf("expected indices to be reset to 1 in config")
-	}
-
-	paths := keymanager.NewKeyPaths(cfg.Root)
-	idIdx, _ := os.ReadFile(paths.IdentityIndexPath)
-	encIdx, _ := os.ReadFile(paths.EncryptionIndexPath)
-	if string(idIdx) != "1" || string(encIdx) != "1" {
-		t.Errorf("expected indices to be reset to '1' on disk, got identity=%s, encryption=%s", string(idIdx), string(encIdx))
-	}
-}
-
-func TestAdminResetIdentityKeys_SuccessProvided(t *testing.T) {
-	handler, database, cfg := setupTestServer(t)
-
-	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
-
-	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
-	_ = database.CreateUser("u1", "admin", string(hash), true)
-	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
-
+	// Setup mnemonic and keys
 	mnemonic, _ := crypto.GenerateMnemonic()
+	cfg.Keys.IdentityKeyIndex = 1
+	cfg.Keys.EncryptionKeyIndex = 1
+	cfg.MnemonicStore.Set(mnemonic)
+
+	// Write keys to disk
+	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 1, 1)
+	if err != nil {
+		t.Fatalf("failed to setup keys: %v", err)
+	}
+
+	// Update cfg's MasterPublicKeyPEM
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master key: %v", err)
+	}
+	masterPubPEM, err := crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		t.Fatalf("failed to marshal master public key: %v", err)
+	}
+	cfg.Keys.MasterPublicKeyPEM = masterPubPEM
+
+	// Create admin user (id: u1)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	// Add a contact for u1
+	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key", "friend-master-pub-key")
+
 	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"mnemonic": mnemonic,
 	})
@@ -326,8 +316,214 @@ func TestAdminResetIdentityKeys_SuccessProvided(t *testing.T) {
 
 	var resp map[string]string
 	json.NewDecoder(rr.Body).Decode(&resp)
-	if resp["mnemonic"] != mnemonic {
-		t.Errorf("expected mnemonic %q, got %q", mnemonic, resp["mnemonic"])
+	expectedMsg := "Identity keys rotated and succession certificate queued for all contacts. Contacts preserved."
+	if resp["message"] != expectedMsg {
+		t.Errorf("expected message %q, got %q", expectedMsg, resp["message"])
+	}
+
+	// Verify contacts are NOT wiped
+	contacts, err := database.GetContacts("u1")
+	if err != nil {
+		t.Fatalf("failed to get contacts: %v", err)
+	}
+	if len(contacts) != 1 || contacts[0].ID != "c1" {
+		t.Errorf("expected contact c1 to be preserved, got %d contacts", len(contacts))
+	}
+
+	// Verify indices are incremented
+	if cfg.Keys.IdentityKeyIndex != 2 || cfg.Keys.EncryptionKeyIndex != 2 {
+		t.Errorf("expected indices to be incremented to 2 in config, got identity=%d, encryption=%d", cfg.Keys.IdentityKeyIndex, cfg.Keys.EncryptionKeyIndex)
+	}
+
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	idIdx, _ := os.ReadFile(paths.IdentityIndexPath)
+	encIdx, _ := os.ReadFile(paths.EncryptionIndexPath)
+	if string(idIdx) != "2" || string(encIdx) != "2" {
+		t.Errorf("expected indices to be incremented to '2' on disk, got identity=%s, encryption=%s", string(idIdx), string(encIdx))
+	}
+
+	// Verify succession certificate is enqueued
+	msgs, err := database.GetPendingMessages()
+	if err != nil {
+		t.Fatalf("failed to get pending messages: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 pending message, got %d", len(msgs))
+	}
+	if msgs[0].AppID != "system:key-succession" {
+		t.Errorf("expected message AppID 'system:key-succession', got %q", msgs[0].AppID)
+	}
+}
+
+func TestAdminResetIdentityKeys_NuclearReset_DifferentMnemonic(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
+
+	// Setup mnemonic and keys
+	mnemonic, _ := crypto.GenerateMnemonic()
+	cfg.Keys.IdentityKeyIndex = 1
+	cfg.Keys.EncryptionKeyIndex = 1
+	cfg.MnemonicStore.Set(mnemonic)
+
+	// Write keys to disk
+	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 1, 1)
+	if err != nil {
+		t.Fatalf("failed to setup keys: %v", err)
+	}
+
+	// Update cfg's MasterPublicKeyPEM
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master key: %v", err)
+	}
+	masterPubPEM, err := crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		t.Fatalf("failed to marshal master public key: %v", err)
+	}
+	cfg.Keys.MasterPublicKeyPEM = masterPubPEM
+
+	// Create admin user (id: u1)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	// Add a contact for u1
+	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key", "friend-master-pub-key")
+
+	differentMnemonic, _ := crypto.GenerateMnemonic()
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
+		"mnemonic": differentMnemonic,
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/reset-identity", bytes.NewReader(bodyBytes))
+	req.AddCookie(adminCookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rr.Body).Decode(&resp)
+	expectedMsg := "P2P identity reset successfully. Revocation and reconnect requests sent to all contacts. Restart required."
+	if resp["message"] != expectedMsg {
+		t.Errorf("expected message %q, got %q", expectedMsg, resp["message"])
+	}
+	if resp["mnemonic"] != differentMnemonic {
+		t.Errorf("expected mnemonic %q, got %q", differentMnemonic, resp["mnemonic"])
+	}
+
+	// Verify contacts are NOT wiped
+	contacts, err := database.GetContacts("u1")
+	if err != nil {
+		t.Fatalf("failed to get contacts: %v", err)
+	}
+	if len(contacts) != 1 || contacts[0].ID != "c1" {
+		t.Errorf("expected contact c1 to be preserved, got %d contacts", len(contacts))
+	}
+
+	// Verify indices are reset to 1
+	if cfg.Keys.IdentityKeyIndex != 1 || cfg.Keys.EncryptionKeyIndex != 1 {
+		t.Errorf("expected indices to be reset to 1 in config, got identity=%d, encryption=%d", cfg.Keys.IdentityKeyIndex, cfg.Keys.EncryptionKeyIndex)
+	}
+
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	idIdx, _ := os.ReadFile(paths.IdentityIndexPath)
+	encIdx, _ := os.ReadFile(paths.EncryptionIndexPath)
+	if string(idIdx) != "1" || string(encIdx) != "1" {
+		t.Errorf("expected indices to be reset to '1' on disk, got identity=%s, encryption=%s", string(idIdx), string(encIdx))
+	}
+
+	// Verify messages in queue
+	msgs, err := database.GetPendingMessages()
+	if err != nil {
+		t.Fatalf("failed to get pending messages: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 pending messages, got %d", len(msgs))
+	}
+	appIDs := map[string]bool{msgs[0].AppID: true, msgs[1].AppID: true}
+	if !appIDs["system:master-revocation"] || !appIDs["system:contact-request"] {
+		t.Errorf("expected master-revocation and contact-request messages, got: %+v", msgs)
+	}
+}
+
+func TestAdminResetIdentityKeys_NuclearReset_EmptyBody(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
+
+	// Setup mnemonic and keys
+	mnemonic, _ := crypto.GenerateMnemonic()
+	cfg.Keys.IdentityKeyIndex = 1
+	cfg.Keys.EncryptionKeyIndex = 1
+	cfg.MnemonicStore.Set(mnemonic)
+
+	// Write keys to disk
+	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 1, 1)
+	if err != nil {
+		t.Fatalf("failed to setup keys: %v", err)
+	}
+
+	// Update cfg's MasterPublicKeyPEM
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master key: %v", err)
+	}
+	masterPubPEM, err := crypto.MarshalPublicKey(masterPriv.Public())
+	if err != nil {
+		t.Fatalf("failed to marshal master public key: %v", err)
+	}
+	cfg.Keys.MasterPublicKeyPEM = masterPubPEM
+
+	// Create admin user (id: u1)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	// Add a contact for u1
+	_ = database.AddContact("c1", "u1", "Friend", "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "/ip4/127.0.0.1/tcp/5001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H", "friend-user-id", "some-enc-pub-key", "friend-master-pub-key")
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/reset-identity", bytes.NewReader([]byte("{}")))
+	req.AddCookie(adminCookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rr.Body).Decode(&resp)
+	expectedMsg := "P2P identity reset successfully. Revocation and reconnect requests sent to all contacts. Restart required."
+	if resp["message"] != expectedMsg {
+		t.Errorf("expected message %q, got %q", expectedMsg, resp["message"])
+	}
+	if resp["mnemonic"] == "" {
+		t.Errorf("expected generated mnemonic in response, got empty string")
+	}
+
+	// Verify contacts are NOT wiped
+	contacts, err := database.GetContacts("u1")
+	if err != nil {
+		t.Fatalf("failed to get contacts: %v", err)
+	}
+	if len(contacts) != 1 || contacts[0].ID != "c1" {
+		t.Errorf("expected contact c1 to be preserved, got %d contacts", len(contacts))
+	}
+
+	// Verify indices are reset to 1
+	if cfg.Keys.IdentityKeyIndex != 1 || cfg.Keys.EncryptionKeyIndex != 1 {
+		t.Errorf("expected indices to be reset to 1 in config, got identity=%d, encryption=%d", cfg.Keys.IdentityKeyIndex, cfg.Keys.EncryptionKeyIndex)
+	}
+
+	paths := keymanager.NewKeyPaths(cfg.Root)
+	idIdx, _ := os.ReadFile(paths.IdentityIndexPath)
+	encIdx, _ := os.ReadFile(paths.EncryptionIndexPath)
+	if string(idIdx) != "1" || string(encIdx) != "1" {
+		t.Errorf("expected indices to be reset to '1' on disk, got identity=%s, encryption=%s", string(idIdx), string(encIdx))
 	}
 }
 

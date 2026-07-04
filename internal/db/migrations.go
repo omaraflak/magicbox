@@ -69,6 +69,7 @@ func (d *DB) Migrate() error {
 			target_user_id TEXT NOT NULL DEFAULT '',
 			enc_pub_key TEXT NOT NULL DEFAULT '',
 			master_pub_key TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'active',
 			created_at TEXT NOT NULL,
 			UNIQUE(user_id, peer_id)
 		)`,
@@ -116,6 +117,7 @@ func (d *DB) Migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN enc_pub_key TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN peer_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN master_pub_key TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.conn.Exec(`ALTER TABLE contacts ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`)
 	_, _ = d.conn.Exec(`ALTER TABLE contact_requests ADD COLUMN master_pub_key TEXT NOT NULL DEFAULT ''`)
 
 	// Migrate existing contacts: extract peer_id and actual multiaddr from stored invite links.

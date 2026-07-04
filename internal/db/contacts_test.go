@@ -153,3 +153,74 @@ func TestGetAllContacts(t *testing.T) {
 	}
 }
 
+func TestContactStatusAndQueries(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	userID := "user-123"
+	if err := db.CreateUser(userID, "omar", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	contactID := "contact-456"
+	contactName := "Alice"
+	peerID := "peer-alice"
+	multiaddr := "/ip4/127.0.0.1/tcp/4001/p2p/peer-alice"
+	targetUserID := "alice-id"
+
+	if err := db.AddContact(contactID, userID, contactName, peerID, multiaddr, targetUserID, "enc-key", "master-key"); err != nil {
+		t.Fatalf("AddContact failed: %v", err)
+	}
+
+	// 1. Verify default status is 'active'
+	c, err := db.GetContactByID(contactID, userID)
+	if err != nil {
+		t.Fatalf("GetContactByID failed: %v", err)
+	}
+	if c.Status != "active" {
+		t.Errorf("expected default status 'active', got %q", c.Status)
+	}
+
+	// 2. GetContactByTargetUserID
+	c2, err := db.GetContactByTargetUserID(userID, targetUserID)
+	if err != nil {
+		t.Fatalf("GetContactByTargetUserID failed: %v", err)
+	}
+	if c2 == nil {
+		t.Fatal("expected contact to be found by target user ID, got nil")
+	}
+	if c2.ID != contactID {
+		t.Errorf("expected contact ID %q, got %q", contactID, c2.ID)
+	}
+
+	// 3. UpdateContactStatus to 'revoked'
+	if err := db.UpdateContactStatus(contactID, "revoked"); err != nil {
+		t.Fatalf("UpdateContactStatus failed: %v", err)
+	}
+
+	c3, err := db.GetContactByID(contactID, userID)
+	if err != nil {
+		t.Fatalf("GetContactByID failed: %v", err)
+	}
+	if c3.Status != "revoked" {
+		t.Errorf("expected status 'revoked', got %q", c3.Status)
+	}
+
+	// 4. UpdateContactFromRequest
+	err = db.UpdateContactFromRequest(contactID, "peer-new", "/ip4/1.1.1.1/p2p/peer-new", "enc-new", "master-new")
+	if err != nil {
+		t.Fatalf("UpdateContactFromRequest failed: %v", err)
+	}
+
+	c4, err := db.GetContactByID(contactID, userID)
+	if err != nil {
+		t.Fatalf("GetContactByID failed: %v", err)
+	}
+	if c4.PeerID != "peer-new" || c4.Multiaddr != "/ip4/1.1.1.1/p2p/peer-new" || c4.EncPubKey != "enc-new" || c4.MasterPubKey != "master-new" {
+		t.Errorf("unexpected updated fields: %+v", c4)
+	}
+	if c4.Status != "active" {
+		t.Errorf("expected status reset to 'active', got %q", c4.Status)
+	}
+}
+

@@ -314,13 +314,12 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
             }}>
                 <div className="tab-header" style={{ marginBottom: '16px', textAlign: 'left' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        Rotate Identity Keys (Hygiene)
+                        Rotate Identity Keys
                     </h3>
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    This will rotate your public P2P Identity key. It automatically signs a succession certificate using your old identity key and queues it to all your contacts so they can update your address without losing connection. 
-                    <strong> No manual action is required from your contacts</strong>, and your secure channels remain intact.
+                    This will rotate your public P2P Identity key. It automatically signs a succession certificate using your Master Key and queues it to all your contacts so they can update your address without losing connection. Your contacts will automatically trust the update, preserving your secure channels. This is also the correct recovery action if your operational key on disk was compromised but your mnemonic is secure.
                 </p>
 
                 <form onSubmit={handleRotateIdentitySubmit} style={{ maxWidth: '500px' }}>
@@ -370,14 +369,12 @@ export default function AdminKeysTab({ onRotateEncryption, onRotateIdentity, onR
                 <div className="tab-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start', textAlign: 'left' }}>
                     <span style={{ fontSize: '1.2rem' }}>⚠️</span>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#ef4444', margin: 0, textAlign: 'left' }}>
-                        Danger Zone: Reset P2P Identity (Compromised)
+                        Key Compromised: Reset P2P Identity
                     </h3>
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    This is an emergency recovery action. It completely resets your cryptographic P2P Identity and generates a brand new encryption key.
-                    <br /><br />
-                    <span style={{ color: '#ef4444', fontWeight: 600 }}>Important:</span> You will be completely disconnected from all your contacts. They will not be able to reach you until you share your new invite link with them. Use this only if your current keys/device have been compromised or you want to start fresh.
+                    Warning: Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a new mnemonic. This generates a brand new Master Key, resets key indexes, and wipes all contacts and pending requests from your database. Your contacts will NOT accept automatic updates and you must re-add them manually.
                 </p>
 
                 <form onSubmit={handleResetIdentitySubmit} style={{ maxWidth: '500px' }}>

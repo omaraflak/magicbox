@@ -15,12 +15,13 @@ type Contact struct {
 	TargetUserID string `json:"target_user_id"`
 	EncPubKey    string `json:"enc_pub_key"`
 	MasterPubKey string `json:"master_pub_key"`
+	Status       string `json:"status"`
 	CreatedAt    string `json:"created_at"`
 }
 
 // GetContacts returns all contacts for the given user.
 func (d *DB) GetContacts(userID string) ([]Contact, error) {
-	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? ORDER BY display_name ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +30,7 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		contacts = append(contacts, c)
@@ -39,9 +40,9 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 
 // GetContactByID fetches a contact by ID and owner userID.
 func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
-	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
 	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -53,9 +54,9 @@ func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
 
 // GetContactByPeerID fetches a contact by the remote peer's libp2p peer ID and the owning user ID.
 func (d *DB) GetContactByPeerID(userID, peerID string) (*Contact, error) {
-	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at FROM contacts WHERE user_id = ? AND peer_id = ?`, userID, peerID)
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? AND peer_id = ?`, userID, peerID)
 	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -116,7 +117,7 @@ func (d *DB) WipeAllContactsAndRequests() error {
 
 // GetAllContacts returns all contacts in the system.
 func (d *DB) GetAllContacts() ([]Contact, error) {
-	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at FROM contacts ORDER BY display_name ASC`)
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts ORDER BY display_name ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -125,11 +126,40 @@ func (d *DB) GetAllContacts() ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		contacts = append(contacts, c)
 	}
 	return contacts, rows.Err()
+}
+
+// GetContactByTargetUserID fetches a contact by its owner's userID and the target remote userID.
+func (d *DB) GetContactByTargetUserID(userID, targetUserID string) (*Contact, error) {
+	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? AND target_user_id = ?`, userID, targetUserID)
+	var c Contact
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// UpdateContactFromRequest updates the contact's peer ID, multiaddress, encryption public key, and master public key, resetting status to 'active'.
+func (d *DB) UpdateContactFromRequest(contactID, peerID, multiaddr, encPubKey, masterPubKey string) error {
+	_, err := d.conn.Exec(
+		`UPDATE contacts SET peer_id = ?, multiaddr = ?, enc_pub_key = ?, master_pub_key = ?, status = 'active' WHERE id = ?`,
+		peerID, multiaddr, encPubKey, masterPubKey, contactID,
+	)
+	return err
+}
+
+// UpdateContactStatus updates a contact's status.
+func (d *DB) UpdateContactStatus(contactID string, status string) error {
+	_, err := d.conn.Exec(`UPDATE contacts SET status = ? WHERE id = ?`, status, contactID)
+	return err
 }
 

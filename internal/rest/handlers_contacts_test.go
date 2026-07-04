@@ -188,3 +188,117 @@ func TestSendContactRequest_InvalidJSONPayloadFails(t *testing.T) {
 		t.Errorf("expected 400 Bad Request, got %d", rr.Code)
 	}
 }
+
+func TestAcceptContactRequest_NewContact(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+	token, _ := GenerateSessionToken(cfg.JWTSecret, userID, "omar", false)
+	cookie := &http.Cookie{Name: SessionCookieName, Value: token, Path: "/"}
+
+	// Insert an incoming contact request
+	reqID := "req-abc"
+	err := database.InsertContactRequest(
+		reqID, userID, "incoming", "Alice",
+		"peer-alice-1", "/ip4/1.1.1.1/p2p/peer-alice-1",
+		"alice-uid", "alice-enc-pub-1", "alice-master-pub-1",
+	)
+	if err != nil {
+		t.Fatalf("failed to insert contact request: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/contacts/requests/req-abc/accept", nil)
+	req.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	// Verify contact was created
+	c, err := database.GetContactByTargetUserID(userID, "alice-uid")
+	if err != nil {
+		t.Fatalf("failed to query contact: %v", err)
+	}
+	if c == nil {
+		t.Fatal("expected contact to be created")
+	}
+	if c.DisplayName != "Alice" || c.Status != "active" {
+		t.Errorf("unexpected contact state: %+v", c)
+	}
+
+	// Verify contact request was deleted
+	reqs, _ := database.GetContactRequests(userID, "incoming")
+	if len(reqs) != 0 {
+		t.Errorf("expected 0 incoming requests, got %d", len(reqs))
+	}
+}
+
+func TestAcceptContactRequest_ExistingContact(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+	token, _ := GenerateSessionToken(cfg.JWTSecret, userID, "omar", false)
+	cookie := &http.Cookie{Name: SessionCookieName, Value: token, Path: "/"}
+
+	// Insert existing contact with status 'revoked'
+	existingID := "existing-alice"
+	err := database.AddContact(
+		existingID, userID, "Alice",
+		"peer-alice-old", "/ip4/1.1.1.1/p2p/peer-alice-old",
+		"alice-uid", "alice-enc-pub-old", "alice-master-pub-old",
+	)
+	if err != nil {
+		t.Fatalf("failed to add contact: %v", err)
+	}
+	database.UpdateContactStatus(existingID, "revoked")
+
+	// Insert incoming request with new credentials (reconnect request)
+	reqID := "req-xyz"
+	err = database.InsertContactRequest(
+		reqID, userID, "incoming", "Alice",
+		"peer-alice-new", "/ip4/2.2.2.2/p2p/peer-alice-new",
+		"alice-uid", "alice-enc-pub-new", "alice-master-pub-new",
+	)
+	if err != nil {
+		t.Fatalf("failed to insert contact request: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/contacts/requests/req-xyz/accept", nil)
+	req.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	// Verify existing contact was updated, NOT created as new
+	contacts, err := database.GetContacts(userID)
+	if err != nil {
+		t.Fatalf("GetContacts failed: %v", err)
+	}
+	if len(contacts) != 1 {
+		t.Fatalf("expected 1 contact, got %d", len(contacts))
+	}
+
+	c := contacts[0]
+	if c.ID != existingID {
+		t.Errorf("expected contact ID %q, got %q", existingID, c.ID)
+	}
+	if c.PeerID != "peer-alice-new" || c.Multiaddr != "/ip4/2.2.2.2/p2p/peer-alice-new" || c.EncPubKey != "alice-enc-pub-new" || c.MasterPubKey != "alice-master-pub-new" {
+		t.Errorf("contact fields not updated correctly: %+v", c)
+	}
+	if c.Status != "active" {
+		t.Errorf("expected status 'active', got %q", c.Status)
+	}
+
+	// Verify request was deleted
+	reqs, _ := database.GetContactRequests(userID, "incoming")
+	if len(reqs) != 0 {
+		t.Errorf("expected 0 incoming requests, got %d", len(reqs))
+	}
+}

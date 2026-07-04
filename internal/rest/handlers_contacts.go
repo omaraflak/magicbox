@@ -270,15 +270,30 @@ func (s *Server) handleAcceptContactRequest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Create the contact from the request data.
-	contactID := uuid.NewString()
-	if err := s.db.AddContact(
-		contactID, claims.UserID, req.DisplayName,
-		req.PeerID, req.Multiaddr,
-		req.TargetUserID, req.EncPubKey, req.MasterPubKey,
-	); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create contact: "+err.Error())
+	// Check if a contact with target_user_id = req.TargetUserID already exists.
+	existing, err := s.db.GetContactByTargetUserID(claims.UserID, req.TargetUserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query existing contact: "+err.Error())
 		return
+	}
+
+	var contactID string
+	if existing != nil {
+		contactID = existing.ID
+		if err := s.db.UpdateContactFromRequest(existing.ID, req.PeerID, req.Multiaddr, req.EncPubKey, req.MasterPubKey); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update contact: "+err.Error())
+			return
+		}
+	} else {
+		contactID = uuid.NewString()
+		if err := s.db.AddContact(
+			contactID, claims.UserID, req.DisplayName,
+			req.PeerID, req.Multiaddr,
+			req.TargetUserID, req.EncPubKey, req.MasterPubKey,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create contact: "+err.Error())
+			return
+		}
 	}
 
 	// Send accept message back to the requester.
@@ -313,14 +328,14 @@ func (s *Server) handleAcceptContactRequest(w http.ResponseWriter, r *http.Reque
 			MasterPubKey: ourMasterPubHex,
 		})
 
-		// Use the newly created contact to enqueue the accept message.
-		newContact := db.Contact{
+		// Use the contact to enqueue the accept message.
+		contactForQueue := db.Contact{
 			ID:           contactID,
 			Multiaddr:    req.Multiaddr,
 			EncPubKey:    req.EncPubKey,
 			TargetUserID: req.TargetUserID,
 		}
-		if err := protocol.EnqueueForContacts(s.db, []db.Contact{newContact}, protocol.AppIDContactAccept, acceptPayload); err != nil {
+		if err := protocol.EnqueueForContacts(s.db, []db.Contact{contactForQueue}, protocol.AppIDContactAccept, acceptPayload); err != nil {
 			s.logger.Error("failed to enqueue contact accept", logging.F("error", err.Error()))
 		}
 	}
