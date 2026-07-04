@@ -195,3 +195,31 @@ func RotateEncryption(paths *KeyPaths, mnemonic string, index int) error {
 
 	return nil
 }
+
+// RotateIdentity derives a new Ed25519 identity key at the given index
+// and writes only the identity key files to disk. Encryption keys are not affected.
+func RotateIdentity(paths *KeyPaths, mnemonic string, index int) error {
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, index)
+	if err != nil {
+		return fmt.Errorf("failed to derive identity key from mnemonic: %w", err)
+	}
+
+	privPEM, err := crypto.MarshalPrivateKey(edPriv)
+	if err != nil {
+		return fmt.Errorf("failed to marshal identity private key: %w", err)
+	}
+	pubPEM, err := crypto.MarshalPublicKey(edPriv.Public())
+	if err != nil {
+		return fmt.Errorf("failed to marshal identity public key: %w", err)
+	}
+
+	if err := os.WriteFile(paths.IdentityKeyPath, privPEM, 0600); err != nil {
+		return fmt.Errorf("failed to write identity private key: %w", err)
+	}
+	if err := os.WriteFile(paths.IdentityPubPath, pubPEM, 0644); err != nil {
+		return fmt.Errorf("failed to write identity public key: %w", err)
+	}
+
+	return nil
+}
+

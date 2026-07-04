@@ -13,6 +13,7 @@ import (
 
 	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
+	"github.com/magicbox/core/internal/keymanager"
 )
 
 func TestAdminUpgrade_Unauthenticated(t *testing.T) {
@@ -258,7 +259,7 @@ func TestAdminRotateEncryptionKeys_InvalidMnemonic(t *testing.T) {
 	}
 }
 
-func TestAdminRotateIdentityKeys_SuccessGenerated(t *testing.T) {
+func TestAdminResetIdentityKeys_SuccessGenerated(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
@@ -267,7 +268,7 @@ func TestAdminRotateIdentityKeys_SuccessGenerated(t *testing.T) {
 	_ = database.CreateUser("u1", "admin", string(hash), true)
 	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-identity", bytes.NewReader([]byte("{}")))
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/reset-identity", bytes.NewReader([]byte("{}")))
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -293,7 +294,7 @@ func TestAdminRotateIdentityKeys_SuccessGenerated(t *testing.T) {
 	}
 }
 
-func TestAdminRotateIdentityKeys_SuccessProvided(t *testing.T) {
+func TestAdminResetIdentityKeys_SuccessProvided(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 
 	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
@@ -307,7 +308,7 @@ func TestAdminRotateIdentityKeys_SuccessProvided(t *testing.T) {
 		"mnemonic": mnemonic,
 	})
 
-	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-identity", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/reset-identity", bytes.NewReader(bodyBytes))
 	req.AddCookie(adminCookie)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -320,6 +321,50 @@ func TestAdminRotateIdentityKeys_SuccessProvided(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if resp["mnemonic"] != mnemonic {
 		t.Errorf("expected mnemonic %q, got %q", mnemonic, resp["mnemonic"])
+	}
+}
+
+func TestAdminRotateIdentityKeys_Success(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	_ = os.MkdirAll(filepath.Join(cfg.Root, "core"), 0750)
+
+	// Create admin user
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "admin", string(hash), true)
+	adminCookie := getSessionCookieForUser(t, handler, "admin", "pass")
+
+	// Pre-populate settings and contact
+	mnemonic, _ := crypto.GenerateMnemonic()
+	_ = database.SetSystemSetting(db.SettingIdentityKeyIndex, "0")
+	cfg.Keys.IdentityKeyIndex = 0
+	cfg.Keys.Mnemonic = mnemonic
+
+	// We must write dummy keys first so keymanager can do things (actually RotateIdentity overwrites them anyway, but it validates the mnemonic)
+	err := keymanager.RecoverAll(keymanager.NewKeyPaths(cfg.Root), mnemonic, 0, 0)
+	if err != nil {
+		t.Fatalf("failed to setup keys: %v", err)
+	}
+
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
+		"mnemonic": mnemonic,
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/keys/rotate-identity", bytes.NewReader(bodyBytes))
+	req.AddCookie(adminCookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	val, _ := database.GetSystemSetting(db.SettingIdentityKeyIndex)
+	if val != "1" {
+		t.Errorf("expected identity key index in DB to be updated to 1, got %s", val)
+	}
+	if cfg.Keys.IdentityKeyIndex != 1 {
+		t.Errorf("expected identity key index in config to be updated to 1, got %d", cfg.Keys.IdentityKeyIndex)
 	}
 }
 

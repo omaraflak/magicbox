@@ -41,7 +41,8 @@ export default function SettingsView({
     upgradeStatus,
     mnemonicData,
   onRotateEncryption,
-  onRotateIdentity
+  onRotateIdentity,
+  onResetIdentity
 }) {
     return (
         <div className="admin-layout animate-fade-in">
@@ -194,6 +195,7 @@ export default function SettingsView({
                             <AdminKeysTab
                   onRotateEncryption={onRotateEncryption}
                   onRotateIdentity={onRotateIdentity}
+                  onResetIdentity={onResetIdentity}
                             />
                         )}
                     </div>

@@ -591,13 +591,34 @@ export default function App() {
         }
     };
 
-    // Reset & Rotate Identity Keys (Danger Zone)
+    // Rotate Identity Keys (Hygiene)
     const handleRotateIdentityKeys = async (mnemonic) => {
+        return new Promise((resolve) => {
+            showConfirm(
+                "Are you sure you want to rotate your P2P identity keys? Succession certificates will be automatically generated and queued for all your contacts so they can update your address. This will restart Magicbox to apply changes.",
+                async () => {
+                    const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
+                    if (status === 200) {
+                        loadMnemonic();
+                        setTimeout(triggerSystemRestart, 1500); // restart immediately
+                        resolve({ success: true, message: 'Identity keys rotated successfully! Restarting Magicbox to apply changes...' });
+                    } else {
+                        resolve({ success: false, error: data?.error || 'Rotation failed' });
+                    }
+                },
+                "Confirm Identity Rotation",
+                () => resolve({ success: false, cancelled: true })
+            );
+        });
+    };
+
+    // Reset & Re-create P2P Identity (Danger Zone)
+    const handleResetIdentityKeys = async (mnemonic) => {
         return new Promise((resolve) => {
             showConfirm(
                 "⚠️ WARNING: This will completely RESET your cryptographic identity. You will be disconnected from all your contacts, and you must share your new invite link with them. Are you sure you want to proceed?",
                 async () => {
-                    const { status, data } = await callAPI('POST', '/admin/keys/rotate-identity', { mnemonic });
+                    const { status, data } = await callAPI('POST', '/admin/keys/reset-identity', { mnemonic });
                     if (status === 200) {
                         if (data?.mnemonic) {
                             // If a new mnemonic was generated, show the modal so they can copy it!
@@ -742,6 +763,7 @@ export default function App() {
                         mnemonicData={mnemonicData}
                         onRotateEncryption={handleRotateEncryptionKeys}
                         onRotateIdentity={handleRotateIdentityKeys}
+                        onResetIdentity={handleResetIdentityKeys}
                     />
                 )}
             </div>

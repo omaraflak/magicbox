@@ -762,3 +762,14 @@ func (d *DB) DeleteContactRequest(userID, id string) error {
 	_, err := d.conn.Exec(`DELETE FROM contact_requests WHERE user_id = ? AND id = ?`, userID, id)
 	return err
 }
+
+// UpdateContactIdentity updates a contact's peer ID, multiaddr, and encryption public key.
+// Used when they rotate their identity key and broadcast a succession certificate.
+func (d *DB) UpdateContactIdentity(id, peerID, multiaddr, encPubKey string) error {
+	_, err := d.conn.Exec(
+		`UPDATE contacts SET peer_id = ?, multiaddr = ?, enc_pub_key = ? WHERE id = ?`,
+		peerID, multiaddr, encPubKey, id,
+	)
+	return err
+}
+

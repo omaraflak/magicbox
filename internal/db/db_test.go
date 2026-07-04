@@ -434,3 +434,30 @@ func TestDeleteContactRequest(t *testing.T) {
 		t.Errorf("expected 0 requests after delete, got %d", len(reqs))
 	}
 }
+
+func TestUpdateContactIdentity(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.AddContact("c-1", "user-1", "Bob", "peer-old", "/ip4/1.1.1.1/tcp/4001/p2p/peer-old", "bob-uid", "enc-old")
+
+	err := db.UpdateContactIdentity("c-1", "peer-new", "/ip4/1.1.1.1/tcp/4001/p2p/peer-new", "enc-new")
+	if err != nil {
+		t.Fatalf("UpdateContactIdentity failed: %v", err)
+	}
+
+	contact, err := db.GetContactByPeerID("user-1", "peer-new")
+	if err != nil {
+		t.Fatalf("GetContactByPeerID failed: %v", err)
+	}
+	if contact == nil {
+		t.Fatal("expected to find contact by new peer ID")
+	}
+	if contact.EncPubKey != "enc-new" {
+		t.Errorf("expected enc_pub_key enc-new, got %s", contact.EncPubKey)
+	}
+	if contact.Multiaddr != "/ip4/1.1.1.1/tcp/4001/p2p/peer-new" {
+		t.Errorf("expected updated multiaddress, got %s", contact.Multiaddr)
+	}
+}
+

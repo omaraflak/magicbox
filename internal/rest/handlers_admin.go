@@ -15,12 +15,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	libp2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
+	"github.com/magicbox/core/internal/keymanager"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/protocol"
 )
@@ -448,7 +451,7 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 	})
 }
 
-func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Mnemonic string `json:"mnemonic"`
 	}
@@ -469,7 +472,7 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 		var err error
 		mnemonic, err = crypto.GenerateMnemonic()
 		if err != nil {
-			s.logger.Error("admin rotate identity keys: failed to generate mnemonic", logging.F("error", err.Error()))
+			s.logger.Error("admin reset identity keys: failed to generate mnemonic", logging.F("error", err.Error()))
 			writeError(w, http.StatusInternalServerError, "failed to generate mnemonic")
 			return
 		}
@@ -481,18 +484,18 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := config.RecoverKeys(s.config.Root, mnemonic, 0, 0); err != nil {
-		s.logger.Error("admin rotate identity keys: failed to recover keys", logging.F("error", err.Error()))
+		s.logger.Error("admin reset identity keys: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return
 	}
 
 	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, "0"); err != nil {
-		s.logger.Error("admin rotate identity keys: database error", logging.F("error", err.Error()))
+		s.logger.Error("admin reset identity keys: database error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	if err := s.db.SetSystemSetting(db.SettingEncryptionKeyIndex, "0"); err != nil {
-		s.logger.Error("admin rotate identity keys: database error", logging.F("error", err.Error()))
+		s.logger.Error("admin reset identity keys: database error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -505,6 +508,132 @@ func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Re
 		"mnemonic": mnemonic,
 		"message":  "Identity keys rotated successfully. System reset. Restart required.",
 	})
+}
+
+func (s *Server) handleAdminRotateIdentityKeys(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mnemonic string `json:"mnemonic"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Mnemonic == "" || !bip39.IsMnemonicValid(req.Mnemonic) {
+		writeError(w, http.StatusBadRequest, "invalid mnemonic phrase")
+		return
+	}
+
+	newIndex := s.config.Keys.IdentityKeyIndex + 1
+
+	oldPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, s.config.Keys.IdentityKeyIndex)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to derive old identity key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	newPriv, err := crypto.DeriveIdentityKey(req.Mnemonic, newIndex)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to derive new identity key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	libp2pNewPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&newPriv)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to convert new std key to libp2p key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	newPeerID, err := peer.IDFromPrivateKey(libp2pNewPriv)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to get peer ID from private key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	libp2pOldPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&oldPriv)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to convert old std key to libp2p key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	oldPeerID, err := peer.IDFromPrivateKey(libp2pOldPriv)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to get old peer ID", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	addrs := s.p2pService.Multiaddrs()
+	if len(addrs) == 0 {
+		s.logger.Error("admin rotate identity keys: no multiaddresses found")
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	oldMultiaddr := addrs[0]
+	newMultiaddr := strings.ReplaceAll(oldMultiaddr, oldPeerID.String(), newPeerID.String())
+
+	xPriv, err := crypto.DeriveEncryptionKey(req.Mnemonic, s.config.Keys.EncryptionKeyIndex)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to derive encryption key", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	pubHex := hex.EncodeToString(xPriv.PublicKey().Bytes())
+
+	cert, err := protocol.SignSuccessionCertificate(oldPriv, oldPeerID.String(), newPeerID.String(), newMultiaddr, pubHex)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to sign succession certificate", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	certBytes, err := json.Marshal(cert)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: failed to marshal succession certificate", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := keymanager.RotateIdentity(keymanager.NewKeyPaths(s.config.Root), req.Mnemonic, newIndex); err != nil {
+		s.logger.Error("admin rotate identity keys: failed to rotate identity key on disk", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := s.db.SetSystemSetting(db.SettingIdentityKeyIndex, fmt.Sprintf("%d", newIndex)); err != nil {
+		s.logger.Error("admin rotate identity keys: database error setting identity key index", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	s.config.Keys.IdentityKeyIndex = newIndex
+
+	user := GetUserFromContext(r)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	contacts, err := s.db.GetContacts(user.UserID)
+	if err != nil {
+		s.logger.Error("admin rotate identity keys: database error getting contacts", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if err := protocol.EnqueueForContacts(s.db, contacts, protocol.AppIDKeySuccession, certBytes); err != nil {
+		s.logger.Error("admin rotate identity keys: failed to enqueue succession certificate", logging.F("error", err.Error()))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Identity keys rotated successfully. Succession certificates queued. Restarting...",
+	})
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		s.onRestart()
+	}()
 }
 
 func (s *Server) handleAdminRestart(w http.ResponseWriter, r *http.Request) {
