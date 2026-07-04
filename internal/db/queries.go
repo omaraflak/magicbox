@@ -531,7 +531,11 @@ func (d *DB) AddContact(id, userID, displayName, peerID, multiaddr, targetUserID
 // DeleteContact deletes a contact by ID and owner userID.
 func (d *DB) DeleteContact(id string, userID string) error {
 	_, err := d.conn.Exec(`DELETE FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = d.conn.Exec(`DELETE FROM message_queue WHERE contact_id = ?`, id)
+	return nil
 }
 
 // UpdateContactEncPubKey updates the encryption public key for a contact.
@@ -765,7 +769,11 @@ func (d *DB) GetContactRequestByPeerID(userID, peerID string) (*ContactRequest, 
 // DeleteContactRequest removes a contact request.
 func (d *DB) DeleteContactRequest(userID, id string) error {
 	_, err := d.conn.Exec(`DELETE FROM contact_requests WHERE user_id = ? AND id = ?`, userID, id)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = d.conn.Exec(`DELETE FROM message_queue WHERE contact_id = ?`, id)
+	return nil
 }
 
 // UpdateContactIdentity updates a contact's peer ID, multiaddr, and encryption public key.
