@@ -38,7 +38,7 @@ func TestKeyUpdateHandler_Success(t *testing.T) {
 
 	handler := newKeyUpdateHandler(database, logger)
 	msg := &p2p.Message{
-		AppID:        "system:key-update",
+		AppID:        AppIDKeyUpdate,
 		TargetUserID: "user-1",
 		Payload:      []byte("new-enc-key-hex"),
 	}
@@ -64,7 +64,7 @@ func TestKeyUpdateHandler_UnknownPeerIgnored(t *testing.T) {
 
 	handler := newKeyUpdateHandler(database, logger)
 	msg := &p2p.Message{
-		AppID:        "system:key-update",
+		AppID:        AppIDKeyUpdate,
 		TargetUserID: "user-1",
 		Payload:      []byte("new-enc-key-hex"),
 	}
@@ -82,7 +82,7 @@ func TestRegisterSystemHandlers_DoesNotPanic(t *testing.T) {
 	mock := &mockP2PService{handlers: make(map[string]p2p.Handler)}
 	RegisterSystemHandlers(mock, database, logger)
 
-	if _, ok := mock.handlers["system:key-update"]; !ok {
+	if _, ok := mock.handlers[AppIDKeyUpdate]; !ok {
 		t.Error("expected system:key-update handler to be registered")
 	}
 }

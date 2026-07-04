@@ -76,6 +76,17 @@ func (d *DB) Migrate() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS message_queue (
+			id TEXT PRIMARY KEY,
+			contact_id TEXT NOT NULL,
+			app_id TEXT NOT NULL,
+			payload BLOB NOT NULL,
+			next_retry_at TEXT NOT NULL,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			max_attempts INTEGER NOT NULL DEFAULT 10,
+			created_at TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range statements {

@@ -129,6 +129,9 @@ func run() error {
 	// Register system protocol handlers (key rotation, etc.).
 	protocol.RegisterSystemHandlers(p2pService, database, logger)
 
+	// Start background queue processor for reliable message delivery.
+	stopQueue := protocol.StartQueueProcessor(database, p2pService, logger, 30*time.Second)
+
 	// Register default handler for app-to-app P2P message routing.
 	p2pService.SetDefaultHandler(func(ctx context.Context, fromPeerID string, msg *p2p.Message) error {
 		if msg.TargetUserID == "" {
@@ -204,6 +207,7 @@ func run() error {
 	// Stop cron jobs.
 	stopTransit()
 	stopBackup()
+	stopQueue()
 
 	logger.Info("shutdown complete")
 	return nil

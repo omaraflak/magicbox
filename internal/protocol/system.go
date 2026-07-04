@@ -12,11 +12,19 @@ import (
 	"github.com/magicbox/core/internal/p2p"
 )
 
+// System protocol AppIDs for P2P messages.
+const (
+	AppIDKeyUpdate      = "system:key-update"
+	AppIDKeySuccession  = "system:key-succession"
+	AppIDContactRequest = "system:contact-request"
+	AppIDContactAccept  = "system:contact-accept"
+)
+
 // RegisterSystemHandlers registers all system:* P2P message handlers on the given service.
 // Each handler is registered by its AppID so the P2P layer dispatches directly
 // without a manual switch/if-else chain.
 func RegisterSystemHandlers(service p2p.Service, database *db.DB, logger *logging.Logger) {
-	service.RegisterHandler("system:key-update", newKeyUpdateHandler(database, logger))
+	service.RegisterHandler(AppIDKeyUpdate, newKeyUpdateHandler(database, logger))
 
 	// Future system handlers:
 	// service.RegisterHandler("system:key-succession", newKeySuccessionHandler(...))

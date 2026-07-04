@@ -3,6 +3,7 @@ package db
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func setupTestDB(t *testing.T) *DB {
@@ -237,5 +238,123 @@ func TestSystemSettings_GetAndSet(t *testing.T) {
 	}
 	if val != "hello_world" {
 		t.Errorf("expected 'hello_world', got %q", val)
+	}
+}
+
+func TestEnqueueAndGetPendingMessages(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a user and contact first (foreign key for join).
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+
+	// Enqueue a message.
+	err := db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("new-key-hex"), 5)
+	if err != nil {
+		t.Fatalf("EnqueueMessage failed: %v", err)
+	}
+
+	// Get pending messages.
+	msgs, err := db.GetPendingMessages()
+	if err != nil {
+		t.Fatalf("GetPendingMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 pending message, got %d", len(msgs))
+	}
+
+	m := msgs[0]
+	if m.ID != "msg-1" {
+		t.Errorf("expected id msg-1, got %s", m.ID)
+	}
+	if m.AppID != "system:key-update" {
+		t.Errorf("expected app_id system:key-update, got %s", m.AppID)
+	}
+	if string(m.Payload) != "new-key-hex" {
+		t.Errorf("expected payload new-key-hex, got %s", string(m.Payload))
+	}
+	if m.Multiaddr != "/ip4/127.0.0.1/tcp/4001/p2p/peer-123" {
+		t.Errorf("expected joined multiaddr, got %s", m.Multiaddr)
+	}
+	if m.EncPubKey != "enc-pub-hex" {
+		t.Errorf("expected joined enc_pub_key, got %s", m.EncPubKey)
+	}
+	if m.TargetUserID != "bob-uid" {
+		t.Errorf("expected joined target_user_id, got %s", m.TargetUserID)
+	}
+	if m.Attempts != 0 {
+		t.Errorf("expected 0 attempts, got %d", m.Attempts)
+	}
+	if m.MaxAttempts != 5 {
+		t.Errorf("expected max_attempts 5, got %d", m.MaxAttempts)
+	}
+}
+
+func TestDeleteMessage(t *testing.T) {
+	db := setupTestDB(t)
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
+
+	if err := db.DeleteMessage("msg-1"); err != nil {
+		t.Fatalf("DeleteMessage failed: %v", err)
+	}
+
+	msgs, _ := db.GetPendingMessages()
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages after delete, got %d", len(msgs))
+	}
+}
+
+func TestIncrementMessageAttempts(t *testing.T) {
+	db := setupTestDB(t)
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
+
+	// Set next retry to far future.
+	futureTime := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	if err := db.IncrementMessageAttempts("msg-1", futureTime); err != nil {
+		t.Fatalf("IncrementMessageAttempts failed: %v", err)
+	}
+
+	// Should not appear in pending (next_retry_at is in the future).
+	msgs, _ := db.GetPendingMessages()
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 pending messages (future retry), got %d", len(msgs))
+	}
+}
+
+func TestCleanExpiredMessages(t *testing.T) {
+	db := setupTestDB(t)
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 1)
+
+	// Increment past max_attempts.
+	db.IncrementMessageAttempts("msg-1", time.Now().UTC().Format(time.RFC3339))
+
+	deleted, err := db.CleanExpiredMessages()
+	if err != nil {
+		t.Fatalf("CleanExpiredMessages failed: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("expected 1 deleted, got %d", deleted)
+	}
+}
+
+func TestGetPendingMessages_DeletedContactExcluded(t *testing.T) {
+	db := setupTestDB(t)
+	db.CreateUser("user-1", "alice", "hash", false)
+	db.AddContact("contact-1", "user-1", "Bob", "peer-123", "/ip4/127.0.0.1/tcp/4001/p2p/peer-123", "bob-uid", "enc-pub-hex")
+	db.EnqueueMessage("msg-1", "contact-1", "system:key-update", []byte("payload"), 5)
+
+	// Delete the contact.
+	db.DeleteContact("contact-1", "user-1")
+
+	// Message should not appear (JOIN excludes deleted contacts).
+	msgs, _ := db.GetPendingMessages()
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages after contact deleted, got %d", len(msgs))
 	}
 }

@@ -22,7 +22,7 @@ import (
 	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/logging"
-	"github.com/magicbox/core/internal/p2p"
+	"github.com/magicbox/core/internal/protocol"
 )
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
@@ -439,13 +439,8 @@ func (s *Server) handleAdminRotateEncryptionKeys(w http.ResponseWriter, r *http.
 		return
 	}
 
-	for _, contact := range contacts {
-		msg := &p2p.Message{
-			AppID:        "system:key-update",
-			TargetUserID: contact.TargetUserID,
-			Payload:      []byte(pubHex),
-		}
-		_ = s.p2pService.SendTo(r.Context(), contact.Multiaddr, contact.EncPubKey, msg)
+	if err := protocol.EnqueueForContacts(s.db, contacts, protocol.AppIDKeyUpdate, []byte(pubHex)); err != nil {
+		s.logger.Error("admin rotate encryption keys: failed to enqueue key updates", logging.F("error", err.Error()))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
