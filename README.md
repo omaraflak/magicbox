@@ -37,6 +37,7 @@ If you are developing Magicbox and want to build the stack from source:
 docker build -t docker.io/omaraflak/magicbox-core:latest .
 docker build -t docker.io/omaraflak/magicbox-drive:latest -f apps/drive/Dockerfile .
 docker build -t docker.io/omaraflak/magicbox-ai:latest -f apps/ai/Dockerfile .
+docker build -t docker.io/omaraflak/magicbox-chat:latest -f apps/chat/Dockerfile .
 docker compose up -d
 ```
 

@@ -149,7 +149,12 @@ func listConversations() ([]Conversation, error) {
 		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
 			return nil, err
 		}
+		convs = append(convs, c)
+	}
+	rows.Close() // Release connection back to pool before performing sub-queries
 
+	for i := range convs {
+		c := &convs[i]
 		parts, err := getParticipants(c.ID)
 		if err != nil {
 			return nil, err
@@ -170,9 +175,8 @@ func listConversations() ([]Conversation, error) {
 			unread = 0
 		}
 		c.UnreadCount = unread
-
-		convs = append(convs, c)
 	}
+
 	return convs, nil
 }
 
@@ -227,5 +231,10 @@ func markMessagesAsRead(conversationID string) error {
 
 func deleteConversation(id string) error {
 	_, err := dbConn.Exec("DELETE FROM conversations WHERE id = ?", id)
+	return err
+}
+
+func renameConversation(id, name string) error {
+	_, err := dbConn.Exec("UPDATE conversations SET name = ? WHERE id = ?", name, id)
 	return err
 }

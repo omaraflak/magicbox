@@ -86,6 +86,30 @@ func TestCreateConversationAndGet(t *testing.T) {
 	}
 }
 
+func TestRenameConversation(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	convID := "conv-rename"
+	nowStr := time.Now().Format(time.RFC3339)
+
+	_ = createConversation(convID, "Old Name", nowStr)
+
+	err := renameConversation(convID, "New Name")
+	if err != nil {
+		t.Fatalf("renameConversation failed: %v", err)
+	}
+
+	conv, err := getConversation(convID)
+	if err != nil {
+		t.Fatalf("getConversation failed: %v", err)
+	}
+
+	if conv.Name != "New Name" {
+		t.Errorf("Expected New Name, got %s", conv.Name)
+	}
+}
+
 func TestInsertAndGetMessages(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()

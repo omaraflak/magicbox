@@ -208,7 +208,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 						names = append(names, p.DisplayName)
 					}
 				}
-				convName = "Group with " + strings.Join(names, ", ")
+				convName = strings.Join(names, ", ")
 			}
 		}
 
@@ -314,6 +314,29 @@ func handleConversationRoutes(w http.ResponseWriter, r *http.Request) {
 		}
 		notifyClients()
 		writeJSON(w, http.StatusOK, map[string]string{"message": "messages marked as read"})
+	case "rename":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			writeError(w, http.StatusBadRequest, "name cannot be empty")
+			return
+		}
+		if err := renameConversation(conv.ID, name); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to rename conversation: "+err.Error())
+			return
+		}
+		notifyClients()
+		writeJSON(w, http.StatusOK, map[string]string{"message": "conversation renamed successfully"})
 	default:
 		writeError(w, http.StatusNotFound, "not found")
 	}

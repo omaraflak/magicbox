@@ -29,6 +29,18 @@ const IconChat = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
 );
 
+const IconEdit = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+);
+
+const IconCheck = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+);
+
+const IconDots = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle></svg>
+);
+
 function App() {
   const [profile, setProfile] = useState(null);
   const [contacts, setContacts] = useState([]);
@@ -40,8 +52,13 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [newConvName, setNewConvName] = useState('');
-  const [newConvIsGroup, setNewConvIsGroup] = useState(false);
   const [selectedContactIDs, setSelectedContactIDs] = useState([]);
+
+  // Menu & Modal States
+  const [showMenu, setShowMenu] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [renameInput, setRenameInput] = useState('');
 
   // Message Sending State
   const [messageText, setMessageText] = useState('');
@@ -92,7 +109,19 @@ function App() {
     } else {
       setMessages([]);
     }
+    setShowMenu(false);
+    setShowRenameModal(false);
+    setShowDeleteModal(false);
+    setRenameInput('');
   }, [selectedConv]);
+
+  // Click outside to close dropdown menu
+  useEffect(() => {
+    if (!showMenu) return;
+    const closeMenu = () => setShowMenu(false);
+    document.addEventListener('click', closeMenu);
+    return () => document.removeEventListener('click', closeMenu);
+  }, [showMenu]);
 
   // Scroll to bottom whenever messages list changes
   useEffect(() => {
@@ -170,8 +199,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newConvIsGroup ? newConvName : '',
-          is_group: newConvIsGroup,
+          name: selectedContactIDs.length > 1 ? newConvName : '',
           participant_ids: selectedContactIDs
         })
       });
@@ -183,7 +211,6 @@ function App() {
         setShowModal(false);
         // Reset modal forms
         setNewConvName('');
-        setNewConvIsGroup(false);
         setSelectedContactIDs([]);
       } else {
         const err = await res.json();
@@ -234,18 +261,37 @@ function App() {
     }
   };
 
-  const handleDeleteConversation = async (convID) => {
-    if (!confirm('Are you sure you want to delete this chat and all its messages?')) return;
-
+  const handleRenameConversation = async () => {
+    const trimmed = renameInput.trim();
+    if (trimmed === '' || !selectedConv) return;
     try {
-      const res = await fetch(`api/conversations/${convID}`, {
+      const res = await fetch(`api/conversations/${selectedConv.id}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed })
+      });
+      if (res.ok) {
+        setSelectedConv(prev => ({ ...prev, name: trimmed }));
+        setShowRenameModal(false);
+        fetchConversations();
+      } else {
+        alert('Failed to rename conversation');
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!selectedConv) return;
+    try {
+      const res = await fetch(`api/conversations/${selectedConv.id}`, {
         method: 'DELETE'
       });
 
       if (res.ok) {
-        if (selectedConv?.id === convID) {
-          setSelectedConv(null);
-        }
+        setSelectedConv(null);
+        setShowDeleteModal(false);
         fetchConversations();
       } else {
         alert('Failed to delete chat');
@@ -370,21 +416,45 @@ function App() {
               <div>
                 <div className="chat-title">{selectedConv.name}</div>
                 <div className="chat-subtitle">
-                  {selectedConv.is_group 
+                  {selectedConv.participants.length > 2 
                     ? `Group · ${selectedConv.participants.map(p => p.display_name).join(', ')}`
                     : 'Direct Message'
                   }
                 </div>
               </div>
             </div>
-            <button 
-              className="action-btn" 
-              onClick={() => handleDeleteConversation(selectedConv.id)}
-              title="Delete conversation"
-              style={{ color: 'var(--danger)' }}
-            >
-              <IconTrash />
-            </button>
+            
+            <div className="menu-container">
+              <button 
+                className="action-btn" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
+                title="Menu"
+              >
+                <IconDots />
+              </button>
+              {showMenu && (
+                <div className="dropdown-menu">
+                  <button 
+                    className="dropdown-item" 
+                    onClick={() => {
+                      setShowRenameModal(true);
+                      setRenameInput(selectedConv.name);
+                    }}
+                  >
+                    <IconEdit /> Rename Chat
+                  </button>
+                  <button 
+                    className="dropdown-item danger" 
+                    onClick={() => setShowDeleteModal(true)}
+                  >
+                    <IconTrash /> Delete Chat
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Messages container */}
@@ -400,7 +470,7 @@ function App() {
                   className={`message-bubble-wrapper ${isSentByMe ? 'sent' : 'received'}`}
                 >
                   <div className="message-bubble">
-                    {!isSentByMe && selectedConv.is_group && (
+                    {!isSentByMe && selectedConv.participants.length > 2 && (
                       <span className="message-sender">{m.sender_name}</span>
                     )}
 
@@ -528,20 +598,7 @@ function App() {
             </div>
             <div className="modal-body">
               
-              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input 
-                  type="checkbox" 
-                  id="isGroup" 
-                  checked={newConvIsGroup}
-                  onChange={(e) => setNewConvIsGroup(e.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                <label htmlFor="isGroup" style={{ fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>
-                  This is a Group Chat (multiple contacts)
-                </label>
-              </div>
-
-              {newConvIsGroup && (
+              {selectedContactIDs.length > 1 && (
                 <div className="form-group">
                   <label className="form-label">Group Name</label>
                   <input 
@@ -567,15 +624,20 @@ function App() {
                       return (
                         <div 
                           key={c.id} 
-                          className="contact-picker-item"
+                          className={`contact-picker-item ${isSelected ? 'selected' : ''}`}
                           onClick={() => toggleContactSelection(c.id)}
                         >
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected}
-                            readOnly
-                          />
-                          <span className="contact-picker-name">{c.display_name}</span>
+                          <div className="contact-picker-item-left">
+                            <div className="avatar">
+                              {c.display_name.substring(0, 2)}
+                            </div>
+                            <span className="contact-picker-name">{c.display_name}</span>
+                          </div>
+                          {isSelected && (
+                            <span className="contact-picker-check">
+                              <IconCheck />
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -589,9 +651,69 @@ function App() {
               <button 
                 className="btn btn-primary" 
                 onClick={handleCreateConversation}
-                disabled={selectedContactIDs.length === 0 || (newConvIsGroup && newConvName.trim() === '')}
+                disabled={selectedContactIDs.length === 0 || (selectedContactIDs.length > 1 && newConvName.trim() === '')}
               >
                 Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Conversation Modal */}
+      {showRenameModal && (
+        <div className="modal-overlay" onClick={() => setShowRenameModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Rename Chat</span>
+              <button className="action-btn" onClick={() => setShowRenameModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">New Name</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={renameInput}
+                  onChange={(e) => setRenameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRenameConversation();
+                    if (e.key === 'Escape') setShowRenameModal(false);
+                  }}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowRenameModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleRenameConversation} disabled={renameInput.trim() === ''}>
+                Rename
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Delete Chat</span>
+              <button className="action-btn" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '14.5px', lineHeight: '1.5', opacity: 0.9 }}>
+                Are you sure you want to delete the chat <strong>"{selectedConv.name}"</strong>?
+              </p>
+              <p style={{ fontSize: '13px', color: 'var(--text-mute)', marginTop: '8px' }}>
+                This will delete the conversation and erase all sent/received messages and files. This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDeleteConversation}>
+                Delete
               </button>
             </div>
           </div>
