@@ -245,16 +245,19 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 	} else {
 		// Path B: Mnemonic compromise recovery (Nuclear Reset)
 		oldMnemonic := s.config.MnemonicStore.Get()
-		if oldMnemonic == "" {
-			writeError(w, http.StatusPreconditionFailed, "system is locked")
-			return
-		}
+		hasOldMnemonic := oldMnemonic != ""
 
-		oldMasterPriv, err := crypto.DeriveIdentityKey(oldMnemonic, 0)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to derive old master key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
+		var oldMasterPriv ed25519.PrivateKey
+		if hasOldMnemonic {
+			var err error
+			oldMasterPriv, err = crypto.DeriveIdentityKey(oldMnemonic, 0)
+			if err != nil {
+				s.logger.Error("admin reset identity keys: failed to derive old master key", logging.F("error", err.Error()))
+				writeError(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+		} else {
+			s.logger.Warn("admin reset identity keys: system is locked, proceeding with nuclear reset without sending master revocations")
 		}
 
 		// 1. Get all contacts of the user
@@ -331,24 +334,26 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 
 		// 3. For each contact, enqueue revocation and reconnection request
 		for _, c := range contacts {
-			// Sign revocation with old master key
-			msgToSign := []byte("REVOKE_MASTER_KEY:" + user.UserID + ":" + timestamp)
-			sigBytes := ed25519.Sign(oldMasterPriv, msgToSign)
-			sigHex := hex.EncodeToString(sigBytes)
+			if hasOldMnemonic {
+				// Sign revocation with old master key
+				msgToSign := []byte("REVOKE_MASTER_KEY:" + user.UserID + ":" + timestamp)
+				sigBytes := ed25519.Sign(oldMasterPriv, msgToSign)
+				sigHex := hex.EncodeToString(sigBytes)
 
-			payloadBytes, err := json.Marshal(protocol.MasterRevocationPayload{
-				UserID:    user.UserID,
-				Timestamp: timestamp,
-				Signature: sigHex,
-			})
-			if err != nil {
-				s.logger.Error("admin reset identity keys: failed to marshal revocation payload", logging.F("error", err.Error()))
-				continue
-			}
+				payloadBytes, err := json.Marshal(protocol.MasterRevocationPayload{
+					UserID:    user.UserID,
+					Timestamp: timestamp,
+					Signature: sigHex,
+				})
+				if err != nil {
+					s.logger.Error("admin reset identity keys: failed to marshal revocation payload", logging.F("error", err.Error()))
+					continue
+				}
 
-			// Enqueue revocation payload
-			if err := protocol.EnqueueForContacts(s.db, []db.Contact{c}, protocol.AppIDMasterRevocation, payloadBytes); err != nil {
-				s.logger.Error("admin reset identity keys: failed to enqueue revocation", logging.F("contact_id", c.ID), logging.F("error", err.Error()))
+				// Enqueue revocation payload
+				if err := protocol.EnqueueForContacts(s.db, []db.Contact{c}, protocol.AppIDMasterRevocation, payloadBytes); err != nil {
+					s.logger.Error("admin reset identity keys: failed to enqueue revocation", logging.F("contact_id", c.ID), logging.F("error", err.Error()))
+				}
 			}
 
 			// Enqueue reconnect payload

@@ -318,7 +318,11 @@ export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, 
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    Warning: Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a brand new mnemonic and identity. This generates a brand new Master Key and resets key indexes. It will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity. Contacts are preserved.
+                    Warning: Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a brand new mnemonic and identity. This generates a brand new Master Key and resets key indexes. {unlocked ? (
+                        "It will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity."
+                    ) : (
+                        "Since the system is locked, it will skip sending blacklist signals to your contacts (as the old recovery mnemonic is unavailable to sign them), but it will immediately enqueue new contact requests so they can automatically reconnect with your new identity once they accept."
+                    )} Contacts are preserved.
                 </p>
 
                 <form onSubmit={handleResetIdentitySubmit} style={{ maxWidth: '500px' }}>
