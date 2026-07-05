@@ -223,7 +223,7 @@ func (d *DB) DeleteAppScopes(appID, userID string) error {
 	return err
 }
 
-func scanApp(row interface { Scan(dest ...interface{}) error }) (*App, error) {
+func scanApp(row RowScanner) (*App, error) {
 	var a App
 	var imageDigest, version, containerID, host, webhookPath, updatedAt sql.NullString
 	var entryPort sql.NullInt64

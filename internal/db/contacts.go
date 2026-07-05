@@ -26,44 +26,19 @@ func (d *DB) GetContacts(userID string) ([]Contact, error) {
 		return nil, err
 	}
 	defer rows.Close()
-
-	var contacts []Contact
-	for rows.Next() {
-		var c Contact
-		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt); err != nil {
-			return nil, err
-		}
-		contacts = append(contacts, c)
-	}
-	return contacts, rows.Err()
+	return scanContacts(rows)
 }
 
 // GetContactByID fetches a contact by ID and owner userID.
 func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
 	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE id = ? AND user_id = ?`, id, userID)
-	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &c, nil
+	return scanContact(row)
 }
 
 // GetContactByPeerID fetches a contact by the remote peer's libp2p peer ID and the owning user ID.
 func (d *DB) GetContactByPeerID(userID, peerID string) (*Contact, error) {
 	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? AND peer_id = ?`, userID, peerID)
-	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &c, nil
+	return scanContact(row)
 }
 
 // AddContact inserts a new contact into the database.
@@ -122,30 +97,13 @@ func (d *DB) GetAllContacts() ([]Contact, error) {
 		return nil, err
 	}
 	defer rows.Close()
-
-	var contacts []Contact
-	for rows.Next() {
-		var c Contact
-		if err := rows.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt); err != nil {
-			return nil, err
-		}
-		contacts = append(contacts, c)
-	}
-	return contacts, rows.Err()
+	return scanContacts(rows)
 }
 
 // GetContactByTargetUserID fetches a contact by its owner's userID and the target remote userID.
 func (d *DB) GetContactByTargetUserID(userID, targetUserID string) (*Contact, error) {
 	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? AND target_user_id = ?`, userID, targetUserID)
-	var c Contact
-	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &c, nil
+	return scanContact(row)
 }
 
 // UpdateContactFromRequest updates the contact's peer ID, multiaddress, encryption public key, and master public key, resetting status to 'active'.
@@ -161,5 +119,29 @@ func (d *DB) UpdateContactFromRequest(contactID, peerID, multiaddr, encPubKey, m
 func (d *DB) UpdateContactStatus(contactID string, status string) error {
 	_, err := d.conn.Exec(`UPDATE contacts SET status = ? WHERE id = ?`, status, contactID)
 	return err
+}
+
+func scanContact(row RowScanner) (*Contact, error) {
+	var c Contact
+	err := row.Scan(&c.ID, &c.UserID, &c.DisplayName, &c.PeerID, &c.Multiaddr, &c.TargetUserID, &c.EncPubKey, &c.MasterPubKey, &c.Status, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func scanContacts(rows *sql.Rows) ([]Contact, error) {
+	var contacts []Contact
+	for rows.Next() {
+		c, err := scanContact(rows)
+		if err != nil {
+			return nil, err
+		}
+		contacts = append(contacts, *c)
+	}
+	return contacts, rows.Err()
 }
 

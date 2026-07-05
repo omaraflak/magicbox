@@ -63,7 +63,7 @@ func (d *DB) ListUsers() ([]User, error) {
 
 	var users []User
 	for rows.Next() {
-		u, err := scanUserRow(rows)
+		u, err := scanUser(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -85,28 +85,13 @@ func (d *DB) UserCount() (int, error) {
 	return count, err
 }
 
-type rowScanner interface {
-	Scan(dest ...interface{}) error
-}
-
-func scanUser(row rowScanner) (*User, error) {
+func scanUser(row RowScanner) (*User, error) {
 	var u User
 	var isAdmin int
 	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &isAdmin, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	u.IsAdmin = isAdmin != 0
-	return &u, nil
-}
-
-func scanUserRow(row rowScanner) (*User, error) {
-	var u User
-	var isAdmin int
-	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &isAdmin, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}

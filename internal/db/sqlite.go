@@ -36,3 +36,9 @@ func Open(path string) (*DB, error) {
 func (d *DB) Close() error {
 	return d.conn.Close()
 }
+
+// RowScanner defines an interface for database rows/row scanning.
+type RowScanner interface {
+	Scan(dest ...interface{}) error
+}
+
