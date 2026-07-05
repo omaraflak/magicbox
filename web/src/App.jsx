@@ -632,8 +632,8 @@ export default function App() {
     const handleResetIdentityKeys = async (unlocked) => {
         return new Promise((resolve) => {
             const confirmMsg = unlocked
-                ? "⚠️ WARNING: This will completely reset your cryptographic identity. This generates a brand new Master Key and resets key indexes. It will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity. Are you sure you want to proceed?"
-                : "⚠️ WARNING: This will completely reset your cryptographic identity. This generates a brand new Master Key and resets key indexes. Since the system is locked (the recovery mnemonic has not been entered on the Unlock system section), your contacts will not receive a revocation signal and won't know that your old keys have been compromised. Are you sure you want to proceed?";
+              ? "⚠️ WARNING: This will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity. Are you sure you want to proceed?"
+              : "⚠️ WARNING: Since the system is locked (the recovery mnemonic has not been entered in the Unlock system section), your contacts will not receive a revocation signal and won't know that your old keys have been compromised. Are you sure you want to proceed?";
 
             showConfirm(
                 confirmMsg,
