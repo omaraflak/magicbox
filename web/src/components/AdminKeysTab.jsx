@@ -290,7 +290,14 @@ export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, 
                         disabled={isAnyLoading || !unlocked || (!rotateEncryption && !rotateIdentity)}
                         style={{ padding: '10px 24px', fontSize: '0.9rem' }}
                     >
-                        {rotateLoading ? 'Rotating...' : 'Rotate Selected Keys'}
+                        {rotateLoading ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                                Rotating...
+                                <div className="spinner-sm" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
+                            </span>
+                        ) : (
+                            'Rotate Selected Keys'
+                        )}
                     </button>
                 </form>
             </div>
@@ -339,7 +346,14 @@ export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, 
                         disabled={isAnyLoading}
                         style={{ padding: '10px 24px', fontSize: '0.9rem' }}
                     >
-                        {resetLoading ? 'Resetting...' : 'Reset P2P Identity'}
+                        {resetLoading ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                                Resetting...
+                                <div className="spinner-sm" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
+                            </span>
+                        ) : (
+                            'Reset P2P Identity'
+                        )}
                     </button>
                 </form>
             </div>
