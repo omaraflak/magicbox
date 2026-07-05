@@ -190,27 +190,11 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Auto-generate name if empty
-		convName := req.Name
-		if convName == "" {
-			if len(uniqueParts) == 2 {
-				// 1-to-1 conversation, default to the recipient's name
-				for _, p := range uniqueParts {
-					if p.UserID != profile.UserId {
-						convName = p.DisplayName
-						break
-					}
-				}
-			} else {
-				// Group conversation
-				names := []string{}
-				for _, p := range uniqueParts {
-					if p.UserID != profile.UserId {
-						names = append(names, p.DisplayName)
-					}
-				}
-				convName = strings.Join(names, ", ")
-			}
+		// Conversation Name: if 1-to-1, it is always empty in DB. 
+		// If group, use the explicit name provided, otherwise save as empty.
+		convName := ""
+		if len(uniqueParts) > 2 {
+			convName = strings.TrimSpace(req.Name)
 		}
 
 		// Check if a 1-to-1 conversation with this contact already exists to reuse it
@@ -334,10 +318,41 @@ func handleConversationRoutes(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "name cannot be empty")
 			return
 		}
+
+		client, conn, ctx, err := getCoreClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to contact core client: "+err.Error())
+			return
+		}
+		defer conn.Close()
+
+		profile, err := client.GetProfile(ctx, &pb.GetProfileRequest{})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to get profile: "+err.Error())
+			return
+		}
+
 		if err := renameConversation(conv.ID, name); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to rename conversation: "+err.Error())
 			return
 		}
+
+		sysMsg := &Message{
+			ID:             uuid.New().String(),
+			ConversationID: conv.ID,
+			SenderID:       profile.UserId,
+			SenderName:     profile.Username,
+			Text:           profile.Username + " renamed the chat to \"" + name + "\"",
+			SentAt:         time.Now().Format(time.RFC3339),
+			IsRead:         true,
+		}
+		if err := insertMessage(sysMsg); err != nil {
+			log.Printf("Rename warning: failed to save system message: %v", err)
+		}
+
+		conv.Name = name
+		go broadcastMessage(conv, sysMsg, nil, profile.UserId, profile.Username)
+
 		notifyClients()
 		writeJSON(w, http.StatusOK, map[string]string{"message": "conversation renamed successfully"})
 	default:
@@ -638,11 +653,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if conv == nil {
 		log.Printf("Webhook: received message for new conversation %s (%s)", payload.ConversationName, payload.ConversationID)
 		
-		// Set conversation name: if group, use payload name. If 1-to-1, default to sender name
 		convName := payload.ConversationName
-		if convName == "" {
-			convName = payload.SenderName
-		}
 
 		if err := createConversation(payload.ConversationID, convName, payload.SentAt); err != nil {
 			log.Printf("Webhook DB error: failed to create conversation: %v", err)
@@ -653,6 +664,14 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		// Save participants
 		for _, p := range payload.Participants {
 			_ = addParticipant(payload.ConversationID, p.UserID, p.DisplayName)
+		}
+	} else {
+		// Conversation already exists, check if name has been explicitly set/updated by a peer
+		if payload.ConversationName != "" && conv.Name != payload.ConversationName {
+			log.Printf("Webhook: updating conversation %s name to %s", conv.ID, payload.ConversationName)
+			if err := renameConversation(conv.ID, payload.ConversationName); err == nil {
+				conv.Name = payload.ConversationName
+			}
 		}
 	}
 

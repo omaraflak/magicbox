@@ -96,6 +96,14 @@ function App() {
     fetchConversations();
   }, []);
 
+  const getConversationName = (conv) => {
+    if (!conv) return '';
+    if (conv.name) return conv.name;
+    const others = conv.participants ? conv.participants.filter(p => p.user_id !== profile?.user_id) : [];
+    if (others.length === 0) return 'Solo Chat';
+    return others.map(p => p.display_name).join(', ');
+  };
+
   // Poll databases and notifications via EventSource
   useEffect(() => {
     // SSE event stream
@@ -475,7 +483,7 @@ function App() {
 
   // Filter conversations based on search text
   const filteredConvs = conversations.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+    getConversationName(c).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -516,11 +524,11 @@ function App() {
               onClick={() => setSelectedConv(c)}
             >
               <div className="avatar">
-                {c.name.substring(0, 2)}
+                {getConversationName(c).substring(0, 2)}
               </div>
               <div className="chat-item-details">
                 <div className="chat-item-header">
-                  <span className="chat-item-name">{c.name}</span>
+                  <span className="chat-item-name">{getConversationName(c)}</span>
                   <span className="chat-item-time">{c.last_message ? formatTime(c.last_message.sent_at) : ''}</span>
                 </div>
                 <div className="chat-item-body">
@@ -547,10 +555,10 @@ function App() {
           <div className="chat-header">
             <div className="chat-header-info">
               <div className="avatar">
-                {selectedConv.name.substring(0, 2)}
+                {getConversationName(selectedConv).substring(0, 2)}
               </div>
               <div>
-                <div className="chat-title">{selectedConv.name}</div>
+                <div className="chat-title">{getConversationName(selectedConv)}</div>
                 <div className="chat-subtitle">
                   {selectedConv.participants.length > 2 
                     ? `Group · ${selectedConv.participants.map(p => p.display_name).join(', ')}`
@@ -577,7 +585,7 @@ function App() {
                     className="dropdown-item" 
                     onClick={() => {
                       setShowRenameModal(true);
-                      setRenameInput(selectedConv.name);
+                      setRenameInput(getConversationName(selectedConv));
                     }}
                   >
                     <IconEdit /> Rename Chat
@@ -891,7 +899,7 @@ function App() {
             </div>
             <div className="modal-body">
               <p style={{ fontSize: '14.5px', lineHeight: '1.5', opacity: 0.9 }}>
-                Are you sure you want to delete the chat <strong>"{selectedConv.name}"</strong>?
+                Are you sure you want to delete the chat <strong>"{getConversationName(selectedConv)}"</strong>?
               </p>
               <p style={{ fontSize: '13px', color: 'var(--text-mute)', marginTop: '8px' }}>
                 This will delete the conversation and erase all sent/received messages and files. This action cannot be undone.
