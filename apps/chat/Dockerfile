@@ -2,7 +2,8 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/web
 COPY apps/chat/web/package*.json ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm \
+    npm install
 COPY apps/chat/web/ ./
 RUN npm run build
 
@@ -18,10 +19,13 @@ COPY api/proto/v1/ /magicbox/api/proto/v1/
 COPY sdk/ /magicbox/sdk/
 # Copy module configuration
 COPY apps/chat/go.mod apps/chat/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 # Copy local source file
 COPY apps/chat/*.go ./
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o chat .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o chat .
 
 # Stage 3: Runtime
 FROM alpine:3.19

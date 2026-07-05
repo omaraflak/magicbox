@@ -19,14 +19,12 @@ import (
 
 type CreateConvRequest struct {
 	Name           string   `json:"name"`
-	IsGroup        bool     `json:"is_group"`
 	ParticipantIDs []string `json:"participant_ids"`
 }
 
 type MessagePayload struct {
 	ConversationID   string            `json:"conversation_id"`
 	ConversationName string            `json:"conversation_name,omitempty"`
-	IsGroup          bool              `json:"is_group"`
 	Participants     []ParticipantInfo `json:"participants"`
 	MessageID        string            `json:"message_id"`
 	SenderID         string            `json:"sender_id"`
@@ -215,7 +213,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Check if a 1-to-1 conversation with this contact already exists to reuse it
-		if !req.IsGroup && len(uniqueParts) == 2 {
+		if len(uniqueParts) == 2 {
 			var recipientID string
 			for _, p := range uniqueParts {
 				if p.UserID != profile.UserId {
@@ -227,7 +225,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 			existingConvs, err := listConversations()
 			if err == nil {
 				for _, ec := range existingConvs {
-					if !ec.IsGroup && len(ec.Participants) == 2 {
+					if len(ec.Participants) == 2 {
 						for _, ep := range ec.Participants {
 							if ep.UserID == recipientID {
 								// Found existing 1-to-1 conversation, return it!
@@ -243,7 +241,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 		convID := uuid.NewString()
 		nowStr := time.Now().Format(time.RFC3339)
 
-		if err := createConversation(convID, convName, req.IsGroup, nowStr); err != nil {
+		if err := createConversation(convID, convName, nowStr); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to create conversation: "+err.Error())
 			return
 		}
@@ -477,7 +475,6 @@ func broadcastMessage(conv *Conversation, msg *Message, attachmentBytes []byte, 
 	payload := MessagePayload{
 		ConversationID:   conv.ID,
 		ConversationName: conv.Name,
-		IsGroup:          conv.IsGroup,
 		Participants:     partsPayload,
 		MessageID:        msg.ID,
 		SenderID:         selfUserID,
@@ -577,7 +574,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			convName = payload.SenderName
 		}
 
-		if err := createConversation(payload.ConversationID, convName, payload.IsGroup, payload.SentAt); err != nil {
+		if err := createConversation(payload.ConversationID, convName, payload.SentAt); err != nil {
 			log.Printf("Webhook DB error: failed to create conversation: %v", err)
 			writeError(w, http.StatusInternalServerError, "db error")
 			return

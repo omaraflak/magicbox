@@ -27,7 +27,6 @@ func initDB() {
 		`CREATE TABLE IF NOT EXISTS conversations (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
-			is_group BOOLEAN NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS conversation_participants (
@@ -64,7 +63,6 @@ func initDB() {
 type Conversation struct {
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
-	IsGroup      bool          `json:"is_group"`
 	CreatedAt    string        `json:"created_at"`
 	Participants []Participant `json:"participants"`
 	LastMessage  *Message      `json:"last_message,omitempty"`
@@ -91,8 +89,8 @@ type Message struct {
 
 // DB functions
 
-func createConversation(id, name string, isGroup bool, createdAt string) error {
-	_, err := dbConn.Exec("INSERT INTO conversations (id, name, is_group, created_at) VALUES (?, ?, ?, ?)", id, name, isGroup, createdAt)
+func createConversation(id, name string, createdAt string) error {
+	_, err := dbConn.Exec("INSERT INTO conversations (id, name, created_at) VALUES (?, ?, ?)", id, name, createdAt)
 	return err
 }
 
@@ -103,7 +101,7 @@ func addParticipant(conversationID, userID, displayName string) error {
 
 func getConversation(id string) (*Conversation, error) {
 	var c Conversation
-	err := dbConn.QueryRow("SELECT id, name, is_group, created_at FROM conversations WHERE id = ?", id).Scan(&c.ID, &c.Name, &c.IsGroup, &c.CreatedAt)
+	err := dbConn.QueryRow("SELECT id, name, created_at FROM conversations WHERE id = ?", id).Scan(&c.ID, &c.Name, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -139,7 +137,7 @@ func getParticipants(conversationID string) ([]Participant, error) {
 }
 
 func listConversations() ([]Conversation, error) {
-	rows, err := dbConn.Query("SELECT id, name, is_group, created_at FROM conversations ORDER BY created_at DESC")
+	rows, err := dbConn.Query("SELECT id, name, created_at FROM conversations ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +146,7 @@ func listConversations() ([]Conversation, error) {
 	var convs []Conversation
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.Name, &c.IsGroup, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 
