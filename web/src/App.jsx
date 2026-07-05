@@ -552,18 +552,13 @@ export default function App() {
 
         if (isIdentityResetPending) {
             setIsIdentityResetPending(false);
-            triggerSystemRestart();
+            startReconnecting();
         }
     };
 
-    // Trigger System Restart (Docker Container Reboot)
-    const triggerSystemRestart = async () => {
-        setUpgradeStatus('reconnecting'); // Show styled "Reconnecting..." spinner overlay
-        try {
-            await callAPI('POST', '/admin/restart');
-        } catch (e) {
-            // Ignore connection abort errors since server terminates immediately
-        }
+    // Start Reconnecting Overlay and Health Polling (used when backend restarts itself)
+    const startReconnecting = () => {
+        setUpgradeStatus('reconnecting');
         
         // Poll health endpoint every 1.5 seconds until container is back online
         const interval = setInterval(async () => {
@@ -577,6 +572,13 @@ export default function App() {
                 // Keep polling during downtime
             }
         }, 1500);
+    };
+
+    // Trigger System Restart (Docker Container Reboot)
+    const triggerSystemRestart = async () => {
+        const promise = callAPI('POST', '/admin/restart').catch(() => {});
+        startReconnecting();
+        await promise;
     };
 
     // Rotate Keys (Unified)
@@ -595,7 +597,7 @@ export default function App() {
                     });
                     if (status === 200) {
                         loadMnemonic();
-                        setTimeout(triggerSystemRestart, 1500);
+                        startReconnecting();
                         resolve({ success: true, message: data?.message || 'Keys rotated successfully! Restarting Magicbox...' });
                     } else {
                         resolve({ success: false, error: data?.error || 'Rotation failed' });
@@ -641,7 +643,7 @@ export default function App() {
                             setIsIdentityResetPending(true); // restart after modal is acknowledged
                         } else {
                             loadMnemonic();
-                            setTimeout(triggerSystemRestart, 1500); // restart immediately
+                            startReconnecting(); // restart immediately
                         }
                         resolve({ success: true, message: 'Identity keys reset successfully! Restarting Magicbox to apply changes...' });
                     } else {
@@ -684,11 +686,13 @@ export default function App() {
     };
 
     // Rendering Helper
-    if (booting) {
+    if (booting || upgradeStatus === 'reconnecting') {
         return (
-            <div className="spinner-container">
+            <div className="spinner-container animate-fade-in">
                 <div className="spinner"></div>
-                <div className="spinner-text">Booting Magicbox OS...</div>
+                <div className="spinner-text">
+                    {upgradeStatus === 'reconnecting' ? 'Reconnecting to Magicbox...' : 'Booting Magicbox OS...'}
+                </div>
             </div>
         );
     }
