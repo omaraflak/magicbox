@@ -135,7 +135,7 @@ func TestInsertAndGetMessages(t *testing.T) {
 		t.Fatalf("insertMessage failed: %v", err)
 	}
 
-	msgs, err := getMessages(convID)
+	msgs, err := getMessages(convID, "", 50)
 	if err != nil {
 		t.Fatalf("getMessages failed: %v", err)
 	}
@@ -195,5 +195,51 @@ func TestUnreadCountAndMarkAsRead(t *testing.T) {
 
 	if convs[0].UnreadCount != 0 {
 		t.Errorf("Expected unread count to be 0 after marking as read, got %+v", convs)
+	}
+}
+
+func TestSearchMessages(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	convID := "conv-search"
+	nowStr := time.Now().Format(time.RFC3339)
+	_ = createConversation(convID, "Search Test", nowStr)
+
+	m1 := &Message{ID: "m1", ConversationID: convID, SenderID: "u1", SenderName: "A", Text: "Hello secret world", SentAt: nowStr, IsRead: true}
+	m2 := &Message{ID: "m2", ConversationID: convID, SenderID: "u1", SenderName: "A", Text: "Just normal chat", SentAt: nowStr, IsRead: true}
+	_ = insertMessage(m1)
+	_ = insertMessage(m2)
+
+	msgs, err := searchMessages(convID, "secret")
+	if err != nil {
+		t.Fatalf("searchMessages failed: %v", err)
+	}
+
+	if len(msgs) != 1 || msgs[0].ID != "m1" {
+		t.Errorf("Expected only message m1 to match 'secret', got %+v", msgs)
+	}
+}
+
+func TestGetSharedMedia(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	convID := "conv-media-test"
+	nowStr := time.Now().Format(time.RFC3339)
+	_ = createConversation(convID, "Media Test", nowStr)
+
+	m1 := &Message{ID: "m1", ConversationID: convID, SenderID: "u1", SenderName: "A", Text: "", AttachmentName: "image.png", AttachmentType: "image/png", SentAt: nowStr, IsRead: true}
+	m2 := &Message{ID: "m2", ConversationID: convID, SenderID: "u1", SenderName: "A", Text: "Hello standard text", SentAt: nowStr, IsRead: true}
+	_ = insertMessage(m1)
+	_ = insertMessage(m2)
+
+	msgs, err := getSharedMedia(convID, "", 20)
+	if err != nil {
+		t.Fatalf("getSharedMedia failed: %v", err)
+	}
+
+	if len(msgs) != 1 || msgs[0].ID != "m1" {
+		t.Errorf("Expected only media message m1, got %+v", msgs)
 	}
 }

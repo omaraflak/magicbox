@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -303,6 +304,8 @@ func handleConversationRoutes(w http.ResponseWriter, r *http.Request) {
 	switch subRoute {
 	case "messages":
 		handleMessages(w, r, conv)
+	case "attachments":
+		handleAttachments(w, r, conv)
 	case "read":
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -351,7 +354,27 @@ func handleMessages(w http.ResponseWriter, r *http.Request, conv *Conversation) 
 		_ = markMessagesAsRead(conv.ID)
 		notifyClients()
 
-		msgs, err := getMessages(conv.ID)
+		q := r.URL.Query().Get("q")
+		if q != "" {
+			msgs, err := searchMessages(conv.ID, q)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to search messages: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, msgs)
+			return
+		}
+
+		before := r.URL.Query().Get("before")
+		limitStr := r.URL.Query().Get("limit")
+		limit := 50
+		if limitStr != "" {
+			if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+				limit = parsed
+			}
+		}
+
+		msgs, err := getMessages(conv.ID, before, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to get messages: "+err.Error())
 			return
@@ -467,6 +490,30 @@ func handleMessages(w http.ResponseWriter, r *http.Request, conv *Conversation) 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// GET /api/conversations/{id}/attachments
+func handleAttachments(w http.ResponseWriter, r *http.Request, conv *Conversation) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	before := r.URL.Query().Get("before")
+	limitStr := r.URL.Query().Get("limit")
+	limit := 20
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	msgs, err := getSharedMedia(conv.ID, before, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get shared media: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, msgs)
 }
 
 // Background routine to send the P2P messages
@@ -610,7 +657,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if message is already in DB to prevent duplicates
-	existingMsgs, err := getMessages(payload.ConversationID)
+	existingMsgs, err := getMessages(payload.ConversationID, "", 100)
 	if err == nil {
 		for _, m := range existingMsgs {
 			if m.ID == payload.MessageID {

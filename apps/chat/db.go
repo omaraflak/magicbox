@@ -189,10 +189,44 @@ func insertMessage(m *Message) error {
 	return err
 }
 
-func getMessages(conversationID string) ([]Message, error) {
+func getMessages(conversationID string, beforeSentAt string, limit int) ([]Message, error) {
+	var rows *sql.Rows
+	var err error
+	if beforeSentAt == "" {
+		rows, err = dbConn.Query(`
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT ?`, conversationID, limit)
+	} else {
+		rows, err = dbConn.Query(`
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			FROM messages WHERE conversation_id = ? AND sent_at < ? ORDER BY sent_at DESC LIMIT ?`, conversationID, beforeSentAt, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var msgs []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, m)
+	}
+
+	// Reverse messages so they are returned in ascending chronological order
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+
+	return msgs, nil
+}
+
+func searchMessages(conversationID string, query string) ([]Message, error) {
 	rows, err := dbConn.Query(`
 		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
-		FROM messages WHERE conversation_id = ? ORDER BY sent_at ASC`, conversationID)
+		FROM messages WHERE conversation_id = ? AND text LIKE ? ORDER BY sent_at ASC`, conversationID, "%"+query+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -237,4 +271,36 @@ func deleteConversation(id string) error {
 func renameConversation(id, name string) error {
 	_, err := dbConn.Exec("UPDATE conversations SET name = ? WHERE id = ?", name, id)
 	return err
+}
+
+func getSharedMedia(conversationID string, beforeSentAt string, limit int) ([]Message, error) {
+	var rows *sql.Rows
+	var err error
+	if beforeSentAt == "" {
+		rows, err = dbConn.Query(`
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			FROM messages 
+			WHERE conversation_id = ? AND attachment_name != '' 
+			ORDER BY sent_at DESC LIMIT ?`, conversationID, limit)
+	} else {
+		rows, err = dbConn.Query(`
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			FROM messages 
+			WHERE conversation_id = ? AND attachment_name != '' AND sent_at < ? 
+			ORDER BY sent_at DESC LIMIT ?`, conversationID, beforeSentAt, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var msgs []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, nil
 }

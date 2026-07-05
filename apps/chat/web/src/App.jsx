@@ -41,6 +41,14 @@ const IconDots = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle></svg>
 );
 
+const IconImage = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+);
+
+const IconSearch = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+);
+
 function App() {
   const [profile, setProfile] = useState(null);
   const [contacts, setContacts] = useState([]);
@@ -59,6 +67,19 @@ function App() {
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [renameInput, setRenameInput] = useState('');
+
+  // Shared Media & Search States
+  const [showMediaModal, setShowMediaModal] = useState(false);
+  const [sharedMedia, setSharedMedia] = useState([]);
+  const [hasMoreMedia, setHasMoreMedia] = useState(true);
+  const [isLoadingMoreMedia, setIsLoadingMoreMedia] = useState(false);
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [messageSearchQuery, setMessageSearchQuery] = useState('');
+
+  // Pagination States
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const containerRef = useRef(null);
 
   // Message Sending State
   const [messageText, setMessageText] = useState('');
@@ -109,10 +130,12 @@ function App() {
     } else {
       setMessages([]);
     }
-    setShowMenu(false);
-    setShowRenameModal(false);
-    setShowDeleteModal(false);
-    setRenameInput('');
+    setShowMediaModal(false);
+    setSharedMedia([]);
+    setHasMoreMedia(true);
+    setIsLoadingMoreMedia(false);
+    setIsSearchingMessages(false);
+    setMessageSearchQuery('');
   }, [selectedConv]);
 
   // Click outside to close dropdown menu
@@ -123,10 +146,23 @@ function App() {
     return () => document.removeEventListener('click', closeMenu);
   }, [showMenu]);
 
-  // Scroll to bottom whenever messages list changes
+  // Debounced search trigger when messageSearchQuery changes
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!selectedConv) return;
+    
+    if (messageSearchQuery.trim() === '') {
+      if (isSearchingMessages) {
+        fetchMessages(selectedConv.id);
+      }
+      return;
+    }
+    
+    const delayDebounce = setTimeout(() => {
+      searchChatMessages(selectedConv.id, messageSearchQuery);
+    }, 300);
+    
+    return () => clearTimeout(delayDebounce);
+  }, [messageSearchQuery]);
 
   // Fetch calls
 
@@ -165,10 +201,10 @@ function App() {
         if (selectedConv) {
           const updated = (data || []).find(c => c.id === selectedConv.id);
           if (updated) {
-            // Keep unread count, name, participants in sync
             setSelectedConv(updated);
-            // Re-fetch messages in case a new message arrived
-            fetchMessages(selectedConv.id);
+            if (!isSearchingMessages) {
+              fetchMessages(selectedConv.id);
+            }
           }
         }
       }
@@ -177,15 +213,115 @@ function App() {
     }
   };
 
-  const fetchMessages = async (convID) => {
+  const fetchMessages = async (convID, before = '', append = false) => {
+    if (isSearchingMessages && before !== '') return;
+
     try {
-      const res = await fetch(`api/conversations/${convID}/messages`);
+      const url = before 
+        ? `api/conversations/${convID}/messages?limit=50&before=${before}` 
+        : `api/conversations/${convID}/messages?limit=50`;
+        
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data || []);
+        const newMsgs = data || [];
+        
+        if (append) {
+          const container = containerRef.current;
+          const oldScrollHeight = container ? container.scrollHeight : 0;
+          const oldScrollTop = container ? container.scrollTop : 0;
+          
+          setMessages(prev => [...newMsgs, ...prev]);
+          setHasMoreMessages(newMsgs.length === 50);
+          
+          setTimeout(() => {
+            if (container) {
+              const newScrollHeight = container.scrollHeight;
+              container.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+            }
+          }, 0);
+        } else {
+          setMessages(newMsgs);
+          setHasMoreMessages(newMsgs.length === 50);
+          setTimeout(() => {
+            if (containerRef.current) {
+              containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            }
+          }, 0);
+        }
       }
     } catch (e) {
       console.error('Failed to load messages', e);
+    }
+  };
+
+  const searchChatMessages = async (convID, query) => {
+    try {
+      const res = await fetch(`api/conversations/${convID}/messages?q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data || []);
+        setHasMoreMessages(false);
+      }
+    } catch (e) {
+      console.error('Failed to search messages', e);
+    }
+  };
+
+  const handleScroll = () => {
+    if (!selectedConv || !containerRef.current || !hasMoreMessages || isLoadingMore || isSearchingMessages) return;
+    
+    const container = containerRef.current;
+    if (container.scrollTop < 150) {
+      setIsLoadingMore(true);
+      const oldestMsg = messages[0];
+      if (oldestMsg) {
+        fetchMessages(selectedConv.id, oldestMsg.sent_at, true).then(() => {
+          setIsLoadingMore(false);
+        });
+      } else {
+        setIsLoadingMore(false);
+      }
+    }
+  };
+
+  const fetchSharedMedia = async (convID, before = '', append = false) => {
+    try {
+      const url = before 
+        ? `api/conversations/${convID}/attachments?limit=20&before=${before}` 
+        : `api/conversations/${convID}/attachments?limit=20`;
+        
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const newMedia = data || [];
+        
+        if (append) {
+          setSharedMedia(prev => [...prev, ...newMedia]);
+        } else {
+          setSharedMedia(newMedia);
+        }
+        setHasMoreMedia(newMedia.length === 20);
+      }
+    } catch (e) {
+      console.error('Failed to load shared media', e);
+    }
+  };
+
+  const handleMediaScroll = (e) => {
+    if (!selectedConv || !hasMoreMedia || isLoadingMoreMedia) return;
+    
+    const target = e.target;
+    if (target.scrollHeight - target.scrollTop - target.clientHeight < 60) {
+      setIsLoadingMoreMedia(true);
+      const oldestMedia = sharedMedia[sharedMedia.length - 1];
+      if (oldestMedia) {
+        fetchSharedMedia(selectedConv.id, oldestMedia.sent_at, true).then(() => {
+          setIsLoadingMoreMedia(false);
+        });
+      } else {
+        setIsLoadingMoreMedia(false);
+      }
     }
   };
 
@@ -447,6 +583,26 @@ function App() {
                     <IconEdit /> Rename Chat
                   </button>
                   <button 
+                    className="dropdown-item" 
+                    onClick={() => {
+                      setIsSearchingMessages(true);
+                      setMessageSearchQuery('');
+                    }}
+                  >
+                    <IconSearch /> Search Chat Text
+                  </button>
+                  <button 
+                    className="dropdown-item" 
+                    onClick={() => {
+                      setShowMediaModal(true);
+                      setSharedMedia([]);
+                      setHasMoreMedia(true);
+                      fetchSharedMedia(selectedConv.id);
+                    }}
+                  >
+                    <IconImage /> View Shared Media
+                  </button>
+                  <button 
                     className="dropdown-item danger" 
                     onClick={() => setShowDeleteModal(true)}
                   >
@@ -457,71 +613,102 @@ function App() {
             </div>
           </div>
 
+          {isSearchingMessages && (
+            <div className="chat-search-bar">
+              <div className="chat-search-input-container">
+                <span style={{ color: 'var(--text-mute)', display: 'flex', alignItems: 'center' }}><IconSearch /></span>
+                <input 
+                  type="text" 
+                  placeholder="Search messages..." 
+                  className="chat-search-input"
+                  value={messageSearchQuery}
+                  onChange={(e) => setMessageSearchQuery(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <button className="cancel-attach-btn" onClick={() => {
+                setIsSearchingMessages(false);
+                setMessageSearchQuery('');
+              }}>
+                Close
+              </button>
+            </div>
+          )}
+
           {/* Messages container */}
-          <div className="messages-container">
-            {messages.map(m => {
-              const isSentByMe = profile && m.sender_id === profile.user_id;
-              // Build clean url path for file access
-              const attachmentURL = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
+          <div className="messages-container" ref={containerRef} onScroll={handleScroll}>
+            {(() => {
+              const filtered = messages;
+              if (filtered.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '40px', fontSize: '14.5px' }}>
+                    {messageSearchQuery ? "No matching text messages found." : "No messages yet."}
+                  </div>
+                );
+              }
+              return filtered.map(m => {
+                const isSentByMe = profile && m.sender_id === profile.user_id;
+                const attachmentURL = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
 
-              return (
-                <div 
-                  key={m.id} 
-                  className={`message-bubble-wrapper ${isSentByMe ? 'sent' : 'received'}`}
-                >
-                  <div className="message-bubble">
-                    {!isSentByMe && selectedConv.participants.length > 2 && (
-                      <span className="message-sender">{m.sender_name}</span>
-                    )}
+                return (
+                  <div 
+                    key={m.id} 
+                    className={`message-bubble-wrapper ${isSentByMe ? 'sent' : 'received'}`}
+                  >
+                    <div className="message-bubble">
+                      {!isSentByMe && selectedConv.participants.length > 2 && (
+                        <span className="message-sender">{m.sender_name}</span>
+                      )}
 
-                    {m.attachment_name && (
-                      <div className="message-media">
-                        {isImage(m.attachment_type) ? (
-                          <img 
-                            src={attachmentURL} 
-                            alt={m.attachment_name} 
-                            className="message-image" 
-                            onClick={() => window.open(attachmentURL, '_blank')}
-                          />
-                        ) : isVideo(m.attachment_type) ? (
-                          <video 
-                            src={attachmentURL} 
-                            controls 
-                            className="message-video"
-                          />
-                        ) : (
-                          <div className="message-file-card">
-                            <span className="message-file-icon"><IconFile /></span>
-                            <div className="message-file-info">
-                              <div className="message-file-name" title={m.attachment_name}>
-                                {m.attachment_name}
+                      {m.attachment_name && (
+                        <div className="message-media">
+                          {isImage(m.attachment_type) ? (
+                            <img 
+                              src={attachmentURL} 
+                              alt={m.attachment_name} 
+                              className="message-image" 
+                              onClick={() => window.open(attachmentURL, '_blank')}
+                            />
+                          ) : isVideo(m.attachment_type) ? (
+                            <video 
+                              src={attachmentURL} 
+                              controls 
+                              className="message-video"
+                            />
+                          ) : (
+                            <div className="message-file-card">
+                              <span className="message-file-icon"><IconFile /></span>
+                              <div className="message-file-info">
+                                <div className="message-file-name" title={m.attachment_name}>
+                                  {m.attachment_name}
+                                </div>
+                                <div className="message-file-size">
+                                  Attachment File
+                                </div>
                               </div>
-                              <div className="message-file-size">
-                                Attachment File
-                              </div>
+                              <a 
+                                href={attachmentURL} 
+                                download={m.attachment_name} 
+                                className="message-file-download"
+                                title="Download to computer"
+                              >
+                                <IconDownload />
+                              </a>
                             </div>
-                            <a 
-                              href={attachmentURL} 
-                              download={m.attachment_name} 
-                              className="message-file-download"
-                              title="Download to computer"
-                            >
-                              <IconDownload />
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          )}
+                        </div>
+                      )}
 
-                    {m.text && <div className="message-text">{m.text}</div>}
-                    
-                    <div className="message-meta">
-                      <span>{formatTime(m.sent_at)}</span>
+                      {m.text && <div className="message-text">{m.text}</div>}
+                      
+                      <div className="message-meta">
+                        <span>{formatTime(m.sent_at)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
             <div ref={messagesEndRef} />
           </div>
 
@@ -715,6 +902,90 @@ function App() {
               <button className="btn btn-danger" onClick={handleDeleteConversation}>
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shared Media Modal */}
+      {showMediaModal && (
+        <div className="modal-overlay" onClick={() => setShowMediaModal(false)}>
+          <div className="modal-content" style={{ width: '550px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Shared Media & Files</span>
+              <button className="action-btn" onClick={() => setShowMediaModal(false)}>✕</button>
+            </div>
+            <div className="modal-body" onScroll={handleMediaScroll}>
+              {(() => {
+                const mediaMessages = sharedMedia;
+                const visualMedia = mediaMessages.filter(m => isImage(m.attachment_type) || isVideo(m.attachment_type));
+                const docFiles = mediaMessages.filter(m => !isImage(m.attachment_type) && !isVideo(m.attachment_type));
+
+                if (mediaMessages.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '32px' }}>
+                      No media or files shared in this chat.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div>
+                    {visualMedia.length > 0 && (
+                      <div>
+                        <div className="media-files-header">Photos & Videos ({visualMedia.length})</div>
+                        <div className="media-grid">
+                          {visualMedia.map(m => {
+                            const url = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
+                            const isImg = isImage(m.attachment_type);
+                            return (
+                              <div 
+                                key={m.id} 
+                                className="media-grid-item"
+                                onClick={() => window.open(url, '_blank')}
+                                title={`Shared by ${m.sender_name} at ${formatTime(m.sent_at)}`}
+                              >
+                                {isImg ? (
+                                  <img src={url} alt={m.attachment_name} className="media-grid-img" />
+                                ) : (
+                                  <video src={url} className="media-grid-video" muted playsInline />
+                                )}
+                                {!isImg && <span className="media-grid-video-badge">VIDEO</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {docFiles.length > 0 && (
+                      <div style={{ marginTop: visualMedia.length > 0 ? '20px' : '0' }}>
+                        <div className="media-files-header">Documents & Files ({docFiles.length})</div>
+                        <div className="media-files-list">
+                          {docFiles.map(m => {
+                            const url = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
+                            return (
+                              <div key={m.id} className="message-file-card" style={{ margin: 0 }}>
+                                <span className="message-file-icon"><IconFile /></span>
+                                <div className="message-file-info">
+                                  <div className="message-file-name" title={m.attachment_name}>{m.attachment_name}</div>
+                                  <div className="message-file-size">Shared by {m.sender_name}</div>
+                                </div>
+                                <a href={url} download={m.attachment_name} className="message-file-download" title="Download">
+                                  <IconDownload />
+                                </a>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowMediaModal(false)}>Close</button>
             </div>
           </div>
         </div>
