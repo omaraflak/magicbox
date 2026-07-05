@@ -96,7 +96,7 @@ export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, 
 
         setResetLoading(true);
         try {
-            const result = await onResetIdentity();
+            const result = await onResetIdentity(unlocked);
             if (result.cancelled) return;
             if (result.success) {
                 setResetStatus(result.message);
@@ -313,16 +313,12 @@ export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, 
                 <div className="tab-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start', textAlign: 'left' }}>
                     <span style={{ fontSize: '1.2rem' }}>⚠️</span>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#ef4444', margin: 0, textAlign: 'left' }}>
-                        Key Compromised: Reset P2P Identity
+                        Mnemonic Compromised: Reset Identity
                     </h3>
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '20px' }}>
-                    Warning: Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a brand new mnemonic and identity. This generates a brand new Master Key and resets key indexes. {unlocked ? (
-                        "It will send a blacklist signal to your contacts so they stop trusting your old identity, and immediately enqueue new contact requests so they can automatically reconnect with your new identity."
-                    ) : (
-                        "Since the system is locked, it will skip sending blacklist signals to your contacts (as the old recovery mnemonic is unavailable to sign them), but it will immediately enqueue new contact requests so they can automatically reconnect with your new identity once they accept."
-                    )} Contacts are preserved.
+                    Use this option only if you suspect your 12-word recovery mnemonic phrase was compromised, or you want to start fresh with a brand new mnemonic and identity.
                 </p>
 
                 <form onSubmit={handleResetIdentitySubmit} style={{ maxWidth: '500px' }}>
@@ -356,7 +352,7 @@ export default function AdminKeysTab({ onRotateKeys, onResetIdentity, onUnlock, 
                                 <div className="spinner-sm" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
                             </span>
                         ) : (
-                            'Reset P2P Identity'
+                            'Reset Identity'
                         )}
                     </button>
                 </form>
