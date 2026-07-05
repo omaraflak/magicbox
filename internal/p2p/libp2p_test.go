@@ -240,3 +240,55 @@ func TestLibp2pServiceLoopback(t *testing.T) {
 	}
 }
 
+func TestParsePEMToLibp2pKey_ValidKey(t *testing.T) {
+	mnemonic, _ := internalcrypto.GenerateMnemonic()
+	edPriv, _ := internalcrypto.DeriveIdentityKey(mnemonic, 0)
+
+	pemBytes, err := internalcrypto.MarshalPrivateKey(edPriv)
+	if err != nil {
+		t.Fatalf("failed to marshal key: %v", err)
+	}
+
+	libp2pKey, err := ParsePEMToLibp2pKey(pemBytes)
+	if err != nil {
+		t.Fatalf("ParsePEMToLibp2pKey failed: %v", err)
+	}
+
+	if libp2pKey == nil {
+		t.Fatal("expected non-nil libp2p key")
+	}
+
+	// Verify the key matches by comparing peer IDs
+	peerID, err := libp2pcrypto.UnmarshalEd25519PrivateKey(edPriv)
+	if err != nil {
+		t.Fatalf("failed to unmarshal for comparison: %v", err)
+	}
+
+	rawOriginal, _ := peerID.Raw()
+	rawParsed, _ := libp2pKey.Raw()
+	if string(rawOriginal) != string(rawParsed) {
+		t.Error("parsed key does not match original")
+	}
+}
+
+func TestParsePEMToLibp2pKey_InvalidPEMFails(t *testing.T) {
+	_, err := ParsePEMToLibp2pKey([]byte("not a valid PEM"))
+	if err == nil {
+		t.Error("expected error for invalid PEM, got nil")
+	}
+}
+
+func TestParsePEMToLibp2pKey_X25519KeyFails(t *testing.T) {
+	mnemonic, _ := internalcrypto.GenerateMnemonic()
+	xPriv, _ := internalcrypto.DeriveEncryptionKey(mnemonic, 0)
+
+	pemBytes, err := internalcrypto.MarshalPrivateKey(xPriv)
+	if err != nil {
+		t.Fatalf("failed to marshal X25519 key: %v", err)
+	}
+
+	_, err = ParsePEMToLibp2pKey(pemBytes)
+	if err == nil {
+		t.Error("expected error when passing X25519 PEM to ParsePEMToLibp2pKey, got nil")
+	}
+}

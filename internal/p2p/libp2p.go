@@ -3,12 +3,8 @@ package p2p
 import (
 	"context"
 	"crypto/ecdh"
-	"crypto/ed25519"
-	"crypto/x509"
-
 
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"sync"
@@ -25,6 +21,7 @@ import (
 	"github.com/magicbox/core/internal/logging"
 	"github.com/multiformats/go-multiaddr"
 )
+
 
 const ProtocolID = protocol.ID("/magicbox/messaging/1.0.0")
 
@@ -332,26 +329,13 @@ func (s *Libp2pService) handleStream(stream network.Stream) {
 	}
 }
 
-// ParsePEMToPrivKey decodes an Ed25519 PKCS#8 private key PEM block and unmarshals it to a libp2p PrivKey.
-func ParsePEMToPrivKey(pemBytes []byte) (crypto.PrivKey, error) {
-	block, _ := pem.Decode(pemBytes)
-	if block == nil || block.Type != "PRIVATE KEY" {
-		return nil, fmt.Errorf("invalid private key PEM type")
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+// ParsePEMToLibp2pKey decodes an Ed25519 private key from PEM bytes and converts
+// it to a libp2p PrivKey. PEM/PKCS8 parsing is delegated to internal/crypto to
+// avoid duplicating that logic.
+func ParsePEMToLibp2pKey(pemBytes []byte) (crypto.PrivKey, error) {
+	edPriv, err := corecrypto.UnmarshalEd25519PrivateKey(pemBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse PKCS8 private key: %w", err)
-	}
-	edPriv, ok := parsed.(ed25519.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("not an Ed25519 private key")
+		return nil, fmt.Errorf("failed to parse Ed25519 PEM: %w", err)
 	}
 	return crypto.UnmarshalEd25519PrivateKey(edPriv)
 }
-
-// ParsePEMToX25519PrivKey decodes an X25519 PKCS#8 private key PEM block.
-func ParsePEMToX25519PrivKey(pemBytes []byte) (*ecdh.PrivateKey, error) {
-	return corecrypto.UnmarshalX25519PrivateKey(pemBytes)
-}
-
-

@@ -15,6 +15,7 @@ import (
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/cron"
+	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
 	"github.com/magicbox/core/internal/logging"
@@ -97,12 +98,12 @@ func run() error {
 	logger.Info("cron jobs started")
 
 	// 9. Initialize and start P2P service.
-	p2pKey, err := p2p.ParsePEMToPrivKey(cfg.Keys.PrivateKeyPEM)
+	p2pKey, err := p2p.ParsePEMToLibp2pKey(cfg.Keys.PrivateKeyPEM)
 	if err != nil {
 		return fmt.Errorf("failed to parse identity key for P2P: %w", err)
 	}
 
-	encryptionPriv, err := p2p.ParsePEMToX25519PrivKey(cfg.Keys.EncryptionKeyPEM)
+	encryptionPriv, err := crypto.UnmarshalX25519PrivateKey(cfg.Keys.EncryptionKeyPEM)
 	if err != nil {
 		return fmt.Errorf("failed to parse encryption key for P2P: %w", err)
 	}
