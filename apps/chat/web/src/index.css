@@ -847,5 +847,46 @@ html, body, #root {
   }
 }
 
+.media-panel {
+  width: 320px;
+  background-color: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  animation: slideLeft 0.15s ease-out;
+}
+
+.media-panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.media-panel-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.media-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+@keyframes slideLeft {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+  to {
+    width: 320px;
+    opacity: 1;
+  }
+}
+
+
 
 

@@ -69,7 +69,7 @@ function App() {
   const [renameInput, setRenameInput] = useState('');
 
   // Shared Media & Search States
-  const [showMediaModal, setShowMediaModal] = useState(false);
+  const [showMediaPanel, setShowMediaPanel] = useState(false);
   const [sharedMedia, setSharedMedia] = useState([]);
   const [hasMoreMedia, setHasMoreMedia] = useState(true);
   const [isLoadingMoreMedia, setIsLoadingMoreMedia] = useState(false);
@@ -138,7 +138,7 @@ function App() {
     } else {
       setMessages([]);
     }
-    setShowMediaModal(false);
+    setShowMediaPanel(false);
     setSharedMedia([]);
     setHasMoreMedia(true);
     setIsLoadingMoreMedia(false);
@@ -551,7 +551,8 @@ function App() {
 
       {/* Main Conversation Window */}
       {selectedConv ? (
-        <div className="chat-area animate-fade-in">
+        <>
+          <div className="chat-area animate-fade-in">
           <div className="chat-header">
             <div className="chat-header-info">
               <div className="avatar">
@@ -561,7 +562,7 @@ function App() {
                 <div className="chat-title">{getConversationName(selectedConv)}</div>
                 <div className="chat-subtitle">
                   {selectedConv.participants.length > 2 
-                    ? `Group · ${selectedConv.participants.map(p => p.display_name).join(', ')}`
+                    ? `(${selectedConv.participants.length}) Group Chat`
                     : 'Direct Message'
                   }
                 </div>
@@ -602,7 +603,7 @@ function App() {
                   <button 
                     className="dropdown-item" 
                     onClick={() => {
-                      setShowMediaModal(true);
+                      setShowMediaPanel(true);
                       setSharedMedia([]);
                       setHasMoreMedia(true);
                       fetchSharedMedia(selectedConv.id);
@@ -773,6 +774,84 @@ function App() {
             </button>
           </form>
         </div>
+        {showMediaPanel && (
+          <div className="media-panel">
+            <div className="media-panel-header">
+              <span className="media-panel-title">Shared Media</span>
+              <button className="action-btn" onClick={() => setShowMediaPanel(false)}>✕</button>
+            </div>
+            <div className="media-panel-body" onScroll={handleMediaScroll}>
+              {(() => {
+                const mediaMessages = sharedMedia;
+                const visualMedia = mediaMessages.filter(m => isImage(m.attachment_type) || isVideo(m.attachment_type));
+                const docFiles = mediaMessages.filter(m => !isImage(m.attachment_type) && !isVideo(m.attachment_type));
+
+                if (mediaMessages.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '32px' }}>
+                      No media or files shared in this chat.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div>
+                    {visualMedia.length > 0 && (
+                      <div>
+                        <div className="media-files-header">Photos & Videos ({visualMedia.length})</div>
+                        <div className="media-grid">
+                          {visualMedia.map(m => {
+                            const url = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
+                            const isImg = isImage(m.attachment_type);
+                            return (
+                              <div 
+                                key={m.id} 
+                                className="media-grid-item"
+                                onClick={() => window.open(url, '_blank')}
+                                title={`Shared by ${m.sender_name} at ${formatTime(m.sent_at)}`}
+                              >
+                                {isImg ? (
+                                  <img src={url} alt={m.attachment_name} className="media-grid-img" />
+                                ) : (
+                                  <video src={url} className="media-grid-video" muted playsInline />
+                                )}
+                                {!isImg && <span className="media-grid-video-badge">VIDEO</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {docFiles.length > 0 && (
+                      <div style={{ marginTop: visualMedia.length > 0 ? '20px' : '0' }}>
+                        <div className="media-files-header">Documents & Files ({docFiles.length})</div>
+                        <div className="media-files-list">
+                          {docFiles.map(m => {
+                            const url = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
+                            return (
+                              <div key={m.id} className="message-file-card" style={{ margin: 0 }}>
+                                <span className="message-file-icon"><IconFile /></span>
+                                <div className="message-file-info">
+                                  <div className="message-file-name" title={m.attachment_name}>{m.attachment_name}</div>
+                                  <div className="message-file-size">Shared by {m.sender_name}</div>
+                                </div>
+                                <a href={url} download={m.attachment_name} className="message-file-download" title="Download">
+                                  <IconDownload />
+                                </a>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </>
       ) : (
         <div className="chat-empty-state">
           <div className="chat-empty-icon"><IconChat /></div>
@@ -910,90 +989,6 @@ function App() {
               <button className="btn btn-danger" onClick={handleDeleteConversation}>
                 Delete
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Shared Media Modal */}
-      {showMediaModal && (
-        <div className="modal-overlay" onClick={() => setShowMediaModal(false)}>
-          <div className="modal-content" style={{ width: '550px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">Shared Media & Files</span>
-              <button className="action-btn" onClick={() => setShowMediaModal(false)}>✕</button>
-            </div>
-            <div className="modal-body" onScroll={handleMediaScroll}>
-              {(() => {
-                const mediaMessages = sharedMedia;
-                const visualMedia = mediaMessages.filter(m => isImage(m.attachment_type) || isVideo(m.attachment_type));
-                const docFiles = mediaMessages.filter(m => !isImage(m.attachment_type) && !isVideo(m.attachment_type));
-
-                if (mediaMessages.length === 0) {
-                  return (
-                    <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '32px' }}>
-                      No media or files shared in this chat.
-                    </div>
-                  );
-                }
-
-                return (
-                  <div>
-                    {visualMedia.length > 0 && (
-                      <div>
-                        <div className="media-files-header">Photos & Videos ({visualMedia.length})</div>
-                        <div className="media-grid">
-                          {visualMedia.map(m => {
-                            const url = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
-                            const isImg = isImage(m.attachment_type);
-                            return (
-                              <div 
-                                key={m.id} 
-                                className="media-grid-item"
-                                onClick={() => window.open(url, '_blank')}
-                                title={`Shared by ${m.sender_name} at ${formatTime(m.sent_at)}`}
-                              >
-                                {isImg ? (
-                                  <img src={url} alt={m.attachment_name} className="media-grid-img" />
-                                ) : (
-                                  <video src={url} className="media-grid-video" muted playsInline />
-                                )}
-                                {!isImg && <span className="media-grid-video-badge">VIDEO</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {docFiles.length > 0 && (
-                      <div style={{ marginTop: visualMedia.length > 0 ? '20px' : '0' }}>
-                        <div className="media-files-header">Documents & Files ({docFiles.length})</div>
-                        <div className="media-files-list">
-                          {docFiles.map(m => {
-                            const url = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
-                            return (
-                              <div key={m.id} className="message-file-card" style={{ margin: 0 }}>
-                                <span className="message-file-icon"><IconFile /></span>
-                                <div className="message-file-info">
-                                  <div className="message-file-name" title={m.attachment_name}>{m.attachment_name}</div>
-                                  <div className="message-file-size">Shared by {m.sender_name}</div>
-                                </div>
-                                <a href={url} download={m.attachment_name} className="message-file-download" title="Download">
-                                  <IconDownload />
-                                </a>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowMediaModal(false)}>Close</button>
             </div>
           </div>
         </div>
