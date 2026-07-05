@@ -1,13 +1,10 @@
 package rest
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
-	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
@@ -72,28 +69,19 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetAddr := multiaddrs[0]
-	for _, addr := range multiaddrs {
-		if strings.Contains(addr, "/p2p-circuit") {
-			targetAddr = addr
-			break
-		}
-	}
+	targetAddr := preferRelayAddr(multiaddrs)
 
-	// Unmarshal static X25519 public key and encode its raw bytes as hex
-	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.Keys.EncryptionPubPEM)
+	hexPub, err := s.localEncPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local encryption public key: "+err.Error())
 		return
 	}
-	hexPub := hex.EncodeToString(pubKey.Bytes())
 
-	masterPub, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
+	hexMasterPub, err := s.localMasterPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local master public key: "+err.Error())
 		return
 	}
-	hexMasterPub := hex.EncodeToString(masterPub)
 
 	payload := &invite.Payload{
 		Multiaddr:    targetAddr,
@@ -168,31 +156,19 @@ func (s *Server) handleSendContactRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	// Build the request payload with our own info.
-	ourMultiaddrs := s.p2pService.Multiaddrs()
-	ourMultiaddr := ""
-	if len(ourMultiaddrs) > 0 {
-		ourMultiaddr = ourMultiaddrs[0]
-		for _, addr := range ourMultiaddrs {
-			if strings.Contains(addr, "/p2p-circuit") {
-				ourMultiaddr = addr
-				break
-			}
-		}
-	}
+	ourMultiaddr := preferRelayAddr(s.p2pService.Multiaddrs())
 
-	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.Keys.EncryptionPubPEM)
+	ourEncPubHex, err := s.localEncPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read encryption key")
 		return
 	}
-	ourEncPubHex := hex.EncodeToString(pubKey.Bytes())
 
-	ourMasterPubKey, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
+	ourMasterPubHex, err := s.localMasterPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local master public key: "+err.Error())
 		return
 	}
-	ourMasterPubHex := hex.EncodeToString(ourMasterPubKey)
 
 	requestPayload, _ := json.Marshal(protocol.ContactRequestPayload{
 		DisplayName:  claims.Username,
@@ -297,33 +273,22 @@ func (s *Server) handleAcceptContactRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Send accept message back to the requester.
-	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.Keys.EncryptionPubPEM)
+	ourEncPubHex, err := s.localEncPubKeyHex()
 	if err != nil {
 		s.logger.Error("failed to read encryption key for accept message", logging.F("error", err.Error()))
 	} else {
-		ourMultiaddrs := s.p2pService.Multiaddrs()
-		ourMultiaddr := ""
-		if len(ourMultiaddrs) > 0 {
-			ourMultiaddr = ourMultiaddrs[0]
-			for _, addr := range ourMultiaddrs {
-				if strings.Contains(addr, "/p2p-circuit") {
-					ourMultiaddr = addr
-					break
-				}
-			}
-		}
+		ourMultiaddr := preferRelayAddr(s.p2pService.Multiaddrs())
 
-		ourMasterPubKey, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
+		ourMasterPubHex, err := s.localMasterPubKeyHex()
 		if err != nil {
 			s.logger.Error("failed to parse local master public key for accept message", logging.F("error", err.Error()))
 			return
 		}
-		ourMasterPubHex := hex.EncodeToString(ourMasterPubKey)
 
 		acceptPayload, _ := json.Marshal(protocol.ContactAcceptPayload{
 			DisplayName:  claims.Username,
 			Multiaddr:    ourMultiaddr,
-			EncPubKey:    hex.EncodeToString(pubKey.Bytes()),
+			EncPubKey:    ourEncPubHex,
 			UserID:       claims.UserID,
 			MasterPubKey: ourMasterPubHex,
 		})

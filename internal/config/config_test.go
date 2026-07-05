@@ -55,17 +55,6 @@ func TestRecoverKeys_Wrapper(t *testing.T) {
 	}
 }
 
-func TestRotateEncryptionKey_Wrapper(t *testing.T) {
-	tempDir := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(tempDir, "core"), 0750)
-	mnemonic, _ := crypto.GenerateMnemonic()
-	if err := RecoverKeys(tempDir, mnemonic, 1, 1); err != nil {
-		t.Fatalf("RecoverKeys failed: %v", err)
-	}
-	if err := RotateEncryptionKey(tempDir, mnemonic); err != nil {
-		t.Fatalf("RotateEncryptionKey wrapper failed: %v", err)
-	}
-}
 
 func TestLoad_MnemonicStoreInitialization(t *testing.T) {
 	// Clean up any existing data dir before and after

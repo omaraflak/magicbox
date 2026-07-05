@@ -172,12 +172,6 @@ func RecoverKeys(root string, mnemonic string, identityIndex, encryptionIndex in
 	return keymanager.RecoverAll(keymanager.NewKeyPaths(root), mnemonic, identityIndex, encryptionIndex)
 }
 
-// RotateEncryptionKey rotates the encryption key.
-// This is a convenience wrapper around keymanager.RotateEncryption.
-func RotateEncryptionKey(root string, mnemonic string) error {
-	return keymanager.RotateEncryption(keymanager.NewKeyPaths(root), mnemonic)
-}
-
 func isWritable(dir string) bool {
 	testFile := filepath.Join(dir, ".writable_test")
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {

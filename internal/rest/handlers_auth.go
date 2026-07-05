@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,45 +36,12 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !usernameRegex.MatchString(req.Username) {
-		writeError(w, http.StatusBadRequest, "username must be 3-32 lowercase alphanumeric or underscore characters")
-		return
-	}
-	if len(req.Password) < minPassLen {
-		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
-		return
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
+	userID, err := s.createAdminUser(w, req.Username, req.Password)
 	if err != nil {
-		s.logger.Error("setup: failed to hash password", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
+		s.logger.Error("setup failed", logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	userID := uuid.NewString()
-	if err := s.db.CreateUser(userID, req.Username, string(hash), true); err != nil {
-		s.logger.Error("setup: failed to create user", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	// Create user directories.
-	userDir := filepath.Join(s.config.Root, "users", req.Username)
-	for _, sub := range []string{"apps", "shared"} {
-		if err := os.MkdirAll(filepath.Join(userDir, sub), 0750); err != nil {
-			s.logger.Error("setup: failed to create user directory", logging.F("error", err.Error()))
-		}
-	}
-
-	// Auto-login: generate session token and set cookie.
-	token, err := GenerateSessionToken(s.config.JWTSecret, userID, req.Username, true)
-	if err != nil {
-		s.logger.Error("setup: failed to generate session token", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	SetSessionCookie(w, token)
 
 	s.logger.Info("setup: admin user created", logging.F("username", req.Username))
 	writeJSON(w, http.StatusCreated, map[string]string{
@@ -106,51 +74,18 @@ func (s *Server) handleSetupRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !usernameRegex.MatchString(req.Username) {
-		writeError(w, http.StatusBadRequest, "username must be 3-32 lowercase alphanumeric or underscore characters")
-		return
-	}
-	if len(req.Password) < minPassLen {
-		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
-		return
-	}
-
 	if err := config.RecoverKeys(s.config.Root, req.Mnemonic, 0, 0); err != nil {
 		s.logger.Error("setup recover: failed to recover keys", logging.F("error", err.Error()))
 		writeError(w, http.StatusBadRequest, "failed to recover keys: "+err.Error())
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
+	userID, err := s.createAdminUser(w, req.Username, req.Password)
 	if err != nil {
-		s.logger.Error("setup recover: failed to hash password", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
+		s.logger.Error("setup recover failed", logging.F("error", err.Error()))
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	userID := uuid.NewString()
-	if err := s.db.CreateUser(userID, req.Username, string(hash), true); err != nil {
-		s.logger.Error("setup recover: failed to create user", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	// Create user directories.
-	userDir := filepath.Join(s.config.Root, "users", req.Username)
-	for _, sub := range []string{"apps", "shared"} {
-		if err := os.MkdirAll(filepath.Join(userDir, sub), 0750); err != nil {
-			s.logger.Error("setup recover: failed to create user directory", logging.F("error", err.Error()))
-		}
-	}
-
-	// Auto-login: generate session token and set cookie.
-	token, err := GenerateSessionToken(s.config.JWTSecret, userID, req.Username, true)
-	if err != nil {
-		s.logger.Error("setup recover: failed to generate session token", logging.F("error", err.Error()))
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	SetSessionCookie(w, token)
 
 	s.logger.Info("setup recover: admin user created and keys recovered", logging.F("username", req.Username))
 	writeJSON(w, http.StatusCreated, map[string]string{
@@ -289,4 +224,43 @@ func (s *Server) handleUpdatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
+}
+
+// createAdminUser validates the username/password, hashes the password, inserts
+// the user into the database, creates system directories on disk, and sets up
+// auto-login cookies.
+func (s *Server) createAdminUser(w http.ResponseWriter, username, password string) (string, error) {
+	if !usernameRegex.MatchString(username) {
+		return "", fmt.Errorf("username must be 3-32 lowercase alphanumeric or underscore characters")
+	}
+	if len(password) < minPassLen {
+		return "", fmt.Errorf("password must be at least 8 characters")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	userID := uuid.NewString()
+	if err := s.db.CreateUser(userID, username, string(hash), true); err != nil {
+		return "", fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Create user directories.
+	userDir := filepath.Join(s.config.Root, "users", username)
+	for _, sub := range []string{"apps", "shared"} {
+		if err := os.MkdirAll(filepath.Join(userDir, sub), 0750); err != nil {
+			s.logger.Error("setup: failed to create user directory", logging.F("error", err.Error()))
+		}
+	}
+
+	// Auto-login: generate session token and set cookie.
+	token, err := GenerateSessionToken(s.config.JWTSecret, userID, username, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate session token: %w", err)
+	}
+	SetSessionCookie(w, token)
+
+	return userID, nil
 }

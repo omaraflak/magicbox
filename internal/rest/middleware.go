@@ -2,7 +2,6 @@ package rest
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -19,13 +18,13 @@ func AuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr, err := GetSessionCookie(r)
 			if err != nil {
-				writeJSONError(w, http.StatusUnauthorized, "authentication required")
+				writeError(w, http.StatusUnauthorized, "authentication required")
 				return
 			}
 
 			claims, err := ValidateSessionToken(secret, tokenStr)
 			if err != nil {
-				writeJSONError(w, http.StatusUnauthorized, "invalid or expired session")
+				writeError(w, http.StatusUnauthorized, "invalid or expired session")
 				return
 			}
 
@@ -42,7 +41,7 @@ func AppAccessMiddleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetUserFromContext(r)
 			if claims == nil {
-				writeJSONError(w, http.StatusUnauthorized, "authentication required")
+				writeError(w, http.StatusUnauthorized, "authentication required")
 				return
 			}
 
@@ -51,7 +50,7 @@ func AppAccessMiddleware() func(http.Handler) http.Handler {
 			if len(parts) >= 3 && parts[1] == "u" {
 				targetUsername := parts[2]
 				if claims.Username != targetUsername {
-					writeJSONError(w, http.StatusForbidden, "access denied to this app instance")
+					writeError(w, http.StatusForbidden, "access denied to this app instance")
 					return
 				}
 			}
@@ -68,7 +67,7 @@ func AdminMiddleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetUserFromContext(r)
 			if claims == nil || !claims.IsAdmin {
-				writeJSONError(w, http.StatusForbidden, "admin access required")
+				writeError(w, http.StatusForbidden, "admin access required")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -105,29 +104,22 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 		case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
 			headerToken := r.Header.Get("X-CSRF-Token")
 			if headerToken == "" {
-				writeJSONError(w, http.StatusForbidden, "missing CSRF token")
+				writeError(w, http.StatusForbidden, "missing CSRF token")
 				return
 			}
 
 			cookie, err := r.Cookie(CSRFCookieName)
 			if err != nil {
-				writeJSONError(w, http.StatusForbidden, "missing CSRF cookie")
+				writeError(w, http.StatusForbidden, "missing CSRF cookie")
 				return
 			}
 
 			if !ValidateCSRFToken(cookie.Value, headerToken) {
-				writeJSONError(w, http.StatusForbidden, "invalid CSRF token")
+				writeError(w, http.StatusForbidden, "invalid CSRF token")
 				return
 			}
 		}
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-// writeJSONError writes a JSON error response.
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

@@ -26,39 +26,17 @@ func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional status filter.
 	statusFilter := r.URL.Query().Get("status")
-	if statusFilter != "" {
-		var filtered []interface{}
-		for _, a := range apps {
-			if a.Status == statusFilter {
-				filtered = append(filtered, appResponse(a))
-			}
-		}
-		writeJSON(w, http.StatusOK, filtered)
-		return
-	}
-
-	var result []interface{}
+	var result []map[string]interface{}
 	for _, a := range apps {
-		result = append(result, appResponse(a))
+		if statusFilter == "" || a.Status == statusFilter {
+			result = append(result, appResponse(a))
+		}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
 
-func appResponse(a interface{}) map[string]interface{} {
-	var app db.App
-	switch val := a.(type) {
-	case db.App:
-		app = val
-	case *db.App:
-		if val != nil {
-			app = *val
-		}
-	default:
-		return nil
-	}
-
+func appResponse(app db.App) map[string]interface{} {
 	return map[string]interface{}{
 		"id":         app.ID,
 		"app_id":     app.AppID,
@@ -104,26 +82,14 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUninstallApp(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	appDBID := r.PathValue("id")
-	if appDBID == "" {
-		writeError(w, http.StatusBadRequest, "missing app id")
-		return
-	}
-
-	app, err := s.db.GetAppByID(appDBID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if app == nil || app.UserID != claims.UserID {
-		writeError(w, http.StatusNotFound, "app not found")
+	app, ok := s.getOwnedApp(w, r)
+	if !ok {
 		return
 	}
 
 	wipe := (r.URL.Query().Get("wipe") == "true")
 
-	if err := s.orchestrator.Uninstall(r.Context(), appDBID, wipe); err != nil {
+	if err := s.orchestrator.Uninstall(r.Context(), app.ID, wipe); err != nil {
 		s.logger.Error("uninstall app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -133,20 +99,12 @@ func (s *Server) handleUninstallApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStartApp(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	appDBID := r.PathValue("id")
-
-	app, err := s.db.GetAppByID(appDBID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if app == nil || app.UserID != claims.UserID {
-		writeError(w, http.StatusNotFound, "app not found")
+	app, ok := s.getOwnedApp(w, r)
+	if !ok {
 		return
 	}
 
-	if err := s.orchestrator.Start(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.Start(r.Context(), app.ID); err != nil {
 		s.logger.Error("start app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -156,20 +114,12 @@ func (s *Server) handleStartApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStopApp(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	appDBID := r.PathValue("id")
-
-	app, err := s.db.GetAppByID(appDBID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if app == nil || app.UserID != claims.UserID {
-		writeError(w, http.StatusNotFound, "app not found")
+	app, ok := s.getOwnedApp(w, r)
+	if !ok {
 		return
 	}
 
-	if err := s.orchestrator.Stop(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.Stop(r.Context(), app.ID); err != nil {
 		s.logger.Error("stop app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -179,16 +129,8 @@ func (s *Server) handleStopApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	appDBID := r.PathValue("id")
-
-	app, err := s.db.GetAppByID(appDBID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if app == nil || app.UserID != claims.UserID {
-		writeError(w, http.StatusNotFound, "app not found")
+	app, ok := s.getOwnedApp(w, r)
+	if !ok {
 		return
 	}
 
@@ -200,7 +142,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.orchestrator.Update(r.Context(), appDBID, manifestData); err != nil {
+	if err := s.orchestrator.Update(r.Context(), app.ID, manifestData); err != nil {
 		s.logger.Error("update app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -210,20 +152,12 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRebuildApp(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	appDBID := r.PathValue("id")
-
-	app, err := s.db.GetAppByID(appDBID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if app == nil || app.UserID != claims.UserID {
-		writeError(w, http.StatusNotFound, "app not found")
+	app, ok := s.getOwnedApp(w, r)
+	if !ok {
 		return
 	}
 
-	if err := s.orchestrator.Rebuild(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.Rebuild(r.Context(), app.ID); err != nil {
 		s.logger.Error("rebuild app: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -233,20 +167,12 @@ func (s *Server) handleRebuildApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRotateToken(w http.ResponseWriter, r *http.Request) {
-	claims := GetUserFromContext(r)
-	appDBID := r.PathValue("id")
-
-	app, err := s.db.GetAppByID(appDBID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if app == nil || app.UserID != claims.UserID {
-		writeError(w, http.StatusNotFound, "app not found")
+	app, ok := s.getOwnedApp(w, r)
+	if !ok {
 		return
 	}
 
-	if err := s.orchestrator.RotateToken(r.Context(), appDBID); err != nil {
+	if err := s.orchestrator.RotateToken(r.Context(), app.ID); err != nil {
 		s.logger.Error("rotate token: orchestrator error", logging.F("error", err.Error()))
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -335,4 +261,32 @@ func (s *Server) handleAppProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.ServeHTTP(w, r)
+}
+
+// getOwnedApp extracts claims, validates the path ID, retrieves the app,
+// and validates that the logged-in user owns the app.
+func (s *Server) getOwnedApp(w http.ResponseWriter, r *http.Request) (*db.App, bool) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return nil, false
+	}
+
+	appDBID := r.PathValue("id")
+	if appDBID == "" {
+		writeError(w, http.StatusBadRequest, "missing app id")
+		return nil, false
+	}
+
+	app, err := s.db.GetAppByID(appDBID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return nil, false
+	}
+	if app == nil || app.UserID != claims.UserID {
+		writeError(w, http.StatusNotFound, "app not found")
+		return nil, false
+	}
+
+	return app, true
 }

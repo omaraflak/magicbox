@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -111,79 +112,8 @@ func (s *Server) handleAdminRotateKeys(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Enqueue updates for contacts
 	if req.RotateIdentity {
-		masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to derive master identity key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		masterPubBytes := masterPriv.Public().(ed25519.PublicKey)
-		masterPubKeyHex := hex.EncodeToString(masterPubBytes)
-
-		oldPriv, err := crypto.DeriveIdentityKey(mnemonic, oldIdentityIndex)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to derive old identity key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		newPriv, err := crypto.DeriveIdentityKey(mnemonic, newIdentityIndex)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to derive new identity key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		libp2pNewPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&newPriv)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to convert new std key to libp2p key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		newPeerID, err := peer.IDFromPrivateKey(libp2pNewPriv)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to get peer ID from private key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		libp2pOldPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&oldPriv)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to convert old std key to libp2p key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		oldPeerID, err := peer.IDFromPrivateKey(libp2pOldPriv)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to get old peer ID", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		addrs := s.p2pService.Multiaddrs()
-		if len(addrs) == 0 {
-			s.logger.Error("admin rotate keys: no multiaddresses found")
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		oldMultiaddr := addrs[0]
-		newMultiaddr := strings.ReplaceAll(oldMultiaddr, oldPeerID.String(), newPeerID.String())
-
-		cert, err := protocol.SignSuccessionCertificate(masterPriv, masterPubKeyHex, oldPeerID.String(), newPeerID.String(), newMultiaddr, encPubKeyHex)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to sign succession certificate", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		certBytes, err := json.Marshal(cert)
-		if err != nil {
-			s.logger.Error("admin rotate keys: failed to marshal succession certificate", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		if err := protocol.EnqueueForContacts(s.db, contacts, protocol.AppIDKeySuccession, certBytes); err != nil {
-			s.logger.Error("admin rotate keys: failed to enqueue succession certificate", logging.F("error", err.Error()))
+		if err := s.buildAndEnqueueSuccession(mnemonic, oldIdentityIndex, newIdentityIndex, contacts, encPubKeyHex); err != nil {
+			s.logger.Error("admin rotate keys: failed to build and enqueue succession", logging.F("error", err.Error()))
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -269,54 +199,6 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 		newIndex := s.config.Keys.IdentityKeyIndex + 1
 		newEncIndex := s.config.Keys.EncryptionKeyIndex + 1
 
-		oldPriv, err := crypto.DeriveIdentityKey(mnemonic, s.config.Keys.IdentityKeyIndex)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to derive old identity key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		newPriv, err := crypto.DeriveIdentityKey(mnemonic, newIndex)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to derive new identity key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		libp2pNewPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&newPriv)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to convert new std key to libp2p key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		newPeerID, err := peer.IDFromPrivateKey(libp2pNewPriv)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to get peer ID from private key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		libp2pOldPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&oldPriv)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to convert old std key to libp2p key", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		oldPeerID, err := peer.IDFromPrivateKey(libp2pOldPriv)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to get old peer ID", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		addrs := s.p2pService.Multiaddrs()
-		if len(addrs) == 0 {
-			s.logger.Error("admin reset identity keys: no multiaddresses found")
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		oldMultiaddr := addrs[0]
-		newMultiaddr := strings.ReplaceAll(oldMultiaddr, oldPeerID.String(), newPeerID.String())
-
 		newXPriv, err := crypto.DeriveEncryptionKey(mnemonic, newEncIndex)
 		if err != nil {
 			s.logger.Error("admin reset identity keys: failed to derive new encryption key", logging.F("error", err.Error()))
@@ -325,25 +207,15 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 		}
 		newEncPubKeyHex := hex.EncodeToString(newXPriv.PublicKey().Bytes())
 
-		masterPubBytesRaw := masterPriv.Public().(ed25519.PublicKey)
-		masterPubKeyHex := hex.EncodeToString(masterPubBytesRaw)
-
-		cert, err := protocol.SignSuccessionCertificate(masterPriv, masterPubKeyHex, oldPeerID.String(), newPeerID.String(), newMultiaddr, newEncPubKeyHex)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to sign succession certificate", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		certBytes, err := json.Marshal(cert)
-		if err != nil {
-			s.logger.Error("admin reset identity keys: failed to marshal succession certificate", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
 		contacts, err := s.db.GetContacts(user.UserID)
 		if err != nil {
 			s.logger.Error("admin reset identity keys: database error getting contacts", logging.F("error", err.Error()))
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		if err := s.buildAndEnqueueSuccession(mnemonic, s.config.Keys.IdentityKeyIndex, newIndex, contacts, newEncPubKeyHex); err != nil {
+			s.logger.Error("admin reset identity keys: failed to build and enqueue succession", logging.F("error", err.Error()))
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -361,12 +233,6 @@ func (s *Server) handleAdminResetIdentityKeys(w http.ResponseWriter, r *http.Req
 
 		s.config.Keys.IdentityKeyIndex = newIndex
 		s.config.Keys.EncryptionKeyIndex = newEncIndex
-
-		if err := protocol.EnqueueForContacts(s.db, contacts, protocol.AppIDKeySuccession, certBytes); err != nil {
-			s.logger.Error("admin reset identity keys: failed to enqueue succession certificate", logging.F("error", err.Error()))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
 
 		writeJSON(w, http.StatusOK, map[string]string{
 			"message": "Identity keys rotated and succession certificate queued for all contacts. Contacts preserved.",
@@ -561,4 +427,61 @@ func (s *Server) handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 		"identity_index":   s.config.Keys.IdentityKeyIndex,
 		"encryption_index": s.config.Keys.EncryptionKeyIndex,
 	})
+}
+
+// buildAndEnqueueSuccession derives standard keys, converts to libp2p keys, generates
+// a succession certificate, and enqueues it for delivery to contact peers.
+func (s *Server) buildAndEnqueueSuccession(mnemonic string, oldIndex, newIndex int, contacts []db.Contact, encPubKeyHex string) error {
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		return fmt.Errorf("failed to derive master identity key: %w", err)
+	}
+	masterPubBytes := masterPriv.Public().(ed25519.PublicKey)
+	masterPubKeyHex := hex.EncodeToString(masterPubBytes)
+
+	oldPriv, err := crypto.DeriveIdentityKey(mnemonic, oldIndex)
+	if err != nil {
+		return fmt.Errorf("failed to derive old identity key: %w", err)
+	}
+
+	newPriv, err := crypto.DeriveIdentityKey(mnemonic, newIndex)
+	if err != nil {
+		return fmt.Errorf("failed to derive new identity key: %w", err)
+	}
+
+	libp2pNewPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&newPriv)
+	if err != nil {
+		return fmt.Errorf("failed to convert new std key to libp2p key: %w", err)
+	}
+	newPeerID, err := peer.IDFromPrivateKey(libp2pNewPriv)
+	if err != nil {
+		return fmt.Errorf("failed to get peer ID from private key: %w", err)
+	}
+
+	libp2pOldPriv, _, err := libp2pCrypto.KeyPairFromStdKey(&oldPriv)
+	if err != nil {
+		return fmt.Errorf("failed to convert old std key to libp2p key: %w", err)
+	}
+	oldPeerID, err := peer.IDFromPrivateKey(libp2pOldPriv)
+	if err != nil {
+		return fmt.Errorf("failed to get old peer ID: %w", err)
+	}
+
+	addrs := s.p2pService.Multiaddrs()
+	if len(addrs) == 0 {
+		return fmt.Errorf("no multiaddresses found")
+	}
+	oldMultiaddr := addrs[0]
+	newMultiaddr := strings.ReplaceAll(oldMultiaddr, oldPeerID.String(), newPeerID.String())
+
+	cert, err := protocol.SignSuccessionCertificate(masterPriv, masterPubKeyHex, oldPeerID.String(), newPeerID.String(), newMultiaddr, encPubKeyHex)
+	if err != nil {
+		return fmt.Errorf("failed to sign succession certificate: %w", err)
+	}
+	certBytes, err := json.Marshal(cert)
+	if err != nil {
+		return fmt.Errorf("failed to marshal succession certificate: %w", err)
+	}
+
+	return protocol.EnqueueForContacts(s.db, contacts, protocol.AppIDKeySuccession, certBytes)
 }
