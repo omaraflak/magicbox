@@ -582,15 +582,17 @@ function App() {
               </button>
               {showMenu && (
                 <div className="dropdown-menu">
-                  <button 
-                    className="dropdown-item" 
-                    onClick={() => {
-                      setShowRenameModal(true);
-                      setRenameInput(getConversationName(selectedConv));
-                    }}
-                  >
-                    <IconEdit /> Rename Chat
-                  </button>
+                  {selectedConv.participants.length > 2 && (
+                    <button 
+                      className="dropdown-item" 
+                      onClick={() => {
+                        setShowRenameModal(true);
+                        setRenameInput(getConversationName(selectedConv));
+                      }}
+                    >
+                      <IconEdit /> Rename Chat
+                    </button>
+                  )}
                   <button 
                     className="dropdown-item" 
                     onClick={() => {

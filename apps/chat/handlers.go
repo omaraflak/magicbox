@@ -319,6 +319,11 @@ func handleConversationRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if len(conv.Participants) < 3 {
+			writeError(w, http.StatusBadRequest, "cannot rename 1-to-1 conversations")
+			return
+		}
+
 		client, conn, ctx, err := getCoreClient()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to contact core client: "+err.Error())
@@ -653,7 +658,10 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if conv == nil {
 		log.Printf("Webhook: received message for new conversation %s (%s)", payload.ConversationName, payload.ConversationID)
 		
-		convName := payload.ConversationName
+		convName := ""
+		if len(payload.Participants) > 2 {
+			convName = payload.ConversationName
+		}
 
 		if err := createConversation(payload.ConversationID, convName, payload.SentAt); err != nil {
 			log.Printf("Webhook DB error: failed to create conversation: %v", err)
@@ -666,8 +674,8 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			_ = addParticipant(payload.ConversationID, p.UserID, p.DisplayName)
 		}
 	} else {
-		// Conversation already exists, check if name has been explicitly set/updated by a peer
-		if payload.ConversationName != "" && conv.Name != payload.ConversationName {
+		// Conversation already exists, check if name has been explicitly set/updated by a peer in a group chat (>=3 participants)
+		if len(conv.Participants) >= 3 && payload.ConversationName != "" && conv.Name != payload.ConversationName {
 			log.Printf("Webhook: updating conversation %s name to %s", conv.ID, payload.ConversationName)
 			if err := renameConversation(conv.ID, payload.ConversationName); err == nil {
 				conv.Name = payload.ConversationName
