@@ -1,0 +1,25 @@
+{
+  "app_id": "com.magicbox.chat",
+  "name": "Magic Chat",
+  "version": "1.0.0",
+  "image": "docker.io/omaraflak/magicbox-chat:latest",
+  "entry_port": 9090,
+  "route_slug": "chat",
+  "webhook_path": "/internal/magicbox-webhook",
+  "required_scopes": [
+    "profile:read",
+    "shared:storage:rw",
+    "contacts:read"
+  ],
+  "volume_mounts": [
+    {
+      "type": "shared",
+      "name": "storage",
+      "access": "read-write"
+    }
+  ],
+  "resource_limits": {
+    "memory_mb": 256,
+    "cpu_cores": 0.5
+  }
+}

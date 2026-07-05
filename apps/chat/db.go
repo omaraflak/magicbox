@@ -1,0 +1,233 @@
+package main
+
+import (
+	"database/sql"
+	"log"
+	"os"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+var dbConn *sql.DB
+
+func initDB() {
+	dbPath := "/data/app_state/chat.db"
+	if err := os.MkdirAll("/data/app_state", 0755); err != nil {
+		log.Fatalf("Failed to create app state directory: %v", err)
+	}
+
+	var err error
+	dbConn, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		log.Fatalf("Failed to open sqlite database: %v", err)
+	}
+
+	queries := []string{
+		`PRAGMA foreign_keys = ON;`,
+		`CREATE TABLE IF NOT EXISTS conversations (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			is_group BOOLEAN NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS conversation_participants (
+			conversation_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			PRIMARY KEY (conversation_id, user_id),
+			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS messages (
+			id TEXT PRIMARY KEY,
+			conversation_id TEXT NOT NULL,
+			sender_id TEXT NOT NULL,
+			sender_name TEXT NOT NULL,
+			text TEXT NOT NULL,
+			attachment_name TEXT NOT NULL DEFAULT '',
+			attachment_type TEXT NOT NULL DEFAULT '',
+			attachment_path TEXT NOT NULL DEFAULT '',
+			sent_at TEXT NOT NULL,
+			is_read BOOLEAN NOT NULL DEFAULT 0,
+			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+		)`,
+	}
+
+	for _, q := range queries {
+		if _, err := dbConn.Exec(q); err != nil {
+			log.Fatalf("Failed to run schema query %q: %v", q, err)
+		}
+	}
+}
+
+// Structs
+
+type Conversation struct {
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	IsGroup      bool          `json:"is_group"`
+	CreatedAt    string        `json:"created_at"`
+	Participants []Participant `json:"participants"`
+	LastMessage  *Message      `json:"last_message,omitempty"`
+	UnreadCount  int           `json:"unread_count"`
+}
+
+type Participant struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+}
+
+type Message struct {
+	ID             string `json:"id"`
+	ConversationID string `json:"conversation_id"`
+	SenderID       string `json:"sender_id"`
+	SenderName     string `json:"sender_name"`
+	Text           string `json:"text"`
+	AttachmentName string `json:"attachment_name"`
+	AttachmentType string `json:"attachment_type"`
+	AttachmentPath string `json:"attachment_path"`
+	SentAt         string `json:"sent_at"`
+	IsRead         bool   `json:"is_read"`
+}
+
+// DB functions
+
+func createConversation(id, name string, isGroup bool, createdAt string) error {
+	_, err := dbConn.Exec("INSERT INTO conversations (id, name, is_group, created_at) VALUES (?, ?, ?, ?)", id, name, isGroup, createdAt)
+	return err
+}
+
+func addParticipant(conversationID, userID, displayName string) error {
+	_, err := dbConn.Exec("INSERT OR REPLACE INTO conversation_participants (conversation_id, user_id, display_name) VALUES (?, ?, ?)", conversationID, userID, displayName)
+	return err
+}
+
+func getConversation(id string) (*Conversation, error) {
+	var c Conversation
+	err := dbConn.QueryRow("SELECT id, name, is_group, created_at FROM conversations WHERE id = ?", id).Scan(&c.ID, &c.Name, &c.IsGroup, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	parts, err := getParticipants(c.ID)
+	if err != nil {
+		return nil, err
+	}
+	c.Participants = parts
+
+	return &c, nil
+}
+
+func getParticipants(conversationID string) ([]Participant, error) {
+	rows, err := dbConn.Query("SELECT user_id, display_name FROM conversation_participants WHERE conversation_id = ?", conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var parts []Participant
+	for rows.Next() {
+		var p Participant
+		if err := rows.Scan(&p.UserID, &p.DisplayName); err != nil {
+			return nil, err
+		}
+		parts = append(parts, p)
+	}
+	return parts, nil
+}
+
+func listConversations() ([]Conversation, error) {
+	rows, err := dbConn.Query("SELECT id, name, is_group, created_at FROM conversations ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var convs []Conversation
+	for rows.Next() {
+		var c Conversation
+		if err := rows.Scan(&c.ID, &c.Name, &c.IsGroup, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+
+		parts, err := getParticipants(c.ID)
+		if err != nil {
+			return nil, err
+		}
+		c.Participants = parts
+
+		// Get last message
+		lastMsg, err := getLastMessage(c.ID)
+		if err != nil {
+			return nil, err
+		}
+		c.LastMessage = lastMsg
+
+		// Get unread count
+		var unread int
+		err = dbConn.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND is_read = 0", c.ID).Scan(&unread)
+		if err != nil {
+			unread = 0
+		}
+		c.UnreadCount = unread
+
+		convs = append(convs, c)
+	}
+	return convs, nil
+}
+
+func insertMessage(m *Message) error {
+	_, err := dbConn.Exec(`
+		INSERT INTO messages (id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.ConversationID, m.SenderID, m.SenderName, m.Text, m.AttachmentName, m.AttachmentType, m.AttachmentPath, m.SentAt, m.IsRead,
+	)
+	return err
+}
+
+func getMessages(conversationID string) ([]Message, error) {
+	rows, err := dbConn.Query(`
+		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+		FROM messages WHERE conversation_id = ? ORDER BY sent_at ASC`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var msgs []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, nil
+}
+
+func getLastMessage(conversationID string) (*Message, error) {
+	var m Message
+	err := dbConn.QueryRow(`
+		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+		FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 1`, conversationID).
+		Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func markMessagesAsRead(conversationID string) error {
+	_, err := dbConn.Exec("UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND is_read = 0", conversationID)
+	return err
+}
+
+func deleteConversation(id string) error {
+	_, err := dbConn.Exec("DELETE FROM conversations WHERE id = ?", id)
+	return err
+}
