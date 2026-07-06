@@ -68,7 +68,7 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := env.EnsureScopes([]string{"profile:read"}, []string{"Read your basic user profile (username, user ID)"}); err != nil {
+	if err := env.EnsureScopes([]string{"profile:read", "contacts:read"}, []string{"Read your basic user profile (username, user ID)", "Access contacts to display names and profile invite links"}); err != nil {
 		if sdk.WriteConsentError(w, err) {
 			return
 		}
@@ -103,7 +103,7 @@ func handleContacts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := env.EnsureScopes([]string{"contacts:read"}, []string{"Access contacts to display names and profile invite links"}); err != nil {
+	if err := env.EnsureScopes([]string{"profile:read", "contacts:read"}, []string{"Read your basic user profile (username, user ID)", "Access contacts to display names and profile invite links"}); err != nil {
 		if sdk.WriteConsentError(w, err) {
 			return
 		}

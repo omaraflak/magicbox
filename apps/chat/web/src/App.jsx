@@ -68,6 +68,8 @@ function App() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [renameInput, setRenameInput] = useState('');
 
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+
   // Shared Media & Search States
   const [showMediaPanel, setShowMediaPanel] = useState(false);
   const [sharedMedia, setSharedMedia] = useState([]);
@@ -134,11 +136,14 @@ function App() {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Load baseline profile and contacts list
+  // Load baseline profile and contacts list sequentially to avoid multiple popups
   useEffect(() => {
-    fetchProfile();
-    fetchContacts();
-    fetchConversations();
+    const init = async () => {
+      await fetchProfile();
+      fetchContacts();
+      fetchConversations();
+    };
+    init();
   }, []);
 
   const getConversationName = (conv) => {
@@ -221,8 +226,8 @@ function App() {
     if (!selectedConv || !profile || !contacts) return [];
     return selectedConv.participants.filter(p => {
       if (p.user_id === profile.user_id) return false;
-      const isContact = contacts.some(c => c.target_user_id === p.user_id);
-      return !isContact && p.invite_link;
+      const hasActiveContact = contacts.some(c => c.target_user_id === p.user_id && (c.status === 'active' || !c.status));
+      return !hasActiveContact && p.invite_link;
     });
   };
 
@@ -694,6 +699,14 @@ function App() {
                     <IconImage /> View Shared Media
                   </button>
                   <button 
+                    className="dropdown-item" 
+                    onClick={() => {
+                      setShowParticipantsModal(true);
+                    }}
+                  >
+                    <span style={{ marginRight: '8px', fontSize: '15.5px' }}>👥</span> View Participants
+                  </button>
+                  <button 
                     className="dropdown-item danger" 
                     onClick={() => setShowDeleteModal(true)}
                   >
@@ -728,13 +741,17 @@ function App() {
 
           {getMissingContacts().length > 0 && (
             <div className="missing-contacts-banner">
-              <span className="banner-icon">⚠️</span>
-              <div className="banner-text">
-                Some participants in this group are not in your contacts. Add them to exchange messages:
+              <div className="banner-header">
+                <span className="banner-icon">⚠️</span>
+                <span className="banner-text">
+                  Some participants in this group are not in your contacts:
+                </span>
               </div>
               <div className="banner-actions">
                 {getMissingContacts().map(p => {
-                  const isSent = sentRequests[p.user_id];
+                  const contact = contacts.find(c => c.target_user_id === p.user_id);
+                  const isPending = contact && contact.status === 'pending';
+                  const isSent = sentRequests[p.user_id] || isPending;
                   const isLoading = addingContacts[p.user_id];
                   return (
                     <button
@@ -743,7 +760,7 @@ function App() {
                       disabled={isSent || isLoading}
                       onClick={() => handleAddContact(p)}
                     >
-                      {isLoading ? 'Adding...' : isSent ? `✓ ${p.display_name}` : `+ Add ${p.display_name}`}
+                      {isLoading ? 'Adding...' : isSent ? `Pending` : `+ Add ${p.display_name}`}
                     </button>
                   );
                 })}
@@ -1100,7 +1117,56 @@ function App() {
           </div>
         </div>
       )}
-
+      {/* View Participants Modal */}
+      {showParticipantsModal && (
+        <div className="modal-overlay" onClick={() => setShowParticipantsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Participants ({selectedConv.participants.length})</span>
+              <button className="action-btn" onClick={() => setShowParticipantsModal(false)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '350px', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {selectedConv.participants.map(p => {
+                  const isMe = profile && p.user_id === profile.user_id;
+                  const isContact = contacts.some(c => c.target_user_id === p.user_id && (c.status === 'active' || !c.status));
+                  const isPending = contacts.some(c => c.target_user_id === p.user_id && c.status === 'pending');
+                  return (
+                    <div key={p.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className="avatar" style={{ width: '32px', height: '32px', fontSize: '12px' }}>
+                          {p.display_name.substring(0, 2)}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                          <span style={{ fontWeight: 600, fontSize: '14px' }}>
+                            {p.display_name} {isMe && "(You)"}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-mute)' }}>
+                            ID: {p.user_id}
+                          </span>
+                        </div>
+                      </div>
+                      {!isMe && !isContact && p.invite_link && (
+                        <button
+                          className={`banner-btn ${isPending ? 'sent' : ''}`}
+                          style={{ padding: '4px 8px', fontSize: '11.5px' }}
+                          disabled={isPending || addingContacts[p.user_id]}
+                          onClick={() => handleAddContact(p)}
+                        >
+                          {addingContacts[p.user_id] ? 'Adding...' : isPending ? 'Pending' : '+ Add Contact'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowParticipantsModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
