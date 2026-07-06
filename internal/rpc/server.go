@@ -339,7 +339,25 @@ func (s *RPCServer) ListContacts(ctx context.Context, _ *pb.ListContactsRequest)
 			Multiaddr:    c.Multiaddr,
 			TargetUserId: c.TargetUserID,
 			InviteLink:   contactInviteLink,
+			Status:       "active",
 		})
+	}
+
+	// Also get outgoing contact requests to return as pending contacts
+	reqs, err := s.db.GetContactRequests(claims.UserID, "outgoing")
+	if err != nil {
+		s.logger.Error("ListContacts: failed to get outgoing requests", logging.F("error", err.Error()))
+	} else {
+		for _, r := range reqs {
+			pbContacts = append(pbContacts, &pb.Contact{
+				Id:           r.ID,
+				DisplayName:  r.DisplayName,
+				Multiaddr:    r.Multiaddr,
+				TargetUserId: r.TargetUserID,
+				InviteLink:   r.Multiaddr, // for pending requests, multiaddr is the invite link itself
+				Status:       "pending",
+			})
+		}
 	}
 
 	return &pb.ListContactsResponse{Contacts: pbContacts}, nil

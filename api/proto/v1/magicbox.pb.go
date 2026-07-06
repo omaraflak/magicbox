@@ -810,6 +810,7 @@ type Contact struct {
 	TargetUserId string                 `protobuf:"bytes,4,opt,name=target_user_id,json=targetUserId,proto3" json:"target_user_id,omitempty"`
 	// Pre-computed invite link for this contact, built from their stored identity.
 	InviteLink    string `protobuf:"bytes,5,opt,name=invite_link,json=inviteLink,proto3" json:"invite_link,omitempty"`
+	Status        string `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -875,6 +876,13 @@ func (x *Contact) GetTargetUserId() string {
 func (x *Contact) GetInviteLink() string {
 	if x != nil {
 		return x.InviteLink
+	}
+	return ""
+}
+
+func (x *Contact) GetStatus() string {
+	if x != nil {
+		return x.Status
 	}
 	return ""
 }
@@ -1112,14 +1120,15 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage\"\x15\n" +
 	"\x13ListContactsRequest\"H\n" +
 	"\x14ListContactsResponse\x120\n" +
-	"\bcontacts\x18\x01 \x03(\v2\x14.magicbox.v1.ContactR\bcontacts\"\xa1\x01\n" +
+	"\bcontacts\x18\x01 \x03(\v2\x14.magicbox.v1.ContactR\bcontacts\"\xb9\x01\n" +
 	"\aContact\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1c\n" +
 	"\tmultiaddr\x18\x03 \x01(\tR\tmultiaddr\x12$\n" +
 	"\x0etarget_user_id\x18\x04 \x01(\tR\ftargetUserId\x12\x1f\n" +
 	"\vinvite_link\x18\x05 \x01(\tR\n" +
-	"inviteLink\"\x16\n" +
+	"inviteLink\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\"\x16\n" +
 	"\x14GetInviteLinkRequest\"8\n" +
 	"\x15GetInviteLinkResponse\x12\x1f\n" +
 	"\vinvite_link\x18\x01 \x01(\tR\n" +

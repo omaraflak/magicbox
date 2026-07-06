@@ -82,6 +82,16 @@ func (d *DB) GetContactRequestByTargetUserID(userID, targetUserID string) (*Cont
 	return scanContactRequest(row)
 }
 
+// GetIncomingContactRequestByTargetUserID fetches an incoming contact request by the remote user's ID.
+func (d *DB) GetIncomingContactRequestByTargetUserID(userID, targetUserID string) (*ContactRequest, error) {
+	row := d.conn.QueryRow(
+		`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at
+		 FROM contact_requests WHERE user_id = ? AND target_user_id = ? AND direction = 'incoming'`,
+		userID, targetUserID,
+	)
+	return scanContactRequest(row)
+}
+
 func (d *DB) DeleteContactRequest(userID, id string) error {
 	_, err := d.conn.Exec(`DELETE FROM contact_requests WHERE user_id = ? AND id = ?`, userID, id)
 	if err != nil {

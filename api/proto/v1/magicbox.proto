@@ -158,6 +158,7 @@ message Contact {
   string target_user_id = 4;
   // Pre-computed invite link for this contact, built from their stored identity.
   string invite_link = 5;
+  string status = 6;
 }
 
 // --------------------------------------------------------------------------

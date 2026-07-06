@@ -146,6 +146,73 @@ func (s *Server) handleSendContactRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Check if there is already an incoming request from this user.
+	incomingReq, err := s.db.GetIncomingContactRequestByTargetUserID(claims.UserID, payload.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query incoming contact request: "+err.Error())
+		return
+	}
+
+	if incomingReq != nil {
+		// Incoming request exists! Accept it automatically.
+		existing, err := s.db.GetContactByTargetUserID(claims.UserID, incomingReq.TargetUserID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to query existing contact: "+err.Error())
+			return
+		}
+
+		var contactID string
+		if existing != nil {
+			contactID = existing.ID
+			if err := s.db.UpdateContactFromRequest(existing.ID, incomingReq.PeerID, incomingReq.Multiaddr, incomingReq.EncPubKey, incomingReq.MasterPubKey); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to update contact: "+err.Error())
+				return
+			}
+		} else {
+			contactID = uuid.NewString()
+			if err := s.db.AddContact(
+				contactID, claims.UserID, incomingReq.DisplayName,
+				incomingReq.PeerID, incomingReq.Multiaddr,
+				incomingReq.TargetUserID, incomingReq.EncPubKey, incomingReq.MasterPubKey,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to create contact: "+err.Error())
+				return
+			}
+		}
+
+		// Send accept message back to the requester.
+		ourEncPubHex, err := s.config.Keys.EncPubKeyHex()
+		if err == nil {
+			ourMultiaddr := p2p.PreferRelayAddr(s.p2pService.Multiaddrs())
+			ourMasterPubHex, err := s.config.Keys.MasterPubKeyHex()
+			if err == nil {
+				acceptPayload, _ := json.Marshal(protocol.ContactAcceptPayload{
+					DisplayName:  claims.Username,
+					Multiaddr:    ourMultiaddr,
+					EncPubKey:    ourEncPubHex,
+					UserID:       claims.UserID,
+					MasterPubKey: ourMasterPubHex,
+				})
+				contactForQueue := db.Contact{
+					ID:           contactID,
+					Multiaddr:    incomingReq.Multiaddr,
+					EncPubKey:    incomingReq.EncPubKey,
+					TargetUserID: incomingReq.TargetUserID,
+				}
+				_ = protocol.EnqueueForContacts(s.db, []db.Contact{contactForQueue}, protocol.AppIDContactAccept, acceptPayload)
+			}
+		}
+
+		// Delete the incoming request.
+		_ = s.db.DeleteContactRequest(claims.UserID, incomingReq.ID)
+
+		writeJSON(w, http.StatusCreated, map[string]string{
+			"id":      contactID,
+			"message": "Contact request accepted automatically from existing invitation",
+		})
+		return
+	}
+
 	// Store as outgoing request.
 	reqID := uuid.NewString()
 	if err := s.db.InsertContactRequest(
