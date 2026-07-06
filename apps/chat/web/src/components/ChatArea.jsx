@@ -90,6 +90,7 @@ export function ChatArea({
                   onClick={() => {
                     setShowRenameModal(true);
                     setRenameInput(getConversationName(selectedConv));
+                    setShowMenu(false);
                   }}
                 >
                   <IconEdit /> Rename Chat
@@ -100,6 +101,7 @@ export function ChatArea({
                 onClick={() => {
                   setIsSearchingMessages(true);
                   setMessageSearchQuery('');
+                  setShowMenu(false);
                 }}
               >
                 <IconSearch /> Search Chat Text
@@ -112,6 +114,7 @@ export function ChatArea({
                   setSharedMedia([]);
                   setHasMoreMedia(true);
                   fetchSharedMedia(selectedConv.id);
+                  setShowMenu(false);
                 }}
               >
                 <IconImage /> View Shared Media
@@ -121,13 +124,17 @@ export function ChatArea({
                 onClick={() => {
                   setShowParticipantsPanel(true);
                   setShowMediaPanel(false);
+                  setShowMenu(false);
                 }}
               >
                 <span style={{ marginRight: '8px', fontSize: '15.5px' }}>👥</span> View Participants
               </button>
               <button 
                 className="dropdown-item danger" 
-                onClick={() => setShowDeleteModal(true)}
+                onClick={() => {
+                  setShowDeleteModal(true);
+                  setShowMenu(false);
+                }}
               >
                 <IconTrash /> Delete Chat
               </button>
@@ -222,7 +229,9 @@ export function ChatArea({
                 )}
                 
                 <div className={`message-bubble ${isMe ? 'sent' : 'received'}`}>
-                  {!isMe && <div className="message-sender-name">{m.sender_name}</div>}
+                  {!isMe && selectedConv.participants.length > 2 && (
+                    <span className="message-sender">{m.sender_name}</span>
+                  )}
                   
                   {m.attachment_name && (
                     <div className="message-file-card">
