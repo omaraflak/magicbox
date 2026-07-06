@@ -222,12 +222,6 @@ export function ChatArea({
 
             return (
               <div key={m.id} className={`message-bubble-wrapper ${isMe ? 'sent' : 'received'} animate-fade-in`}>
-                {!isMe && (
-                  <div className="message-sender-avatar" title={m.sender_name}>
-                    {m.sender_name.substring(0, 2)}
-                  </div>
-                )}
-                
                 <div className={`message-bubble ${isMe ? 'sent' : 'received'}`}>
                   {!isMe && selectedConv.participants.length > 2 && (
                     <span className="message-sender">{m.sender_name}</span>
