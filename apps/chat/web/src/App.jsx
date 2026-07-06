@@ -818,6 +818,14 @@ function App() {
                 );
               }
               return filtered.map(m => {
+                if (m.is_system) {
+                  return (
+                    <div key={m.id} className="system-message">
+                      <span className="system-message-text">{m.text}</span>
+                    </div>
+                  );
+                }
+
                 const isSentByMe = profile && m.sender_id === profile.user_id;
                 const attachmentURL = `api/attachments/${m.conversation_id}/${encodeURIComponent(m.attachment_name)}`;
 

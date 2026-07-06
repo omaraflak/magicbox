@@ -36,6 +36,7 @@ type MessagePayload struct {
 	AttachmentType   string            `json:"attachment_type,omitempty"`
 	AttachmentData   []byte            `json:"attachment_data,omitempty"`
 	SentAt           string            `json:"sent_at"`
+	IsSystem         bool              `json:"is_system,omitempty"`
 }
 
 type ParticipantInfo struct {
@@ -379,6 +380,7 @@ func handleConversationRoutes(w http.ResponseWriter, r *http.Request) {
 			Text:           profile.Username + " renamed the chat to \"" + name + "\"",
 			SentAt:         time.Now().Format(time.RFC3339),
 			IsRead:         true,
+			IsSystem:       true,
 		}
 		if err := insertMessage(sysMsg); err != nil {
 			log.Printf("Rename warning: failed to save system message: %v", err)
@@ -634,6 +636,7 @@ func broadcastMessage(conv *Conversation, msg *Message, attachmentBytes []byte, 
 		AttachmentType:   msg.AttachmentType,
 		AttachmentData:   attachmentBytes,
 		SentAt:           msg.SentAt,
+		IsSystem:         msg.IsSystem,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -781,6 +784,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		AttachmentPath: savedPath,
 		SentAt:         payload.SentAt,
 		IsRead:         false, // Receivers see it as unread
+		IsSystem:       payload.IsSystem,
 	}
 
 	if err := insertMessage(msg); err != nil {

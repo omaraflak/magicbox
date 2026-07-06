@@ -48,6 +48,7 @@ func initDB() {
 			attachment_path TEXT NOT NULL DEFAULT '',
 			sent_at TEXT NOT NULL,
 			is_read BOOLEAN NOT NULL DEFAULT 0,
+			is_system BOOLEAN NOT NULL DEFAULT 0,
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 		)`,
 	}
@@ -84,6 +85,33 @@ func initDB() {
 			log.Printf("Warning: failed to add invite_link column: %v", err)
 		}
 	}
+
+	// Try to dynamically add is_system column to messages table if not present
+	var hasIsSystem bool
+	mRows, err := dbConn.Query("PRAGMA table_info(messages)")
+	if err == nil {
+		defer mRows.Close()
+		for mRows.Next() {
+			var cid int
+			var name, typeStr string
+			var notnull int
+			var dfltValue interface{}
+			var pk int
+			if err := mRows.Scan(&cid, &name, &typeStr, &notnull, &dfltValue, &pk); err == nil {
+				if name == "is_system" {
+					hasIsSystem = true
+					break
+				}
+			}
+		}
+	}
+	if !hasIsSystem {
+		log.Println("Migrating database: adding is_system column to messages table")
+		_, err = dbConn.Exec("ALTER TABLE messages ADD COLUMN is_system BOOLEAN NOT NULL DEFAULT 0")
+		if err != nil {
+			log.Printf("Warning: failed to add is_system column: %v", err)
+		}
+	}
 }
 
 // Structs
@@ -114,6 +142,7 @@ type Message struct {
 	AttachmentPath string `json:"attachment_path"`
 	SentAt         string `json:"sent_at"`
 	IsRead         bool   `json:"is_read"`
+	IsSystem       bool   `json:"is_system"`
 }
 
 // DB functions
@@ -211,9 +240,9 @@ func listConversations() ([]Conversation, error) {
 
 func insertMessage(m *Message) error {
 	_, err := dbConn.Exec(`
-		INSERT INTO messages (id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.ConversationID, m.SenderID, m.SenderName, m.Text, m.AttachmentName, m.AttachmentType, m.AttachmentPath, m.SentAt, m.IsRead,
+		INSERT INTO messages (id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.ConversationID, m.SenderID, m.SenderName, m.Text, m.AttachmentName, m.AttachmentType, m.AttachmentPath, m.SentAt, m.IsRead, m.IsSystem,
 	)
 	return err
 }
@@ -223,11 +252,11 @@ func getMessages(conversationID string, beforeSentAt string, limit int) ([]Messa
 	var err error
 	if beforeSentAt == "" {
 		rows, err = dbConn.Query(`
-			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system
 			FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT ?`, conversationID, limit)
 	} else {
 		rows, err = dbConn.Query(`
-			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system
 			FROM messages WHERE conversation_id = ? AND sent_at < ? ORDER BY sent_at DESC LIMIT ?`, conversationID, beforeSentAt, limit)
 	}
 	if err != nil {
@@ -238,7 +267,7 @@ func getMessages(conversationID string, beforeSentAt string, limit int) ([]Messa
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead, &m.IsSystem); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
@@ -254,7 +283,7 @@ func getMessages(conversationID string, beforeSentAt string, limit int) ([]Messa
 
 func searchMessages(conversationID string, query string) ([]Message, error) {
 	rows, err := dbConn.Query(`
-		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system
 		FROM messages WHERE conversation_id = ? AND text LIKE ? ORDER BY sent_at ASC`, conversationID, "%"+query+"%")
 	if err != nil {
 		return nil, err
@@ -264,7 +293,7 @@ func searchMessages(conversationID string, query string) ([]Message, error) {
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead, &m.IsSystem); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
@@ -275,9 +304,9 @@ func searchMessages(conversationID string, query string) ([]Message, error) {
 func getLastMessage(conversationID string) (*Message, error) {
 	var m Message
 	err := dbConn.QueryRow(`
-		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+		SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system
 		FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 1`, conversationID).
-		Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead)
+		Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead, &m.IsSystem)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -307,13 +336,13 @@ func getSharedMedia(conversationID string, beforeSentAt string, limit int) ([]Me
 	var err error
 	if beforeSentAt == "" {
 		rows, err = dbConn.Query(`
-			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system
 			FROM messages 
 			WHERE conversation_id = ? AND attachment_name != '' 
 			ORDER BY sent_at DESC LIMIT ?`, conversationID, limit)
 	} else {
 		rows, err = dbConn.Query(`
-			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read
+			SELECT id, conversation_id, sender_id, sender_name, text, attachment_name, attachment_type, attachment_path, sent_at, is_read, is_system
 			FROM messages 
 			WHERE conversation_id = ? AND attachment_name != '' AND sent_at < ? 
 			ORDER BY sent_at DESC LIMIT ?`, conversationID, beforeSentAt, limit)
@@ -326,7 +355,7 @@ func getSharedMedia(conversationID string, beforeSentAt string, limit int) ([]Me
 	var msgs []Message
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.SenderName, &m.Text, &m.AttachmentName, &m.AttachmentType, &m.AttachmentPath, &m.SentAt, &m.IsRead, &m.IsSystem); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
