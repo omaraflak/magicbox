@@ -45,6 +45,8 @@ export default function SettingsView({
   onUnlock,
   onGetStatus
 }) {
+    const pendingCount = (contactRequests || []).filter(r => r.direction === 'incoming').length;
+
     return (
         <div className="admin-layout animate-fade-in">
             <aside className="admin-sidebar" style={{ paddingTop: '32px' }}>
@@ -68,8 +70,12 @@ export default function SettingsView({
                 <button 
                     className={`sidebar-item ${activeSection === 'contacts' ? 'active' : ''}`}
                     onClick={() => onSectionChange('contacts')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                 >
-                    👥 Contacts
+                    <span>👥 Contacts</span>
+                    {pendingCount > 0 && (
+                        <span className="notification-bubble">{pendingCount}</span>
+                    )}
                 </button>
 
                 {user?.is_admin && (

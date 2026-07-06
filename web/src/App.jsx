@@ -229,6 +229,17 @@ export default function App() {
         }
     };
 
+    const loadContactRequests = async () => {
+        const { status, data } = await callAPI('GET', '/contacts/requests');
+        if (status === 200) setContactRequests(data || []);
+    };
+
+    // Load contact requests once on login/mount
+    useEffect(() => {
+        if (!user) return;
+        loadContactRequests();
+    }, [user, csrfToken]);
+
     // Polling app statuses when logged in
     useEffect(() => {
         if (!user) return;
@@ -267,10 +278,6 @@ export default function App() {
         if (status === 200) setContacts(data || []);
     };
 
-    const loadContactRequests = async () => {
-        const { status, data } = await callAPI('GET', '/contacts/requests');
-        if (status === 200) setContactRequests(data || []);
-    };
 
     const loadInvitationInfo = async () => {
         const { status, data } = await callAPI('GET', '/me/invitation');
@@ -750,6 +757,7 @@ export default function App() {
                     title="Magicbox OS"
                     user={user}
                     onNavigate={navigate}
+                    contactRequests={contactRequests}
                 />
             )}
 
