@@ -12,11 +12,13 @@ import (
 
 // System protocol AppIDs for P2P messages.
 const (
-	AppIDKeyUpdate       = "system:key-update"
-	AppIDKeySuccession   = "system:key-succession"
-	AppIDContactRequest  = "system:contact-request"
-	AppIDContactAccept   = "system:contact-accept"
+	AppIDKeyUpdate        = "system:key-update"
+	AppIDKeySuccession    = "system:key-succession"
+	AppIDContactRequest   = "system:contact-request"
+	AppIDContactAccept    = "system:contact-accept"
 	AppIDMasterRevocation = "system:master-revocation"
+	AppIDAppCheck         = "system:app-check"
+	AppIDAppCheckResponse = "system:app-check-response"
 )
 
 // RegisterSystemHandlers registers all system:* P2P message handlers on the given service.
@@ -28,4 +30,6 @@ func RegisterSystemHandlers(service p2p.Service, database *db.DB, logger *loggin
 	service.RegisterHandler(AppIDContactAccept, newContactAcceptHandler(database, logger))
 	service.RegisterHandler(AppIDKeySuccession, newKeySuccessionHandler(database, logger))
 	service.RegisterHandler(AppIDMasterRevocation, newMasterRevocationHandler(database, logger))
+	service.RegisterHandler(AppIDAppCheck, newAppCheckHandler(database, service, logger))
+	service.RegisterHandler(AppIDAppCheckResponse, newAppCheckResponseHandler(logger))
 }

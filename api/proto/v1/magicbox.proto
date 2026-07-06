@@ -46,6 +46,10 @@ service MagicboxOS {
 
   // HasScopes checks if the calling app is already granted a set of scopes.
   rpc HasScopes(HasScopesRequest) returns (HasScopesResponse);
+
+  // IsAppInstalled checks if a specific app is installed on a contact's Magicbox.
+  // Requires scope: contacts:read
+  rpc IsAppInstalled(IsAppInstalledRequest) returns (IsAppInstalledResponse);
 }
 
 // --------------------------------------------------------------------------
@@ -183,4 +187,17 @@ message SendContactRequestRequest {
 message SendContactRequestResponse {
   bool success = 1;
   string status_message = 2;
+}
+
+// --------------------------------------------------------------------------
+// IsAppInstalled
+// --------------------------------------------------------------------------
+
+message IsAppInstalledRequest {
+  string contact_id = 1;
+  string app_id = 2;
+}
+
+message IsAppInstalledResponse {
+  bool installed = 1;
 }

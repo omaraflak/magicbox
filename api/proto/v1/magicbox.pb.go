@@ -1071,6 +1071,102 @@ func (x *SendContactRequestResponse) GetStatusMessage() string {
 	return ""
 }
 
+type IsAppInstalledRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContactId     string                 `protobuf:"bytes,1,opt,name=contact_id,json=contactId,proto3" json:"contact_id,omitempty"`
+	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IsAppInstalledRequest) Reset() {
+	*x = IsAppInstalledRequest{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IsAppInstalledRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IsAppInstalledRequest) ProtoMessage() {}
+
+func (x *IsAppInstalledRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IsAppInstalledRequest.ProtoReflect.Descriptor instead.
+func (*IsAppInstalledRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *IsAppInstalledRequest) GetContactId() string {
+	if x != nil {
+		return x.ContactId
+	}
+	return ""
+}
+
+func (x *IsAppInstalledRequest) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+type IsAppInstalledResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Installed     bool                   `protobuf:"varint,1,opt,name=installed,proto3" json:"installed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IsAppInstalledResponse) Reset() {
+	*x = IsAppInstalledResponse{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IsAppInstalledResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IsAppInstalledResponse) ProtoMessage() {}
+
+func (x *IsAppInstalledResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IsAppInstalledResponse.ProtoReflect.Descriptor instead.
+func (*IsAppInstalledResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *IsAppInstalledResponse) GetInstalled() bool {
+	if x != nil {
+		return x.Installed
+	}
+	return false
+}
+
 var File_api_proto_v1_magicbox_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_magicbox_proto_rawDesc = "" +
@@ -1139,7 +1235,13 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\"]\n" +
 	"\x1aSendContactRequestResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12%\n" +
-	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage2\xb0\x06\n" +
+	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage\"M\n" +
+	"\x15IsAppInstalledRequest\x12\x1d\n" +
+	"\n" +
+	"contact_id\x18\x01 \x01(\tR\tcontactId\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\tR\x05appId\"6\n" +
+	"\x16IsAppInstalledResponse\x12\x1c\n" +
+	"\tinstalled\x18\x01 \x01(\bR\tinstalled2\x8b\a\n" +
 	"\n" +
 	"MagicboxOS\x12P\n" +
 	"\vSendWebhook\x12\x1f.magicbox.v1.SendWebhookRequest\x1a .magicbox.v1.SendWebhookResponse\x12M\n" +
@@ -1151,7 +1253,8 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\rGetInviteLink\x12!.magicbox.v1.GetInviteLinkRequest\x1a\".magicbox.v1.GetInviteLinkResponse\x12e\n" +
 	"\x12SendContactRequest\x12&.magicbox.v1.SendContactRequestRequest\x1a'.magicbox.v1.SendContactRequestResponse\x12e\n" +
 	"\x12RequestPermissions\x12&.magicbox.v1.RequestPermissionsRequest\x1a'.magicbox.v1.RequestPermissionsResponse\x12J\n" +
-	"\tHasScopes\x12\x1d.magicbox.v1.HasScopesRequest\x1a\x1e.magicbox.v1.HasScopesResponseB2Z0github.com/magicbox/core/api/proto/v1;magicboxpbb\x06proto3"
+	"\tHasScopes\x12\x1d.magicbox.v1.HasScopesRequest\x1a\x1e.magicbox.v1.HasScopesResponse\x12Y\n" +
+	"\x0eIsAppInstalled\x12\".magicbox.v1.IsAppInstalledRequest\x1a#.magicbox.v1.IsAppInstalledResponseB2Z0github.com/magicbox/core/api/proto/v1;magicboxpbb\x06proto3"
 
 var (
 	file_api_proto_v1_magicbox_proto_rawDescOnce sync.Once
@@ -1165,7 +1268,7 @@ func file_api_proto_v1_magicbox_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_magicbox_proto_rawDescData
 }
 
-var file_api_proto_v1_magicbox_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_api_proto_v1_magicbox_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_api_proto_v1_magicbox_proto_goTypes = []any{
 	(*HasScopesRequest)(nil),           // 0: magicbox.v1.HasScopesRequest
 	(*HasScopesResponse)(nil),          // 1: magicbox.v1.HasScopesResponse
@@ -1188,6 +1291,8 @@ var file_api_proto_v1_magicbox_proto_goTypes = []any{
 	(*GetInviteLinkResponse)(nil),      // 18: magicbox.v1.GetInviteLinkResponse
 	(*SendContactRequestRequest)(nil),  // 19: magicbox.v1.SendContactRequestRequest
 	(*SendContactRequestResponse)(nil), // 20: magicbox.v1.SendContactRequestResponse
+	(*IsAppInstalledRequest)(nil),      // 21: magicbox.v1.IsAppInstalledRequest
+	(*IsAppInstalledResponse)(nil),     // 22: magicbox.v1.IsAppInstalledResponse
 }
 var file_api_proto_v1_magicbox_proto_depIdxs = []int32{
 	2,  // 0: magicbox.v1.RequestPermissionsRequest.requests:type_name -> magicbox.v1.ScopeRequest
@@ -1202,17 +1307,19 @@ var file_api_proto_v1_magicbox_proto_depIdxs = []int32{
 	19, // 9: magicbox.v1.MagicboxOS.SendContactRequest:input_type -> magicbox.v1.SendContactRequestRequest
 	3,  // 10: magicbox.v1.MagicboxOS.RequestPermissions:input_type -> magicbox.v1.RequestPermissionsRequest
 	0,  // 11: magicbox.v1.MagicboxOS.HasScopes:input_type -> magicbox.v1.HasScopesRequest
-	6,  // 12: magicbox.v1.MagicboxOS.SendWebhook:output_type -> magicbox.v1.SendWebhookResponse
-	8,  // 13: magicbox.v1.MagicboxOS.GetProfile:output_type -> magicbox.v1.GetProfileResponse
-	10, // 14: magicbox.v1.MagicboxOS.ListSharedVolumes:output_type -> magicbox.v1.ListSharedVolumesResponse
-	13, // 15: magicbox.v1.MagicboxOS.SendToContact:output_type -> magicbox.v1.SendToContactResponse
-	15, // 16: magicbox.v1.MagicboxOS.ListContacts:output_type -> magicbox.v1.ListContactsResponse
-	18, // 17: magicbox.v1.MagicboxOS.GetInviteLink:output_type -> magicbox.v1.GetInviteLinkResponse
-	20, // 18: magicbox.v1.MagicboxOS.SendContactRequest:output_type -> magicbox.v1.SendContactRequestResponse
-	4,  // 19: magicbox.v1.MagicboxOS.RequestPermissions:output_type -> magicbox.v1.RequestPermissionsResponse
-	1,  // 20: magicbox.v1.MagicboxOS.HasScopes:output_type -> magicbox.v1.HasScopesResponse
-	12, // [12:21] is the sub-list for method output_type
-	3,  // [3:12] is the sub-list for method input_type
+	21, // 12: magicbox.v1.MagicboxOS.IsAppInstalled:input_type -> magicbox.v1.IsAppInstalledRequest
+	6,  // 13: magicbox.v1.MagicboxOS.SendWebhook:output_type -> magicbox.v1.SendWebhookResponse
+	8,  // 14: magicbox.v1.MagicboxOS.GetProfile:output_type -> magicbox.v1.GetProfileResponse
+	10, // 15: magicbox.v1.MagicboxOS.ListSharedVolumes:output_type -> magicbox.v1.ListSharedVolumesResponse
+	13, // 16: magicbox.v1.MagicboxOS.SendToContact:output_type -> magicbox.v1.SendToContactResponse
+	15, // 17: magicbox.v1.MagicboxOS.ListContacts:output_type -> magicbox.v1.ListContactsResponse
+	18, // 18: magicbox.v1.MagicboxOS.GetInviteLink:output_type -> magicbox.v1.GetInviteLinkResponse
+	20, // 19: magicbox.v1.MagicboxOS.SendContactRequest:output_type -> magicbox.v1.SendContactRequestResponse
+	4,  // 20: magicbox.v1.MagicboxOS.RequestPermissions:output_type -> magicbox.v1.RequestPermissionsResponse
+	1,  // 21: magicbox.v1.MagicboxOS.HasScopes:output_type -> magicbox.v1.HasScopesResponse
+	22, // 22: magicbox.v1.MagicboxOS.IsAppInstalled:output_type -> magicbox.v1.IsAppInstalledResponse
+	13, // [13:23] is the sub-list for method output_type
+	3,  // [3:13] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -1229,7 +1336,7 @@ func file_api_proto_v1_magicbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_magicbox_proto_rawDesc), len(file_api_proto_v1_magicbox_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

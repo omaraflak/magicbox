@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"path/filepath"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/magicbox/core/internal/keymanager"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
+	"github.com/magicbox/core/internal/protocol"
 	"github.com/magicbox/core/internal/rest"
 )
 
@@ -38,6 +40,14 @@ func (m *MockP2PService) Multiaddrs() []string {
 func (m *MockP2PService) RegisterHandler(appID string, handler p2p.Handler) {}
 func (m *MockP2PService) SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *p2p.Message) error {
 	m.sent = true
+	if msg.AppID == protocol.AppIDAppCheck {
+		var req protocol.AppCheckRequestPayload
+		if err := json.Unmarshal(msg.Payload, &req); err == nil {
+			go func() {
+				protocol.ResolveAppCheckRequest(req.RequestID, true)
+			}()
+		}
+	}
 	return nil
 }
 
@@ -580,6 +590,77 @@ func TestGrpcRequestPermissions_Reject(t *testing.T) {
 	reqs := orch.ListPendingPermissions(userID)
 	if len(reqs) != 0 {
 		t.Errorf("expected 0 pending requests, got %d", len(reqs))
+	}
+}
+
+func TestGrpcIsAppInstalled(t *testing.T) {
+	client, database, _, p2pMock, cleanup := setupGrpcTestServer(t)
+	defer cleanup()
+
+	// Seed user, contacts, and app token
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+	database.InsertAppToken("com.example.app", userID, "app-secret")
+	database.InsertAppScope("com.example.app", userID, "contacts:read")
+
+	// 1. Add a remote contact
+	database.AddContact("contact-remote", userID, "Alice", "remote-peer-id", "/ip4/1.2.3.4/tcp/4001/p2p/remote-peer-id", "alice-id", "test-enc-pub-key", "alice-master-pub")
+
+	// 2. Add a local contact (loopback)
+	database.AddContact("contact-local", userID, "Bob", p2pMock.HostID(), "/ip4/127.0.0.1/tcp/4001/p2p/"+p2pMock.HostID(), "bob-id", "test-enc-pub-key-2", "bob-master-pub")
+
+	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{"contacts:read"})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+
+	// Test case A: local (loopback) contact where app is NOT installed
+	resp, err := client.IsAppInstalled(ctx, &pb.IsAppInstalledRequest{
+		ContactId: "contact-local",
+		AppId:     "com.example.drive",
+	})
+	if err != nil {
+		t.Fatalf("IsAppInstalled local failed: %v", err)
+	}
+	if resp.Installed {
+		t.Error("expected app not to be installed for local contact")
+	}
+
+	// Test case B: local (loopback) contact where app IS installed
+	database.CreateUser("bob-id", "bob", "hash", false)
+	if err := database.InsertApp(&db.App{
+		ID:        "app-drive",
+		AppID:     "com.example.drive",
+		Name:      "Drive",
+		UserID:    "bob-id",
+		Status:    "installed",
+		RouteSlug: "drive",
+		Image:     "drive-image",
+	}); err != nil {
+		t.Fatalf("InsertApp failed: %v", err)
+	}
+	resp, err = client.IsAppInstalled(ctx, &pb.IsAppInstalledRequest{
+		ContactId: "contact-local",
+		AppId:     "com.example.drive",
+	})
+	if err != nil {
+		t.Fatalf("IsAppInstalled local failed: %v", err)
+	}
+	if !resp.Installed {
+		t.Error("expected app to be installed for local contact")
+	}
+
+	// Test case C: remote contact
+	resp, err = client.IsAppInstalled(ctx, &pb.IsAppInstalledRequest{
+		ContactId: "contact-remote",
+		AppId:     "com.example.chat",
+	})
+	if err != nil {
+		t.Fatalf("IsAppInstalled remote failed: %v", err)
+	}
+	if !resp.Installed {
+		t.Error("expected app to be installed for remote contact")
+	}
+	if !p2pMock.sent {
+		t.Error("expected P2P message to be sent")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -632,6 +633,78 @@ func (s *RPCServer) HasScopes(ctx context.Context, req *pb.HasScopesRequest) (*p
 		HasAll:        len(missing) == 0,
 		MissingScopes: missing,
 	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// IsAppInstalled
+// ---------------------------------------------------------------------------
+
+func (s *RPCServer) IsAppInstalled(ctx context.Context, req *pb.IsAppInstalledRequest) (*pb.IsAppInstalledResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	if !hasScope(claims.Scopes, "contacts:read") {
+		return nil, status.Error(codes.PermissionDenied, "missing scope: contacts:read")
+	}
+
+	if req.ContactId == "" || req.AppId == "" {
+		return nil, status.Error(codes.InvalidArgument, "contact_id and app_id are required")
+	}
+
+	// Fetch contact from DB
+	contact, err := s.db.GetContactByID(req.ContactId, claims.UserID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "database query error: %v", err)
+	}
+	if contact == nil {
+		return nil, status.Errorf(codes.NotFound, "contact %q not found", req.ContactId)
+	}
+
+	// If the contact is a local contact (loopback), check local DB directly.
+	isLocal := contact.PeerID == s.p2pService.HostID()
+	if isLocal {
+		app, err := s.db.GetAppByAppIDAndUserID(req.AppId, contact.TargetUserID)
+		installed := (err == nil && app != nil)
+		return &pb.IsAppInstalledResponse{Installed: installed}, nil
+	}
+
+	// Otherwise, generate request ID, send P2P message, and wait for response.
+	requestID := uuid.NewString()
+	ch := protocol.RegisterAppCheckRequest(requestID)
+	defer protocol.DeregisterAppCheckRequest(requestID)
+
+	payload := protocol.AppCheckRequestPayload{
+		RequestID:    requestID,
+		SenderUserID: claims.UserID,
+		AppID:        req.AppId,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to marshal payload: %v", err)
+	}
+
+	msg := &p2p.Message{
+		AppID:        protocol.AppIDAppCheck,
+		TargetUserID: contact.TargetUserID,
+		Payload:      payloadBytes,
+	}
+
+	// Send message
+	if err := s.p2pService.SendTo(ctx, contact.Multiaddr, contact.EncPubKey, msg); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "failed to send request to contact: %v", err)
+	}
+
+	// Wait for response or timeout (e.g. 5 seconds)
+	select {
+	case installed := <-ch:
+		return &pb.IsAppInstalledResponse{Installed: installed}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(5 * time.Second):
+		return nil, status.Error(codes.DeadlineExceeded, "timeout waiting for contact response")
+	}
 }
 
 
