@@ -94,7 +94,7 @@ export default function ConsentView({ callAPI }) {
     if (loading) {
         return (
             <div style={containerStyle}>
-                <div style={cardStyle}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                     <div style={spinnerStyle}></div>
                     <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>Loading permission details...</p>
                 </div>
@@ -105,7 +105,7 @@ export default function ConsentView({ callAPI }) {
     if (error) {
         return (
             <div style={containerStyle}>
-                <div style={cardStyle}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                     <span style={{ fontSize: '3rem' }}>⚠️</span>
                     <h3 style={{ margin: '16px 0 8px 0', color: 'var(--text-primary)' }}>An Error Occurred</h3>
                     <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>{error}</p>
@@ -117,54 +117,52 @@ export default function ConsentView({ callAPI }) {
 
     return (
         <div style={containerStyle}>
-            <div style={cardStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
-                    <span style={{ fontSize: '2.5rem' }}>🛡️</span>
-                    <div style={{ textAlign: 'left' }}>
-                        <h3 style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 600 }}>Permission Request</h3>
-                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>from {request.app_name}</p>
-                    </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                <span style={{ fontSize: '2.5rem' }}>🛡️</span>
+                <div style={{ textAlign: 'left' }}>
+                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 600 }}>Permission Request</h3>
+                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>from {request.app_name}</p>
                 </div>
+            </div>
 
-                <p style={{ color: 'var(--text-primary)', textAlign: 'left', marginBottom: '20px', lineHeight: 1.5 }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0', textAlign: 'left' }}>
+                <p style={{ color: 'var(--text-primary)', marginBottom: '20px', lineHeight: 1.5 }}>
                     <strong>{request.app_name}</strong> is requesting the following permissions on your Magicbox:
                 </p>
 
-                <div style={{ maxHeight: '250px', overflowY: 'auto', marginBottom: '24px', textAlign: 'left' }}>
-                    {request.requests.map((req, idx) => (
-                        <div key={idx} style={scopeItemStyle}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                <span style={{ color: '#38bdf8' }}>●</span>
-                                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{getScopeLabel(req.scope)}</strong>
-                            </div>
-                            {req.reason && (
-                                <p style={{ margin: '0 0 0 16px', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                                    "{req.reason}"
-                                </p>
-                            )}
+                {request.requests.map((req, idx) => (
+                    <div key={idx} style={scopeItemStyle}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span style={{ color: '#38bdf8' }}>●</span>
+                            <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{getScopeLabel(req.scope)}</strong>
                         </div>
-                    ))}
-                </div>
+                        {req.reason && (
+                            <p style={{ margin: '0 0 0 16px', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                                "{req.reason}"
+                            </p>
+                        )}
+                    </div>
+                ))}
+            </div>
 
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-                    <button 
-                        className="btn btn-danger" 
-                        disabled={actionLoading}
-                        onClick={handleReject}
-                        style={{ padding: '10px 20px' }}
-                    >
-                        Deny
-                    </button>
-                    <button 
-                        className="btn btn-primary" 
-                        disabled={actionLoading}
-                        onClick={handleApprove}
-                        style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                        {actionLoading && <span style={miniSpinnerStyle}></span>}
-                        Allow Access
-                    </button>
-                </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                <button 
+                    className="btn btn-danger" 
+                    disabled={actionLoading}
+                    onClick={handleReject}
+                    style={{ padding: '10px 20px' }}
+                >
+                    Deny
+                </button>
+                <button 
+                    className="btn btn-primary" 
+                    disabled={actionLoading}
+                    onClick={handleApprove}
+                    style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                    {actionLoading && <span style={miniSpinnerStyle}></span>}
+                    Allow Access
+                </button>
             </div>
         </div>
     );
@@ -173,27 +171,14 @@ export default function ConsentView({ callAPI }) {
 // Styling (Premium dark overlay layout)
 const containerStyle = {
     display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: 'column',
     width: '100vw',
     height: '100vh',
     background: '#0a0a0f',
     fontFamily: "'Outfit', sans-serif",
     padding: '24px',
-    boxSizing: 'border-box'
-};
-
-const cardStyle = {
-    width: '100%',
-    maxWidth: '480px',
-    background: 'rgba(15, 15, 20, 0.6)',
-    backdropFilter: 'blur(20px)',
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    borderRadius: '16px',
-    padding: '32px',
-    boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
-    textAlign: 'center',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    justifyContent: 'space-between'
 };
 
 const scopeItemStyle = {

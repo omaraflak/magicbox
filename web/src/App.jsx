@@ -194,7 +194,7 @@ export default function App() {
                         setActiveAppPath(ap || '');
                     }
                     // Replace state so back/forward works from initial load.
-                    window.history.replaceState({ view: v, section: s, tab: t, appSlug: as, appPath: ap }, '', window.location.pathname);
+                    window.history.replaceState({ view: v, section: s, tab: t, appSlug: as, appPath: ap }, '', window.location.pathname + window.location.search);
                 } else {
                     // Check if initial setup is required
                     const needsSetup = await checkNeedsSetup(token);
