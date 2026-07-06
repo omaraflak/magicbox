@@ -90,63 +90,66 @@ func newKeySuccessionHandler(database *db.DB, logger *logging.Logger) p2p.Handle
 			return err
 		}
 
-		// Look up the contact using their old peer ID to retrieve their master public key.
-		contact, err := database.GetContactByPeerID(msg.TargetUserID, cert.OldPeerID)
+		// Look up all contacts using the old peer ID — multiple remote users may share it.
+		contacts, err := database.GetContactsByPeerID(msg.TargetUserID, cert.OldPeerID)
 		if err != nil {
-			logger.Error("Failed to look up contact for succession update",
+			logger.Error("Failed to look up contacts for succession update",
 				logging.F("old_peer", cert.OldPeerID),
 				logging.F("error", err.Error()))
 			return err
 		}
-		if contact == nil {
+		if len(contacts) == 0 {
 			logger.Warn("Received succession certificate for unknown contact, ignoring",
 				logging.F("old_peer", cert.OldPeerID))
 			return nil
 		}
 
-		masterPubBytes, err := hex.DecodeString(contact.MasterPubKey)
-		if err != nil {
-			logger.Error("Failed to decode contact master public key",
+		for _, contact := range contacts {
+			masterPubBytes, err := hex.DecodeString(contact.MasterPubKey)
+			if err != nil {
+				logger.Error("Failed to decode contact master public key",
+					logging.F("contact_id", contact.ID),
+					logging.F("error", err.Error()))
+				continue
+			}
+
+			if len(masterPubBytes) != ed25519.PublicKeySize {
+				logger.Error("Invalid master public key size",
+					logging.F("contact_id", contact.ID),
+					logging.F("size", len(masterPubBytes)))
+				continue
+			}
+			masterPubKey := ed25519.PublicKey(masterPubBytes)
+
+			if err := VerifySuccessionCertificate(&cert, masterPubKey); err != nil {
+				logger.Warn("Succession certificate verification failed for contact, skipping",
+					logging.F("contact_id", contact.ID),
+					logging.F("old_peer", cert.OldPeerID),
+					logging.F("new_peer", cert.NewPeerID),
+					logging.F("error", err.Error()))
+				continue
+			}
+
+			// Update contact details in the database.
+			// Replace the old peer ID suffix in their multiaddress if present.
+			newMultiaddr := cert.NewMultiaddr
+			if strings.Contains(contact.Multiaddr, cert.OldPeerID) {
+				newMultiaddr = strings.ReplaceAll(contact.Multiaddr, cert.OldPeerID, cert.NewPeerID)
+			}
+
+			if err := database.UpdateContactIdentity(contact.ID, cert.NewPeerID, newMultiaddr, cert.NewEncPubKey); err != nil {
+				logger.Error("Failed to update contact identity after succession",
+					logging.F("contact_id", contact.ID),
+					logging.F("error", err.Error()))
+				return err
+			}
+
+			logger.Info("Successfully updated contact identity via succession certificate",
 				logging.F("contact_id", contact.ID),
-				logging.F("error", err.Error()))
-			return err
+				logging.F("display_name", contact.DisplayName),
+				logging.F("old_peer_id", cert.OldPeerID),
+				logging.F("new_peer_id", cert.NewPeerID))
 		}
-
-		if len(masterPubBytes) != ed25519.PublicKeySize {
-			logger.Error("Invalid master public key size",
-				logging.F("contact_id", contact.ID),
-				logging.F("size", len(masterPubBytes)))
-			return fmt.Errorf("invalid master public key size")
-		}
-		masterPubKey := ed25519.PublicKey(masterPubBytes)
-
-		if err := VerifySuccessionCertificate(&cert, masterPubKey); err != nil {
-			logger.Error("Failed to verify succession certificate",
-				logging.F("old_peer", cert.OldPeerID),
-				logging.F("new_peer", cert.NewPeerID),
-				logging.F("error", err.Error()))
-			return err
-		}
-
-		// Update contact details in the database.
-		// Replace the old peer ID suffix in their multiaddress if present.
-		newMultiaddr := cert.NewMultiaddr
-		if strings.Contains(contact.Multiaddr, cert.OldPeerID) {
-			newMultiaddr = strings.ReplaceAll(contact.Multiaddr, cert.OldPeerID, cert.NewPeerID)
-		}
-
-		if err := database.UpdateContactIdentity(contact.ID, cert.NewPeerID, newMultiaddr, cert.NewEncPubKey); err != nil {
-			logger.Error("Failed to update contact identity after succession",
-				logging.F("contact_id", contact.ID),
-				logging.F("error", err.Error()))
-			return err
-		}
-
-		logger.Info("Successfully updated contact identity via succession certificate",
-			logging.F("contact_id", contact.ID),
-			logging.F("display_name", contact.DisplayName),
-			logging.F("old_peer_id", cert.OldPeerID),
-			logging.F("new_peer_id", cert.NewPeerID))
 
 		return nil
 	}

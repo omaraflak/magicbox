@@ -71,7 +71,7 @@ func (d *DB) Migrate() error {
 			master_pub_key TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TEXT NOT NULL,
-			UNIQUE(user_id, peer_id)
+			UNIQUE(user_id, target_user_id)
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS message_queue (

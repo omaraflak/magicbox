@@ -80,17 +80,19 @@ func newContactAcceptHandler(database *db.DB, logger *logging.Logger) p2p.Handle
 			return err
 		}
 
-		// Look up the outgoing request we sent to this peer.
-		req, err := database.GetContactRequestByPeerID(msg.TargetUserID, fromPeerID)
+		// Look up the outgoing request we sent to this specific remote user.
+		req, err := database.GetContactRequestByTargetUserID(msg.TargetUserID, payload.UserID)
 		if err != nil {
 			logger.Error("Failed to look up outgoing request for accept",
 				logging.F("from_peer", fromPeerID),
+				logging.F("remote_user_id", payload.UserID),
 				logging.F("error", err.Error()))
 			return err
 		}
 		if req == nil {
 			logger.Warn("Received contact accept but no matching outgoing request found",
-				logging.F("from_peer", fromPeerID))
+				logging.F("from_peer", fromPeerID),
+				logging.F("remote_user_id", payload.UserID))
 			return nil
 		}
 

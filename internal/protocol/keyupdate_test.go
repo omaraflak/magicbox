@@ -25,12 +25,15 @@ func TestKeyUpdateHandler_Success(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	contact, err := database.GetContactByPeerID("user-1", "peer-123")
+	contacts, err := database.GetContactsByPeerID("user-1", "peer-123")
 	if err != nil {
-		t.Fatalf("failed to get contact: %v", err)
+		t.Fatalf("failed to get contacts: %v", err)
 	}
-	if contact.EncPubKey != "new-enc-key-hex" {
-		t.Errorf("expected enc_pub_key %q, got %q", "new-enc-key-hex", contact.EncPubKey)
+	if len(contacts) != 1 {
+		t.Fatalf("expected 1 contact, got %d", len(contacts))
+	}
+	if contacts[0].EncPubKey != "new-enc-key-hex" {
+		t.Errorf("expected enc_pub_key %q, got %q", "new-enc-key-hex", contacts[0].EncPubKey)
 	}
 }
 

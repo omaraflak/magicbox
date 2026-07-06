@@ -19,29 +19,30 @@ func newKeyUpdateHandler(database *db.DB, logger *logging.Logger) p2p.Handler {
 
 		newKeyHex := string(msg.Payload)
 
-		contact, err := database.GetContactByPeerID(msg.TargetUserID, fromPeerID)
+		contacts, err := database.GetContactsByPeerID(msg.TargetUserID, fromPeerID)
 		if err != nil {
-			logger.Error("Failed to look up contact by peer ID for key update",
+			logger.Error("Failed to look up contacts by peer ID for key update",
 				logging.F("peer_id", fromPeerID),
 				logging.F("error", err.Error()))
 			return err
 		}
-		if contact == nil {
+		if len(contacts) == 0 {
 			logger.Warn("Received key update from unknown peer, ignoring",
 				logging.F("peer_id", fromPeerID))
 			return nil
 		}
 
-		if err := database.UpdateContactEncPubKey(contact.ID, newKeyHex); err != nil {
-			logger.Error("Failed to update contact encryption key",
+		for _, contact := range contacts {
+			if err := database.UpdateContactEncPubKey(contact.ID, newKeyHex); err != nil {
+				logger.Error("Failed to update contact encryption key",
+					logging.F("contact_id", contact.ID),
+					logging.F("error", err.Error()))
+				return err
+			}
+			logger.Info("Successfully updated contact encryption public key",
 				logging.F("contact_id", contact.ID),
-				logging.F("error", err.Error()))
-			return err
+				logging.F("peer_id", fromPeerID))
 		}
-
-		logger.Info("Successfully updated contact encryption public key",
-			logging.F("contact_id", contact.ID),
-			logging.F("peer_id", fromPeerID))
 		return nil
 	}
 }

@@ -71,6 +71,17 @@ func (d *DB) GetContactRequestByPeerID(userID, peerID string) (*ContactRequest, 
 	return scanContactRequest(row)
 }
 
+// GetContactRequestByTargetUserID fetches an outgoing contact request by the remote user's ID.
+// This is more precise than GetContactRequestByPeerID when multiple users share a peer_id.
+func (d *DB) GetContactRequestByTargetUserID(userID, targetUserID string) (*ContactRequest, error) {
+	row := d.conn.QueryRow(
+		`SELECT id, user_id, direction, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, created_at
+		 FROM contact_requests WHERE user_id = ? AND target_user_id = ? AND direction = 'outgoing'`,
+		userID, targetUserID,
+	)
+	return scanContactRequest(row)
+}
+
 func (d *DB) DeleteContactRequest(userID, id string) error {
 	_, err := d.conn.Exec(`DELETE FROM contact_requests WHERE user_id = ? AND id = ?`, userID, id)
 	if err != nil {

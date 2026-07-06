@@ -35,10 +35,15 @@ func (d *DB) GetContactByID(id string, userID string) (*Contact, error) {
 	return scanContact(row)
 }
 
-// GetContactByPeerID fetches a contact by the remote peer's libp2p peer ID and the owning user ID.
-func (d *DB) GetContactByPeerID(userID, peerID string) (*Contact, error) {
-	row := d.conn.QueryRow(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? AND peer_id = ?`, userID, peerID)
-	return scanContact(row)
+// GetContactsByPeerID returns all contacts that share the given peer_id for a user.
+// Multiple contacts can share a peer_id when several remote users live on the same magicbox node.
+func (d *DB) GetContactsByPeerID(userID, peerID string) ([]Contact, error) {
+	rows, err := d.conn.Query(`SELECT id, user_id, display_name, peer_id, multiaddr, target_user_id, enc_pub_key, master_pub_key, status, created_at FROM contacts WHERE user_id = ? AND peer_id = ?`, userID, peerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanContacts(rows)
 }
 
 // AddContact inserts a new contact into the database.

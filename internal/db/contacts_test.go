@@ -58,7 +58,7 @@ func TestGetContacts_Success(t *testing.T) {
 	}
 }
 
-func TestGetContactByPeerID_Success(t *testing.T) {
+func TestGetContactsByPeerID_Success(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 
@@ -72,19 +72,19 @@ func TestGetContactByPeerID_Success(t *testing.T) {
 		t.Fatalf("AddContact failed: %v", err)
 	}
 
-	contact, err := db.GetContactByPeerID(userID, peerID)
+	contacts, err := db.GetContactsByPeerID(userID, peerID)
 	if err != nil {
-		t.Fatalf("GetContactByPeerID failed: %v", err)
+		t.Fatalf("GetContactsByPeerID failed: %v", err)
 	}
-	if contact == nil {
-		t.Fatal("expected contact to be found, got nil")
+	if len(contacts) != 1 {
+		t.Fatalf("expected 1 contact, got %d", len(contacts))
 	}
-	if contact.PeerID != peerID {
-		t.Errorf("expected PeerID %q, got %q", peerID, contact.PeerID)
+	if contacts[0].PeerID != peerID {
+		t.Errorf("expected PeerID %q, got %q", peerID, contacts[0].PeerID)
 	}
 }
 
-func TestGetContactByPeerID_NotFound(t *testing.T) {
+func TestGetContactsByPeerID_NotFound(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.conn.Close()
 
@@ -93,12 +93,12 @@ func TestGetContactByPeerID_NotFound(t *testing.T) {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
 
-	contact, err := db.GetContactByPeerID(userID, "nonexistent-peer")
+	contacts, err := db.GetContactsByPeerID(userID, "nonexistent-peer")
 	if err != nil {
-		t.Fatalf("GetContactByPeerID failed: %v", err)
+		t.Fatalf("GetContactsByPeerID failed: %v", err)
 	}
-	if contact != nil {
-		t.Errorf("expected nil contact, got %+v", contact)
+	if len(contacts) != 0 {
+		t.Errorf("expected no contacts, got %d", len(contacts))
 	}
 }
 
@@ -113,15 +113,15 @@ func TestUpdateContactIdentity(t *testing.T) {
 		t.Fatalf("UpdateContactIdentity failed: %v", err)
 	}
 
-	contact, err := db.GetContactByPeerID("user-1", "peer-new")
+	contacts, err := db.GetContactsByPeerID("user-1", "peer-new")
 	if err != nil {
-		t.Fatalf("GetContactByPeerID failed: %v", err)
+		t.Fatalf("GetContactsByPeerID failed: %v", err)
 	}
-	if contact == nil {
-		t.Fatal("expected to find contact by new peer ID")
+	if len(contacts) != 1 {
+		t.Fatalf("expected 1 contact, got %d", len(contacts))
 	}
-	if contact.EncPubKey != "enc-new" {
-		t.Errorf("expected enc_pub_key enc-new, got %s", contact.EncPubKey)
+	if contacts[0].EncPubKey != "enc-new" {
+		t.Errorf("expected enc_pub_key enc-new, got %s", contacts[0].EncPubKey)
 	}
 }
 
@@ -150,6 +150,41 @@ func TestGetAllContacts(t *testing.T) {
 	// Verify order by display_name
 	if contacts[0].DisplayName != "Charlie" || contacts[1].DisplayName != "Dave" {
 		t.Errorf("unexpected sorting: %s, %s", contacts[0].DisplayName, contacts[1].DisplayName)
+	}
+}
+
+// TestAddMultipleContactsSamePeerID verifies that a user can add two contacts
+// that share the same peer_id (i.e. two users on the same remote magicbox).
+// This previously failed with: UNIQUE constraint failed: contacts.user_id, contacts.peer_id
+func TestAddMultipleContactsSamePeerID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.conn.Close()
+
+	userID := "local-user"
+	if err := db.CreateUser(userID, "omar", "hash", false); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	// Same remote magicbox → same peer_id, but two different users on it.
+	sharedPeerID := "12D3KooWRemoteBoxPeerID"
+	sharedMultiaddr := "/ip4/192.168.1.100/tcp/4001/p2p/" + sharedPeerID
+
+	// Add first contact (Alice on the remote box).
+	if err := db.AddContact("c-alice", userID, "Alice", sharedPeerID, sharedMultiaddr, "alice-uid", "enc-alice", "master-alice"); err != nil {
+		t.Fatalf("AddContact (Alice) failed: %v", err)
+	}
+
+	// Add second contact (Bob on the same remote box, same peer_id).
+	if err := db.AddContact("c-bob", userID, "Bob", sharedPeerID, sharedMultiaddr, "bob-uid", "enc-bob", "master-bob"); err != nil {
+		t.Fatalf("AddContact (Bob) failed — two contacts with the same peer_id should be allowed: %v", err)
+	}
+
+	contacts, err := db.GetContacts(userID)
+	if err != nil {
+		t.Fatalf("GetContacts failed: %v", err)
+	}
+	if len(contacts) != 2 {
+		t.Fatalf("expected 2 contacts, got %d", len(contacts))
 	}
 }
 

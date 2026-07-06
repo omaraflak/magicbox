@@ -69,23 +69,23 @@ func TestKeySuccessionHandler_UpdatesContact(t *testing.T) {
 	}
 
 	// Verify contact was updated.
-	contact, err := database.GetContactByPeerID("user-1", newPeerID)
+	contacts, err := database.GetContactsByPeerID("user-1", newPeerID)
 	if err != nil {
-		t.Fatalf("GetContactByPeerID failed: %v", err)
+		t.Fatalf("GetContactsByPeerID failed: %v", err)
 	}
-	if contact == nil {
-		t.Fatal("expected contact to be updated to new peer ID")
+	if len(contacts) != 1 {
+		t.Fatalf("expected 1 contact with new peer ID, got %d", len(contacts))
 	}
-	if contact.EncPubKey != "enc-new" {
-		t.Errorf("expected enc_pub_key enc-new, got %s", contact.EncPubKey)
+	if contacts[0].EncPubKey != "enc-new" {
+		t.Errorf("expected enc_pub_key enc-new, got %s", contacts[0].EncPubKey)
 	}
-	if contact.Multiaddr != "/ip4/1.1.1.1/tcp/4001/p2p/"+newPeerID {
-		t.Errorf("expected updated multiaddress, got %s", contact.Multiaddr)
+	if contacts[0].Multiaddr != "/ip4/1.1.1.1/tcp/4001/p2p/"+newPeerID {
+		t.Errorf("expected updated multiaddress, got %s", contacts[0].Multiaddr)
 	}
 
-	// Verify old peer ID lookup returns nil.
-	oldContact, _ := database.GetContactByPeerID("user-1", oldPeerID.String())
-	if oldContact != nil {
+	// Verify old peer ID lookup returns empty.
+	oldContacts, _ := database.GetContactsByPeerID("user-1", oldPeerID.String())
+	if len(oldContacts) != 0 {
 		t.Error("expected old contact peer ID to not match anymore")
 	}
 }
