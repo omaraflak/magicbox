@@ -216,7 +216,7 @@ function App() {
     const res = await apiFetch('api/contacts');
     if (res.ok) {
       const data = await res.json();
-      setContacts(data);
+      setContacts(data || []);
     }
   };
 
@@ -224,9 +224,9 @@ function App() {
     const res = await apiFetch('api/conversations');
     if (res.ok) {
       const data = await res.json();
-      setConversations(data);
+      setConversations(data || []);
       if (selectedConv) {
-        const updated = data.find(c => c.id === selectedConv.id);
+        const updated = (data || []).find(c => c.id === selectedConv.id);
         if (updated) {
           setSelectedConv(updated);
         }
@@ -243,11 +243,11 @@ function App() {
     if (res.ok) {
       const data = await res.json();
       if (append) {
-        setMessages(prev => [...data, ...prev]);
-        setHasMoreMessages(data.length === 50);
+        setMessages(prev => [...(data || []), ...prev]);
+        setHasMoreMessages((data || []).length === 50);
       } else {
-        setMessages(data);
-        setHasMoreMessages(data.length === 50);
+        setMessages(data || []);
+        setHasMoreMessages((data || []).length === 50);
         setTimeout(scrollToBottom, 50);
       }
     }
@@ -266,7 +266,7 @@ function App() {
     const res = await apiFetch(url);
     if (res.ok) {
       const data = await res.json();
-      setSearchResults(data);
+      setSearchResults(data || []);
       setHasMoreSearch(false); // Search queries match all matching directly
     }
   };
@@ -291,11 +291,11 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         if (append) {
-          setSharedMedia(prev => [...prev, ...data]);
+          setSharedMedia(prev => [...prev, ...(data || [])]);
         } else {
-          setSharedMedia(data);
+          setSharedMedia(data || []);
         }
-        setHasMoreMedia(data.length === 20);
+        setHasMoreMedia((data || []).length === 20);
       }
     } catch (err) {
       console.error(err);
