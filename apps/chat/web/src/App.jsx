@@ -91,53 +91,43 @@ function App() {
   }, [isResizingMedia]);
 
   const apiFetch = async (url, options = {}) => {
-    const defaultHeaders = {
-      'Content-Type': 'application/json',
-    };
-    if (options.body instanceof FormData) {
-      // Let browser set boundary automatically
-      delete defaultHeaders['Content-Type'];
-    }
-    const mergedOptions = {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    };
+    const res = await window.fetch(url, options);
+    if (res.status === 403) {
+      const clone = res.clone();
+      try {
+        const err = await clone.json();
+        if (err.error === 'consent_required' && err.request_id) {
+          return new Promise((resolve, reject) => {
+            const popup = window.open(`/consent?req_id=${err.request_id}`, 'ConsentRequired', 'width=500,height=600');
+            if (!popup) {
+              alert('Consent popup was blocked. Please allow popups for this site.');
+              reject(new Error('Consent popup blocked'));
+              return;
+            }
 
-    try {
-      const response = await fetch(url, mergedOptions);
-      if (response.status === 403) {
-        const errorData = await response.json();
-        if (errorData.consent_url) {
-          // Open popup window to request consent
-          const popup = window.open(errorData.consent_url, 'ConsentRequest', 'width=500,height=600');
-          if (popup) {
-            return new Promise((resolve, reject) => {
-              const listener = async (event) => {
-                if (event.data === 'consent_granted') {
-                  window.removeEventListener('message', listener);
+            const listener = async (event) => {
+              if (event.data?.type === 'consent_decision' && event.data?.request_id === err.request_id) {
+                window.removeEventListener('message', listener);
+                if (event.data?.approved) {
                   try {
                     const retryRes = await apiFetch(url, options);
                     resolve(retryRes);
                   } catch (retryErr) {
                     reject(retryErr);
                   }
-                } else if (event.data === 'consent_denied') {
-                  window.removeEventListener('message', listener);
-                  reject(new Error('Consent denied by user'));
+                } else {
+                  reject(new Error('Permission denied by user'));
                 }
-              };
-              window.addEventListener('message', listener);
-            });
-          }
+              }
+            };
+            window.addEventListener('message', listener);
+          });
         }
+      } catch (e) {
+        // ignore JSON parse error
       }
-      return response;
-    } catch (err) {
-      throw err;
     }
+    return res;
   };
 
   useEffect(() => {
