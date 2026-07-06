@@ -15,6 +15,7 @@ export default function ContactsTab({
     const [contactAddr, setContactAddr] = useState('');
     const [contactFormError, setContactFormError] = useState('');
     const [copySuccess, setCopySuccess] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
 
     const handleContactSubmit = async (e) => {
         e.preventDefault();
@@ -24,7 +25,9 @@ export default function ContactsTab({
             return;
         }
 
+        setIsAdding(true);
         const success = await onAddContact({ displayName: contactName, multiaddr: contactAddr });
+        setIsAdding(false);
         if (success) {
             setContactName('');
             setContactAddr('');
@@ -93,8 +96,8 @@ export default function ContactsTab({
                             />
                         </div>
                         <div style={{ flex: '0 0 auto', alignSelf: 'flex-end', marginBottom: '16px' }}>
-                            <button type="submit" className="btn btn-primary" disabled={loading} style={{ padding: '10px 24px', height: '42px', fontSize: '0.9rem', fontWeight: 500 }}>
-                                {loading ? 'Sending Request...' : 'Send Request'}
+                            <button type="submit" className="btn btn-primary" disabled={isAdding} style={{ padding: '10px 24px', height: '42px', fontSize: '0.9rem', fontWeight: 500 }}>
+                                {isAdding ? 'Sending Request...' : 'Send Request'}
                             </button>
                         </div>
                     </div>
