@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -47,7 +46,6 @@ type PermissionRequest struct {
 	Requests []ScopeWithReason `json:"requests"`
 	Status   string            `json:"status"` // "pending", "approved", "rejected"
 	userID   string
-	decision  chan bool
 }
 
 // NewOrchestrator creates a new Orchestrator with the given dependencies.
@@ -567,15 +565,14 @@ func generateTokenSecret() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// RequestPermissions registers a permission request and blocks until the user approves or rejects it,
-// or until the context is cancelled, or the request times out (5 minutes).
-func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID string, requests []ScopeWithReason) (bool, string, error) {
+// RequestPermissions registers a permission request dynamically and returns immediately.
+func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID string, requests []ScopeWithReason) (bool, string, string, error) {
 	app, err := o.DB.GetAppByAppIDAndUserID(appID, userID)
 	if err != nil {
-		return false, "", fmt.Errorf("database query error: %w", err)
+		return false, "", "", fmt.Errorf("database query error: %w", err)
 	}
 	if app == nil {
-		return false, "", fmt.Errorf("calling app not found")
+		return false, "", "", fmt.Errorf("calling app not found")
 	}
 
 	reqID := uuid.NewString()
@@ -586,93 +583,15 @@ func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID str
 		Requests: requests,
 		Status:   "pending",
 		userID:   userID,
-		decision: make(chan bool),
 	}
 
 	o.mu.Lock()
 	o.pendingPermissions[reqID] = req
 	o.mu.Unlock()
 
-	defer func() {
-		o.mu.Lock()
-		delete(o.pendingPermissions, reqID)
-		o.mu.Unlock()
-	}()
+	o.Logger.Info("App requesting permissions dynamically (registered)", logging.F("app_id", appID), logging.F("request_id", reqID), logging.F("requests", requests))
 
-	o.Logger.Info("App requesting permissions dynamically", logging.F("app_id", appID), logging.F("request_id", reqID), logging.F("requests", requests))
-
-	// Block until approved, rejected, cancelled, or times out
-	select {
-	case approved := <-req.decision:
-		if !approved {
-			return false, "", nil
-		}
-
-		// Fetch user details to get username for directory creation
-		user, _ := o.DB.GetUserByID(userID)
-
-		// Insert new scopes into DB
-		for _, req := range requests {
-			if err := o.DB.InsertAppScope(appID, userID, req.Scope); err != nil {
-				o.Logger.Error("failed to save new app scope", logging.F("app_id", appID), logging.F("scope", req.Scope), logging.F("error", err.Error()))
-			}
-
-			// Ensure shared directory exists if it's a volume mount scope
-			volName, _, ok := ScopeToVolumeAccess(req.Scope)
-			if ok && user != nil {
-				sharedDir := filepath.Join(o.Cfg.Root, "users", user.Username, "shared", volName)
-				if err := os.MkdirAll(sharedDir, 0750); err != nil {
-					o.Logger.Error("failed to create dynamic shared directory", logging.F("dir", sharedDir), logging.F("error", err.Error()))
-				}
-			}
-		}
-
-		// Fetch all scopes from DB to generate new JWT
-		allScopes, err := o.DB.ListAppScopes(appID, userID)
-		if err != nil {
-			return false, "", fmt.Errorf("failed to fetch updated scopes: %w", err)
-		}
-
-		// Fetch token secret to sign JWT
-		token, err := o.DB.GetAppToken(appID, userID)
-		if err != nil || token == nil {
-			return false, "", fmt.Errorf("failed to fetch app token secret: %w", err)
-		}
-
-		newAppToken, err := o.TokenGenerator([]byte(token.TokenSecret), userID, appID, allScopes)
-		if err != nil {
-			return false, "", fmt.Errorf("failed to generate new app token: %w", err)
-		}
-
-		// Restart container to apply new volume mounts if any volume scopes were added
-		hasVolumeScope := false
-		for _, req := range requests {
-			_, _, ok := ScopeToVolumeAccess(req.Scope)
-			if ok {
-				hasVolumeScope = true
-				break
-			}
-		}
-
-		if hasVolumeScope && o.Docker != nil {
-			o.Logger.Info("Recreating app container to apply new volume mounts", logging.F("app_id", appID))
-			if app.ContainerID != "" {
-				_ = o.Docker.StopContainer(ctx, app.ContainerID, 10)
-				_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
-			}
-			if err := o.Start(ctx, app.ID); err != nil {
-				o.Logger.Error("failed to restart container after scope grant", logging.F("app_id", appID), logging.F("error", err.Error()))
-			}
-		}
-
-		return true, newAppToken, nil
-
-	case <-ctx.Done():
-		return false, "", ctx.Err()
-
-	case <-time.After(5 * time.Minute):
-		return false, "", fmt.Errorf("permission request timed out")
-	}
+	return false, "", reqID, nil
 }
 
 // ListPendingPermissions returns all pending permission requests for a given user.
@@ -690,41 +609,67 @@ func (o *Orchestrator) ListPendingPermissions(userID string) []*PermissionReques
 }
 
 
-// ApprovePermissionRequest approves a pending request by sending true to its channel.
-func (o *Orchestrator) ApprovePermissionRequest(reqID string) bool {
-	o.mu.RLock()
+// ApprovePermissionRequest approves a pending request by inserting the scopes into DB and recreating the app container.
+func (o *Orchestrator) ApprovePermissionRequest(ctx context.Context, reqID string) bool {
+	o.mu.Lock()
 	req, exists := o.pendingPermissions[reqID]
-	o.mu.RUnlock()
+	if exists {
+		delete(o.pendingPermissions, reqID)
+	}
+	o.mu.Unlock()
 
 	if !exists {
 		return false
 	}
 
-	select {
-	case req.decision <- true:
-		req.Status = "approved"
-		return true
-	default:
+	app, err := o.DB.GetAppByAppIDAndUserID(req.AppID, req.userID)
+	if err != nil || app == nil {
+		o.Logger.Error("failed to find app for permission approval", logging.F("app_id", req.AppID))
 		return false
 	}
+
+	user, _ := o.DB.GetUserByID(req.userID)
+
+	// Save new scopes to DB
+	for _, r := range req.Requests {
+		if err := o.DB.InsertAppScope(req.AppID, req.userID, r.Scope); err != nil {
+			o.Logger.Error("failed to save new app scope", logging.F("app_id", req.AppID), logging.F("scope", r.Scope), logging.F("error", err.Error()))
+		}
+
+		// Ensure shared directory exists if it's a volume mount scope
+		volName, _, ok := ScopeToVolumeAccess(r.Scope)
+		if ok && user != nil {
+			sharedDir := filepath.Join(o.Cfg.Root, "users", user.Username, "shared", volName)
+			if err := os.MkdirAll(sharedDir, 0750); err != nil {
+				o.Logger.Error("failed to create dynamic shared directory", logging.F("dir", sharedDir), logging.F("error", err.Error()))
+			}
+		}
+	}
+
+	// Always restart container to apply new scopes and volume mounts
+	if o.Docker != nil {
+		o.Logger.Info("Recreating app container to apply new scopes and volume mounts", logging.F("app_id", req.AppID))
+		if app.ContainerID != "" {
+			_ = o.Docker.StopContainer(ctx, app.ContainerID, 10)
+			_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
+		}
+		if err := o.Start(ctx, app.ID); err != nil {
+			o.Logger.Error("failed to restart container after scope grant", logging.F("app_id", req.AppID), logging.F("error", err.Error()))
+		}
+	}
+
+	return true
 }
 
-// RejectPermissionRequest rejects a pending request by sending false to its channel.
+// RejectPermissionRequest rejects a pending request by removing it.
 func (o *Orchestrator) RejectPermissionRequest(reqID string) bool {
-	o.mu.RLock()
-	req, exists := o.pendingPermissions[reqID]
-	o.mu.RUnlock()
-
-	if !exists {
-		return false
+	o.mu.Lock()
+	_, exists := o.pendingPermissions[reqID]
+	if exists {
+		delete(o.pendingPermissions, reqID)
 	}
+	o.mu.Unlock()
 
-	select {
-	case req.decision <- false:
-		req.Status = "rejected"
-		return true
-	default:
-		return false
-	}
+	return exists
 }
 

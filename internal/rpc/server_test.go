@@ -5,7 +5,6 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -423,21 +422,6 @@ func TestGrpcRequestPermissions_Approve(t *testing.T) {
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, appID, []string{"profile:read"})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 
-	// Concurrently approve the permission request
-	go func() {
-		// Wait a bit for orchestrator to receive the request
-		time.Sleep(50 * time.Millisecond)
-		reqs := orch.ListPendingPermissions(userID)
-		if len(reqs) != 1 {
-			t.Errorf("expected 1 pending permission request, got %d", len(reqs))
-			return
-		}
-		if reqs[0].AppID != appID || len(reqs[0].Requests) != 1 || reqs[0].Requests[0].Reason != "need contacts" {
-			t.Errorf("unexpected pending request: %+v", reqs[0])
-		}
-		orch.ApprovePermissionRequest(reqs[0].ID)
-	}()
-
 	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
 		Requests: []*pb.ScopeRequest{
 			{Scope: "contacts:read", Reason: "need contacts"},
@@ -447,12 +431,24 @@ func TestGrpcRequestPermissions_Approve(t *testing.T) {
 		t.Fatalf("RequestPermissions failed: %v", err)
 	}
 
-	if !resp.Granted {
-		t.Error("expected permissions to be granted")
+	if resp.Granted {
+		t.Error("expected permissions not to be granted immediately")
 	}
 
-	if resp.NewAppToken == "" {
-		t.Error("expected a new app token, got empty string")
+	if resp.RequestId == "" {
+		t.Error("expected a request ID to be returned")
+	}
+
+	// Verify it is in the pending permissions list
+	reqs := orch.ListPendingPermissions(userID)
+	if len(reqs) != 1 {
+		t.Fatalf("expected 1 pending permission request, got %d", len(reqs))
+	}
+
+	// Approve it using the RequestID
+	ok := orch.ApprovePermissionRequest(context.Background(), resp.RequestId)
+	if !ok {
+		t.Fatal("expected ApprovePermissionRequest to succeed")
 	}
 
 	// Verify that contacts:read is now in DB scopes
@@ -497,15 +493,6 @@ func TestGrpcRequestPermissions_Reject(t *testing.T) {
 	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, appID, []string{"profile:read"})
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
 
-	// Concurrently reject the request
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		reqs := orch.ListPendingPermissions(userID)
-		if len(reqs) == 1 {
-			orch.RejectPermissionRequest(reqs[0].ID)
-		}
-	}()
-
 	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
 		Requests: []*pb.ScopeRequest{
 			{Scope: "contacts:write", Reason: "need write"},
@@ -516,7 +503,19 @@ func TestGrpcRequestPermissions_Reject(t *testing.T) {
 	}
 
 	if resp.Granted {
-		t.Error("expected permissions to be rejected, but got granted")
+		t.Error("expected permissions not to be granted immediately")
+	}
+
+	// Reject the request using the RequestID
+	ok := orch.RejectPermissionRequest(resp.RequestId)
+	if !ok {
+		t.Fatal("expected RejectPermissionRequest to succeed")
+	}
+
+	// Verify it is removed from the pending list
+	reqs := orch.ListPendingPermissions(userID)
+	if len(reqs) != 0 {
+		t.Errorf("expected 0 pending requests, got %d", len(reqs))
 	}
 }
 

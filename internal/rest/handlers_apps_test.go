@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
@@ -341,20 +340,19 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 		t.Errorf("expected empty list, got %s", rrList.Body.String())
 	}
 
-	// Trigger a permission request block asynchronously
-	decisionCh := make(chan bool)
-	go func() {
-		granted, _, err := orchestrator.RequestPermissions(context.Background(), "com.example.app", "u1", []core.ScopeWithReason{
-			{Scope: "contacts:read", Reason: "Reason details"},
-		})
-		if err != nil {
-			t.Errorf("RequestPermissions error: %v", err)
-		}
-		decisionCh <- granted
-	}()
-
-	// Wait a bit for orchestrator to register it
-	time.Sleep(50 * time.Millisecond)
+	// Trigger a permission request synchronously
+	granted, _, reqID, err := orchestrator.RequestPermissions(context.Background(), "com.example.app", "u1", []core.ScopeWithReason{
+		{Scope: "contacts:read", Reason: "Reason details"},
+	})
+	if err != nil {
+		t.Fatalf("RequestPermissions error: %v", err)
+	}
+	if granted {
+		t.Error("expected granted to be false initially")
+	}
+	if reqID == "" {
+		t.Error("expected non-empty request id")
+	}
 
 	// Verify it shows up in GET list
 	reqList2 := httptest.NewRequest("GET", "/api/v1/apps/permissions/requests", nil)
@@ -369,12 +367,6 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 		t.Errorf("expected request in list, got %s", rrList2.Body.String())
 	}
 
-	// Extract the ID from list JSON response
-	bodyStr := rrList2.Body.String()
-	idStart := strings.Index(bodyStr, `"id":"`) + 6
-	idEnd := strings.Index(bodyStr[idStart:], `"`) + idStart
-	reqID := bodyStr[idStart:idEnd]
-
 	// Approve it via POST /approve
 	reqApprove := httptest.NewRequest("POST", "/api/v1/apps/permissions/requests/"+reqID+"/approve", nil)
 	reqApprove.AddCookie(cookie)
@@ -385,14 +377,13 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d (body: %s)", rrApprove.Code, rrApprove.Body.String())
 	}
 
-	// Verify dynamic request goroutine returns true
-	select {
-	case granted := <-decisionCh:
-		if !granted {
-			t.Error("expected permission request to be granted")
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("timed out waiting for permission request to approve")
+	// Verify scope is in DB after approval
+	scopes, err := database.ListAppScopes("com.example.app", "u1")
+	if err != nil {
+		t.Fatalf("ListAppScopes failed: %v", err)
+	}
+	if len(scopes) != 1 || scopes[0] != "contacts:read" {
+		t.Errorf("expected contacts:read scope to be granted, got %v", scopes)
 	}
 }
 

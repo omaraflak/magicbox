@@ -3,6 +3,7 @@
 
 export const ROUTES = {
     DASHBOARD: '/',
+    CONSENT: '/consent',
     SETTINGS: '/settings',
     SETTINGS_SECURITY: '/settings/security',
     SETTINGS_CONTACTS: '/settings/contacts',
@@ -22,6 +23,15 @@ const ADMIN_SUBTABS = ['users', 'registries', 'logs', 'keys', 'upgrade'];
  * @returns {{ view: string, section: string, tab: string }}
  */
 export function viewFromPath(pathname) {
+    if (pathname === '/consent') {
+        return { view: 'consent', section: 'profile', tab: 'users' };
+    }
+    if (pathname.startsWith('/app/')) {
+        const segments = pathname.substring(5).split('/');
+        const slug = segments[0];
+        const appPath = segments.slice(1).join('/');
+        return { view: 'app', section: 'profile', tab: 'users', appSlug: slug, appPath: appPath };
+    }
     if (pathname === '/settings') {
         return { view: 'settings', section: 'profile', tab: 'users' };
     }
@@ -47,12 +57,17 @@ export function viewFromPath(pathname) {
 
 /**
  * Build a URL path for a given view, settings section, and admin sub-tab.
- * @param {string} view - 'dashboard' or 'settings'
+ * @param {string} view - 'dashboard', 'settings', or 'app'
  * @param {string} section - 'profile', 'security', 'contacts', or 'admin'
  * @param {string} tab - 'users', 'registries', or 'logs'
+ * @param {string} appSlug - route slug of the app if view is 'app'
+ * @param {string} appPath - sub-path within the app if view is 'app'
  * @returns {string}
  */
-export function pathFromView(view, section = 'profile', tab = 'users') {
+export function pathFromView(view, section = 'profile', tab = 'users', appSlug = '', appPath = '') {
+    if (view === 'app') {
+        return `/app/${appSlug}/${appPath || ''}`;
+    }
     if (view === 'settings') {
         if (section === 'security') {
             return ROUTES.SETTINGS_SECURITY;

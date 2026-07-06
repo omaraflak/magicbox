@@ -165,53 +165,7 @@ func TestEnsureScopes_AlreadyGranted(t *testing.T) {
 	}
 }
 
-func TestEnsureScopes_NeedsRequest_Approved(t *testing.T) {
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer lis.Close()
-
-	srv := grpc.NewServer()
-	mockSrv := &mockMagicboxOSServer{
-		hasScopesFunc: func(ctx context.Context, req *pb.HasScopesRequest) (*pb.HasScopesResponse, error) {
-			return &pb.HasScopesResponse{
-				HasAll:        false,
-				MissingScopes: []string{"scope-1"},
-			}, nil
-		},
-		requestPermissionsFunc: func(ctx context.Context, req *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error) {
-			if len(req.Requests) != 1 || req.Requests[0].Scope != "scope-1" || req.Requests[0].Reason != "reason-1" {
-				return &pb.RequestPermissionsResponse{Granted: false}, nil
-			}
-			return &pb.RequestPermissionsResponse{
-				Granted:     true,
-				NewAppToken: "new-token",
-			}, nil
-		},
-	}
-	pb.RegisterMagicboxOSServer(srv, mockSrv)
-	go srv.Serve(lis)
-	defer srv.Stop()
-
-	env := &Env{
-		ApiToken: "old-token",
-		CoreURL:  "127.0.0.1:" + strings.Split(lis.Addr().String(), ":")[1],
-		UserID:   "user-1",
-		AppID:    "app-1",
-	}
-
-	err = env.EnsureScopes([]string{"scope-1"}, []string{"reason-1"})
-	if err != nil {
-		t.Fatalf("EnsureScopes failed: %v", err)
-	}
-
-	if env.ApiToken != "new-token" {
-		t.Errorf("expected ApiToken to update to 'new-token', got %q", env.ApiToken)
-	}
-}
-
-func TestEnsureScopes_NeedsRequest_Denied(t *testing.T) {
+func TestEnsureScopes_NeedsRequest_ConsentRequired(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
@@ -228,7 +182,8 @@ func TestEnsureScopes_NeedsRequest_Denied(t *testing.T) {
 		},
 		requestPermissionsFunc: func(ctx context.Context, req *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error) {
 			return &pb.RequestPermissionsResponse{
-				Granted: false,
+				Granted:   false,
+				RequestId: "req-123",
 			}, nil
 		},
 	}
@@ -245,11 +200,20 @@ func TestEnsureScopes_NeedsRequest_Denied(t *testing.T) {
 
 	err = env.EnsureScopes([]string{"scope-1"}, []string{"reason-1"})
 	if err == nil {
-		t.Fatal("expected EnsureScopes to fail due to denial, but succeeded")
+		t.Fatal("expected EnsureScopes to fail, got nil")
 	}
 
-	if env.ApiToken != "old-token" {
-		t.Errorf("expected ApiToken to remain 'old-token', got %q", env.ApiToken)
+	consentErr, ok := err.(*ConsentRequiredError)
+	if !ok {
+		t.Fatalf("expected ConsentRequiredError, got %T: %v", err, err)
+	}
+
+	if consentErr.RequestID != "req-123" {
+		t.Errorf("expected RequestID 'req-123', got %q", consentErr.RequestID)
+	}
+
+	if len(consentErr.MissingScopes) != 1 || consentErr.MissingScopes[0] != "scope-1" {
+		t.Errorf("expected MissingScopes ['scope-1'], got %v", consentErr.MissingScopes)
 	}
 }
 

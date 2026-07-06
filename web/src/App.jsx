@@ -5,7 +5,7 @@ import LoginView from './components/LoginView';
 import DashboardView from './components/DashboardView';
 import AdminConsoleView from './components/AdminConsoleView';
 import SettingsView from './components/SettingsView';
-import AppViewer from './components/AppViewer';
+import ConsentView from './components/ConsentView';
 
 // Modals
 import InstallAppModal from './components/InstallAppModal';
@@ -35,6 +35,8 @@ export default function App() {
     // Core Business Data
     const [apps, setApps] = useState([]);
     const [activeApp, setActiveApp] = useState(null);
+    const [activeAppSlug, setActiveAppSlug] = useState('');
+    const [activeAppPath, setActiveAppPath] = useState('');
     const [users, setUsers] = useState([]);
     const [registries, setRegistries] = useState([]);
     const [logs, setLogs] = useState([]);
@@ -104,16 +106,24 @@ export default function App() {
     };
 
     // Navigation: sync view state with URL path.
-    const navigate = (newView, section = 'profile', tab = null) => {
+    const navigate = (newView, section = 'profile', tab = null, appSlug = '', appPath = '') => {
         const s = section || settingsSection || 'profile';
         const t = tab || adminTab || 'users';
         if (newView === 'settings') {
             setSettingsSection(s);
             if (s === 'admin') setAdminTab(t);
         }
-        const path = pathFromView(newView, s, t);
-        window.history.pushState({ view: newView, section: s, tab: t }, '', path);
+        const path = pathFromView(newView, s, t, appSlug, appPath);
+        window.history.pushState({ view: newView, section: s, tab: t, appSlug, appPath }, '', path);
         setView(newView);
+        if (newView === 'app') {
+            setActiveAppSlug(appSlug);
+            setActiveAppPath(appPath);
+        } else {
+            setActiveAppSlug('');
+            setActiveAppPath('');
+            setActiveApp(null);
+        }
     };
 
     // Handle browser back/forward.
@@ -123,11 +133,27 @@ export default function App() {
                 setView(e.state.view);
                 if (e.state.section) setSettingsSection(e.state.section);
                 if (e.state.tab) setAdminTab(e.state.tab);
+                if (e.state.view === 'app' && e.state.appSlug) {
+                    setActiveAppSlug(e.state.appSlug);
+                    setActiveAppPath(e.state.appPath || '');
+                } else {
+                    setActiveAppSlug('');
+                    setActiveAppPath('');
+                    setActiveApp(null);
+                }
             } else {
-                const { view: v, section: s, tab: t } = viewFromPath(window.location.pathname);
+                const { view: v, section: s, tab: t, appSlug: as, appPath: ap } = viewFromPath(window.location.pathname);
                 setView(v);
                 setSettingsSection(s);
                 setAdminTab(t);
+                if (v === 'app' && as) {
+                    setActiveAppSlug(as);
+                    setActiveAppPath(ap || '');
+                } else {
+                    setActiveAppSlug('');
+                    setActiveAppPath('');
+                    setActiveApp(null);
+                }
             }
         };
         window.addEventListener('popstate', onPopState);
@@ -159,12 +185,16 @@ export default function App() {
                 if (me) {
                     setUser(me);
                     // Restore view from URL path on refresh.
-                    const { view: v, section: s, tab: t } = viewFromPath(window.location.pathname);
+                    const { view: v, section: s, tab: t, appSlug: as, appPath: ap } = viewFromPath(window.location.pathname);
                     setView(v);
                     setSettingsSection(s);
                     setAdminTab(t);
+                    if (v === 'app' && as) {
+                        setActiveAppSlug(as);
+                        setActiveAppPath(ap || '');
+                    }
                     // Replace state so back/forward works from initial load.
-                    window.history.replaceState({ view: v, section: s, tab: t }, '', window.location.pathname);
+                    window.history.replaceState({ view: v, section: s, tab: t, appSlug: as, appPath: ap }, '', window.location.pathname);
                 } else {
                     // Check if initial setup is required
                     const needsSetup = await checkNeedsSetup(token);
@@ -186,19 +216,27 @@ export default function App() {
 
     // 2. Fetch Dashboard Apps List
     const loadApps = async () => {
-        if (view !== 'dashboard' && view !== 'admin') return;
+        if (!user) return;
         const { status, data } = await callAPI('GET', '/apps');
         if (status === 200) {
-            setApps(data || []);
+            const appsList = data || [];
+            setApps(appsList);
+            if (activeAppSlug && (!activeApp || activeApp.route_slug !== activeAppSlug)) {
+                const matched = appsList.find(a => a.route_slug === activeAppSlug);
+                if (matched) {
+                    setActiveApp(matched);
+                }
+            }
         }
     };
 
-    // Polling app statuses when dashboard is active (to show active status during installation etc.)
+    // Polling app statuses when logged in
     useEffect(() => {
+        if (!user) return;
         loadApps();
         const interval = setInterval(loadApps, 5000);
         return () => clearInterval(interval);
-    }, [view, csrfToken]);
+    }, [user, csrfToken, activeAppSlug]);
 
     const loadPendingPermissions = async () => {
         if (!user) return;
@@ -774,19 +812,17 @@ export default function App() {
                                 setInstallModalOpen(true);
                             }}
                             onOpenApp={(app) => {
-                                setActiveApp(app);
-                                navigate('app');
+                                const appUrl = app.host 
+                                    ? `${window.location.protocol}//${app.host}/` 
+                                    : `/u/${user?.username}/${app.route_slug}/`;
+                                window.open(appUrl, '_blank');
                             }}
                         />
                     </div>
                 )}
 
-                {view === 'app' && activeApp && (
-                    <AppViewer 
-                        app={activeApp}
-                        user={user}
-                        onBack={() => navigate('dashboard')}
-                    />
+                {view === 'consent' && (
+                    <ConsentView callAPI={callAPI} />
                 )}
 
                 {view === 'settings' && (

@@ -315,7 +315,7 @@ func (s *Server) handleApprovePermissionRequest(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ok := s.orchestrator.ApprovePermissionRequest(reqID)
+	ok := s.orchestrator.ApprovePermissionRequest(r.Context(), reqID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "pending request not found or decision already sent")
 		return

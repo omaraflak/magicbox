@@ -77,6 +77,7 @@ message RequestPermissionsRequest {
 message RequestPermissionsResponse {
   bool granted = 1;
   string new_app_token = 2;
+  string request_id = 3;
 }
 
 // --------------------------------------------------------------------------

@@ -217,6 +217,7 @@ type RequestPermissionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Granted       bool                   `protobuf:"varint,1,opt,name=granted,proto3" json:"granted,omitempty"`
 	NewAppToken   string                 `protobuf:"bytes,2,opt,name=new_app_token,json=newAppToken,proto3" json:"new_app_token,omitempty"`
+	RequestId     string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -261,6 +262,13 @@ func (x *RequestPermissionsResponse) GetGranted() bool {
 func (x *RequestPermissionsResponse) GetNewAppToken() string {
 	if x != nil {
 		return x.NewAppToken
+	}
+	return ""
+}
+
+func (x *RequestPermissionsResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
 	}
 	return ""
 }
@@ -1069,10 +1077,12 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"R\n" +
 	"\x19RequestPermissionsRequest\x125\n" +
-	"\brequests\x18\x01 \x03(\v2\x19.magicbox.v1.ScopeRequestR\brequests\"Z\n" +
+	"\brequests\x18\x01 \x03(\v2\x19.magicbox.v1.ScopeRequestR\brequests\"y\n" +
 	"\x1aRequestPermissionsResponse\x12\x18\n" +
 	"\agranted\x18\x01 \x01(\bR\agranted\x12\"\n" +
-	"\rnew_app_token\x18\x02 \x01(\tR\vnewAppToken\"x\n" +
+	"\rnew_app_token\x18\x02 \x01(\tR\vnewAppToken\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\"x\n" +
 	"\x12SendWebhookRequest\x12\"\n" +
 	"\rtarget_app_id\x18\x01 \x01(\tR\vtargetAppId\x12$\n" +
 	"\x0etarget_user_id\x18\x02 \x01(\tR\ftargetUserId\x12\x18\n" +

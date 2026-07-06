@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"encoding/json"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -179,7 +180,10 @@ func (e *Env) EnsureScopes(scopes []string, reasons []string) error {
 	}
 
 	if !resp.Granted {
-		return fmt.Errorf("ensure scopes: permissions denied by user")
+		return &ConsentRequiredError{
+			RequestID:     resp.RequestId,
+			MissingScopes: hasResp.MissingScopes,
+		}
 	}
 
 	// Update local memory token so future calls use it
@@ -188,5 +192,32 @@ func (e *Env) EnsureScopes(scopes []string, reasons []string) error {
 	}
 
 	return nil
+}
+
+// ConsentRequiredError is returned by EnsureScopes when permissions need to be prompted.
+type ConsentRequiredError struct {
+	RequestID     string
+	MissingScopes []string
+}
+
+func (e *ConsentRequiredError) Error() string {
+	return fmt.Sprintf("consent required for scopes: %v (request_id: %s)", e.MissingScopes, e.RequestID)
+}
+
+// WriteConsentError checks if err is a ConsentRequiredError.
+// If it is, it writes a structured 403 response to w and returns true.
+// Otherwise it returns false.
+func WriteConsentError(w http.ResponseWriter, err error) bool {
+	if consentErr, ok := err.(*ConsentRequiredError); ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error":          "consent_required",
+			"request_id":     consentErr.RequestID,
+			"missing_scopes": consentErr.MissingScopes,
+		})
+		return true
+	}
+	return false
 }
 

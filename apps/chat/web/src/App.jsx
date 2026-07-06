@@ -89,6 +89,46 @@ function App() {
   const [addingContacts, setAddingContacts] = useState({});
   const [sentRequests, setSentRequests] = useState({});
   
+  const apiFetch = async (url, options = {}) => {
+    const res = await window.fetch(url, options);
+    if (res.status === 403) {
+      const clone = res.clone();
+      try {
+        const err = await clone.json();
+        if (err.error === 'consent_required' && err.request_id) {
+          return new Promise((resolve, reject) => {
+            const popup = window.open(`/consent?req_id=${err.request_id}`, 'ConsentRequired', 'width=500,height=600');
+            if (!popup) {
+              alert('Consent popup was blocked. Please allow popups for this site.');
+              reject(new Error('Consent popup blocked'));
+              return;
+            }
+
+            const listener = async (event) => {
+              if (event.data?.type === 'consent_decision' && event.data?.request_id === err.request_id) {
+                window.removeEventListener('message', listener);
+                if (event.data?.approved) {
+                  try {
+                    const retryRes = await apiFetch(url, options);
+                    resolve(retryRes);
+                  } catch (retryErr) {
+                    reject(retryErr);
+                  }
+                } else {
+                  reject(new Error('Permission denied by user'));
+                }
+              }
+            };
+            window.addEventListener('message', listener);
+          });
+        }
+      } catch (e) {
+        // ignore JSON parse error
+      }
+    }
+    return res;
+  };
+  
   
   // Refs
   const messagesEndRef = useRef(null);
@@ -190,7 +230,7 @@ function App() {
     if (!participant.invite_link) return;
     setAddingContacts(prev => ({ ...prev, [participant.user_id]: true }));
     try {
-      const res = await fetch('api/contacts/add', {
+      const res = await apiFetch('api/contacts/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,7 +256,7 @@ function App() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch('api/profile');
+      const res = await apiFetch('api/profile');
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -228,7 +268,7 @@ function App() {
 
   const fetchContacts = async () => {
     try {
-      const res = await fetch('api/contacts');
+      const res = await apiFetch('api/contacts');
       if (res.ok) {
         const data = await res.json();
         setContacts(data || []);
@@ -240,7 +280,7 @@ function App() {
 
   const fetchConversations = async () => {
     try {
-      const res = await fetch('api/conversations');
+      const res = await apiFetch('api/conversations');
       if (res.ok) {
         const data = await res.json();
         setConversations(data || []);
@@ -269,7 +309,7 @@ function App() {
         ? `api/conversations/${convID}/messages?limit=50&before=${before}` 
         : `api/conversations/${convID}/messages?limit=50`;
         
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         const newMsgs = data || [];
@@ -305,7 +345,7 @@ function App() {
 
   const searchChatMessages = async (convID, query) => {
     try {
-      const res = await fetch(`api/conversations/${convID}/messages?q=${encodeURIComponent(query)}`);
+      const res = await apiFetch(`api/conversations/${convID}/messages?q=${encodeURIComponent(query)}`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data || []);
@@ -339,7 +379,7 @@ function App() {
         ? `api/conversations/${convID}/attachments?limit=20&before=${before}` 
         : `api/conversations/${convID}/attachments?limit=20`;
         
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         const newMedia = data || [];
@@ -379,7 +419,7 @@ function App() {
     if (selectedContactIDs.length === 0) return;
 
     try {
-      const res = await fetch('api/conversations', {
+      const res = await apiFetch('api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -417,12 +457,12 @@ function App() {
         formData.append('text', messageText);
         formData.append('attachment', attachment);
 
-        res = await fetch(`api/conversations/${selectedConv.id}/messages`, {
+        res = await apiFetch(`api/conversations/${selectedConv.id}/messages`, {
           method: 'POST',
           body: formData // Content-Type header set automatically by browser
         });
       } else {
-        res = await fetch(`api/conversations/${selectedConv.id}/messages`, {
+        res = await apiFetch(`api/conversations/${selectedConv.id}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: messageText })
@@ -449,7 +489,7 @@ function App() {
     const trimmed = renameInput.trim();
     if (trimmed === '' || !selectedConv) return;
     try {
-      const res = await fetch(`api/conversations/${selectedConv.id}/rename`, {
+      const res = await apiFetch(`api/conversations/${selectedConv.id}/rename`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: trimmed })
@@ -469,7 +509,7 @@ function App() {
   const handleDeleteConversation = async () => {
     if (!selectedConv) return;
     try {
-      const res = await fetch(`api/conversations/${selectedConv.id}`, {
+      const res = await apiFetch(`api/conversations/${selectedConv.id}`, {
         method: 'DELETE'
       });
 

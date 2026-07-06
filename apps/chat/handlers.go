@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	pb "github.com/magicbox/core/api/proto/v1"
+	"github.com/magicbox/core/sdk"
 )
 
 // Structures for REST API
@@ -68,6 +69,9 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := env.EnsureScopes([]string{"profile:read"}, []string{"Read your basic user profile (username, user ID)"}); err != nil {
+		if sdk.WriteConsentError(w, err) {
+			return
+		}
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -100,6 +104,9 @@ func handleContacts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := env.EnsureScopes([]string{"contacts:read"}, []string{"Access contacts to display names and profile invite links"}); err != nil {
+		if sdk.WriteConsentError(w, err) {
+			return
+		}
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -140,6 +147,9 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := env.EnsureScopes([]string{"profile:read", "contacts:read"}, []string{"Read your basic user profile", "Access contacts to display names and profile invite links"}); err != nil {
+			if sdk.WriteConsentError(w, err) {
+				return
+			}
 			writeError(w, http.StatusForbidden, err.Error())
 			return
 		}
@@ -478,6 +488,9 @@ func handleMessages(w http.ResponseWriter, r *http.Request, conv *Conversation) 
 		}
 
 		if err := env.EnsureScopes(scopes, reasons); err != nil {
+			if sdk.WriteConsentError(w, err) {
+				return
+			}
 			writeError(w, http.StatusForbidden, err.Error())
 			return
 		}
@@ -806,6 +819,9 @@ func handleAddContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := env.EnsureScopes([]string{"contacts:write"}, []string{"Send contact requests directly to other users"}); err != nil {
+		if sdk.WriteConsentError(w, err) {
+			return
+		}
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}

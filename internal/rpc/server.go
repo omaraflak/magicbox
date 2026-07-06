@@ -510,7 +510,7 @@ func (s *RPCServer) RequestPermissions(ctx context.Context, req *pb.RequestPermi
 		})
 	}
 
-	granted, newAppToken, err := s.orchestrator.RequestPermissions(ctx, claims.AppID, claims.UserID, coreRequests)
+	granted, newAppToken, reqID, err := s.orchestrator.RequestPermissions(ctx, claims.AppID, claims.UserID, coreRequests)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "permission request failed: %v", err)
 	}
@@ -518,6 +518,7 @@ func (s *RPCServer) RequestPermissions(ctx context.Context, req *pb.RequestPermi
 	return &pb.RequestPermissionsResponse{
 		Granted:     granted,
 		NewAppToken: newAppToken,
+		RequestId:   reqID,
 	}, nil
 }
 
