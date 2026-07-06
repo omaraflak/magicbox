@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +31,11 @@ import (
 // appClaimsKey is the context key for validated AppTokenClaims.
 type appClaimsKey struct{}
 
+type appInstallCacheEntry struct {
+	installed bool
+	timestamp time.Time
+}
+
 // RPCServer implements the MagicboxOS gRPC service.
 type RPCServer struct {
 	pb.UnimplementedMagicboxOSServer
@@ -43,6 +49,9 @@ type RPCServer struct {
 	rateLimiter  *RateLimiter
 	p2pService   p2p.Service
 	grpcServer   *grpc.Server
+
+	cacheMu  sync.RWMutex
+	appCache map[string]appInstallCacheEntry
 }
 
 // NewRPCServer creates a new RPCServer with the given dependencies.
@@ -56,6 +65,7 @@ func NewRPCServer(database *db.DB, dockerClient *docker.Client, orchestrator *co
 		jwtSecret:    config.JWTSecret,
 		rateLimiter:  NewRateLimiter(),
 		p2pService:   p2pService,
+		appCache:     make(map[string]appInstallCacheEntry),
 	}
 }
 
@@ -670,6 +680,22 @@ func (s *RPCServer) IsAppInstalled(ctx context.Context, req *pb.IsAppInstalledRe
 		return &pb.IsAppInstalledResponse{Installed: installed}, nil
 	}
 
+	// Check cache
+	cacheKey := req.ContactId + ":" + req.AppId
+	s.cacheMu.RLock()
+	entry, found := s.appCache[cacheKey]
+	s.cacheMu.RUnlock()
+
+	if found {
+		ttl := 5 * time.Minute
+		if entry.installed {
+			ttl = 15 * 24 * time.Hour
+		}
+		if time.Since(entry.timestamp) < ttl {
+			return &pb.IsAppInstalledResponse{Installed: entry.installed}, nil
+		}
+	}
+
 	// Otherwise, generate request ID, send P2P message, and wait for response.
 	requestID := uuid.NewString()
 	ch := protocol.RegisterAppCheckRequest(requestID)
@@ -696,15 +722,26 @@ func (s *RPCServer) IsAppInstalled(ctx context.Context, req *pb.IsAppInstalledRe
 		return nil, status.Errorf(codes.Unavailable, "failed to send request to contact: %v", err)
 	}
 
+	var installed bool
 	// Wait for response or timeout (e.g. 5 seconds)
 	select {
-	case installed := <-ch:
-		return &pb.IsAppInstalledResponse{Installed: installed}, nil
+	case installed = <-ch:
+		// Resolve success, break to update cache
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(5 * time.Second):
 		return nil, status.Error(codes.DeadlineExceeded, "timeout waiting for contact response")
 	}
+
+	// Update cache
+	s.cacheMu.Lock()
+	s.appCache[cacheKey] = appInstallCacheEntry{
+		installed: installed,
+		timestamp: time.Now(),
+	}
+	s.cacheMu.Unlock()
+
+	return &pb.IsAppInstalledResponse{Installed: installed}, nil
 }
 
 
