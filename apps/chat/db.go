@@ -51,6 +51,15 @@ func initDB() {
 			is_system BOOLEAN NOT NULL DEFAULT 0,
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS message_deliveries (
+			message_id TEXT NOT NULL,
+			recipient_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			last_attempt TEXT,
+			PRIMARY KEY (message_id, recipient_id),
+			FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+		)`,
 	}
 
 	for _, q := range queries {
@@ -361,4 +370,57 @@ func getSharedMedia(conversationID string, beforeSentAt string, limit int) ([]Me
 		msgs = append(msgs, m)
 	}
 	return msgs, nil
+}
+
+type PendingDelivery struct {
+	MessageID      string
+	RecipientID    string
+	ConversationID string
+	Text           string
+	AttachmentName string
+	AttachmentType string
+	AttachmentPath string
+	SentAt         string
+	IsSystem       bool
+	SenderID       string
+	SenderName     string
+	Attempts       int
+}
+
+func insertMessageDelivery(messageID, recipientID, status string) error {
+	_, err := dbConn.Exec("INSERT INTO message_deliveries (message_id, recipient_id, status) VALUES (?, ?, ?)", messageID, recipientID, status)
+	return err
+}
+
+func updateMessageDeliveryStatus(messageID, recipientID, status string) error {
+	_, err := dbConn.Exec("UPDATE message_deliveries SET status = ?, attempts = attempts + 1, last_attempt = datetime('now') WHERE message_id = ? AND recipient_id = ?", status, messageID, recipientID)
+	return err
+}
+
+func deleteMessageDelivery(messageID, recipientID string) error {
+	_, err := dbConn.Exec("DELETE FROM message_deliveries WHERE message_id = ? AND recipient_id = ?", messageID, recipientID)
+	return err
+}
+
+func getPendingDeliveries() ([]PendingDelivery, error) {
+	rows, err := dbConn.Query(`
+		SELECT d.message_id, d.recipient_id, m.conversation_id, m.text, m.attachment_name, m.attachment_type, m.attachment_path, m.sent_at, m.is_system, m.sender_id, m.sender_name, d.attempts
+		FROM message_deliveries d
+		JOIN messages m ON d.message_id = m.id
+		WHERE d.status IN ('pending', 'failed')
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pd []PendingDelivery
+	for rows.Next() {
+		var p PendingDelivery
+		if err := rows.Scan(&p.MessageID, &p.RecipientID, &p.ConversationID, &p.Text, &p.AttachmentName, &p.AttachmentType, &p.AttachmentPath, &p.SentAt, &p.IsSystem, &p.SenderID, &p.SenderName, &p.Attempts); err != nil {
+			return nil, err
+		}
+		pd = append(pd, p)
+	}
+	return pd, nil
 }

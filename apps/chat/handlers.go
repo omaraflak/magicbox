@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -588,84 +589,136 @@ func handleAttachments(w http.ResponseWriter, r *http.Request, conv *Conversatio
 
 // Background routine to send the P2P messages
 func broadcastMessage(conv *Conversation, msg *Message, attachmentBytes []byte, selfUserID, selfUsername string) {
-	client, conn, ctx, err := getCoreClient()
-	if err != nil {
-		log.Printf("P2P Broadcast error: failed to get core client: %v", err)
-		return
-	}
-	defer conn.Close()
-
-	// Get all contacts from core to resolve participant target User ID -> Contact ID
-	contactsResp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
-	if err != nil {
-		log.Printf("P2P Broadcast error: failed to fetch contact list: %v", err)
-		return
-	}
-
-	// Prepare participants list for payload
-	partsPayload := []ParticipantInfo{}
-	for _, p := range conv.Participants {
-		partsPayload = append(partsPayload, ParticipantInfo{
-			UserID:      p.UserID,
-			DisplayName: p.DisplayName,
-			InviteLink:  p.InviteLink,
-		})
-	}
-
-	// Populate our own invite link for the payload
-	inviteResp, inviteErr := client.GetInviteLink(ctx, &pb.GetInviteLinkRequest{})
-	if inviteErr == nil && inviteResp.InviteLink != "" {
-		for i := range partsPayload {
-			if partsPayload[i].UserID == selfUserID {
-				partsPayload[i].InviteLink = inviteResp.InviteLink
-				break
-			}
-		}
-	}
-
-	// Build the JSON payload to send over libp2p
-	payload := MessagePayload{
-		ConversationID:   conv.ID,
-		ConversationName: conv.Name,
-		Participants:     partsPayload,
-		MessageID:        msg.ID,
-		SenderID:         selfUserID,
-		SenderName:       selfUsername,
-		Text:             msg.Text,
-		AttachmentName:   msg.AttachmentName,
-		AttachmentType:   msg.AttachmentType,
-		AttachmentData:   attachmentBytes,
-		SentAt:           msg.SentAt,
-		IsSystem:         msg.IsSystem,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("P2P Broadcast error: failed to marshal payload: %v", err)
-		return
-	}
-
-	// Send to every other participant
 	for _, p := range conv.Participants {
 		if p.UserID == selfUserID {
 			continue // Do not send to ourselves
 		}
+		if err := insertMessageDelivery(msg.ID, p.UserID, "pending"); err != nil {
+			log.Printf("Warning: failed to insert message delivery entry: %v", err)
+		}
+	}
+	go processDeliveryQueue()
+}
 
-		// Find contact by target_user_id
+var processingQueueMu sync.Mutex
+
+func processDeliveryQueue() {
+	processingQueueMu.Lock()
+	defer processingQueueMu.Unlock()
+
+	deliveries, err := getPendingDeliveries()
+	if err != nil {
+		log.Printf("Queue processing error: failed to query pending deliveries: %v", err)
+		return
+	}
+
+	if len(deliveries) == 0 {
+		return
+	}
+
+	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		log.Printf("Queue processing error: failed to get core client: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	// Get contact list to resolve user ID to contact ID
+	contactsResp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
+	if err != nil {
+		log.Printf("Queue processing error: failed to fetch contact list: %v", err)
+		return
+	}
+
+	// Get our own profile details to populate invite link if needed
+	profile, err := client.GetProfile(ctx, &pb.GetProfileRequest{})
+	if err != nil {
+		log.Printf("Queue processing error: failed to fetch profile: %v", err)
+		return
+	}
+
+	inviteResp, inviteErr := client.GetInviteLink(ctx, &pb.GetInviteLinkRequest{})
+	var ownInviteLink string
+	if inviteErr == nil && inviteResp != nil {
+		ownInviteLink = inviteResp.InviteLink
+	}
+
+	// Cache conversation payloads to avoid redundant queries / marshalling in this batch
+	convPayloadCache := make(map[string]*MessagePayload)
+
+	for _, d := range deliveries {
+		// Find contact by target_user_id (d.RecipientID)
 		var contactID string
 		for _, c := range contactsResp.Contacts {
-			if c.TargetUserId == p.UserID {
+			if c.TargetUserId == d.RecipientID {
 				contactID = c.Id
 				break
 			}
 		}
 
 		if contactID == "" {
-			log.Printf("P2P Broadcast warning: could not find contact ID for target user %s (%s)", p.DisplayName, p.UserID)
+			log.Printf("Queue processing warning: could not find contact ID for target user %s", d.RecipientID)
+			// If recipient is no longer a contact, we should drop it or mark it as failed
+			_ = updateMessageDeliveryStatus(d.MessageID, d.RecipientID, "failed")
 			continue
 		}
 
-		log.Printf("P2P Broadcast: sending message %s to %s (%s) for contact ID %s", msg.ID, p.DisplayName, p.UserID, contactID)
+		// Reconstruct/fetch conversation payload
+		payload, exists := convPayloadCache[d.MessageID]
+		if !exists {
+			conv, err := getConversation(d.ConversationID)
+			if err != nil || conv == nil {
+				log.Printf("Queue processing error: failed to load conversation %s for message %s: %v", d.ConversationID, d.MessageID, err)
+				continue
+			}
+
+			// Load attachment bytes if applicable
+			var attachBytes []byte
+			if d.AttachmentPath != "" && d.AttachmentName != "" {
+				attachBytes, err = os.ReadFile(d.AttachmentPath)
+				if err != nil {
+					log.Printf("Queue processing warning: failed to read attachment from path %s: %v", d.AttachmentPath, err)
+				}
+			}
+
+			// Prepare participants payload
+			partsPayload := []ParticipantInfo{}
+			for _, p := range conv.Participants {
+				inviteLnk := p.InviteLink
+				if p.UserID == profile.UserId {
+					inviteLnk = ownInviteLink
+				}
+				partsPayload = append(partsPayload, ParticipantInfo{
+					UserID:      p.UserID,
+					DisplayName: p.DisplayName,
+					InviteLink:  inviteLnk,
+				})
+			}
+
+			payload = &MessagePayload{
+				ConversationID:   conv.ID,
+				ConversationName: conv.Name,
+				Participants:     partsPayload,
+				MessageID:        d.MessageID,
+				SenderID:         d.SenderID,
+				SenderName:       d.SenderName,
+				Text:             d.Text,
+				AttachmentName:   d.AttachmentName,
+				AttachmentType:   d.AttachmentType,
+				AttachmentData:   attachBytes,
+				SentAt:           d.SentAt,
+				IsSystem:         d.IsSystem,
+			}
+			convPayloadCache[d.MessageID] = payload
+		}
+
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			log.Printf("Queue processing error: failed to marshal payload: %v", err)
+			continue
+		}
+
+		log.Printf("Queue processing: attempting delivery of message %s to recipient %s (contact ID %s) (attempt %d)", d.MessageID, d.RecipientID, contactID, d.Attempts+1)
 		sendResp, sendErr := client.SendToContact(ctx, &pb.SendToContactRequest{
 			ContactId: contactID,
 			AppId:     appID,
@@ -673,11 +726,15 @@ func broadcastMessage(conv *Conversation, msg *Message, attachmentBytes []byte, 
 		})
 
 		if sendErr != nil {
-			log.Printf("P2P Broadcast error: send failed to %s: %v", p.DisplayName, sendErr)
+			log.Printf("Queue processing error: send failed: %v", sendErr)
+			_ = updateMessageDeliveryStatus(d.MessageID, d.RecipientID, "failed")
 		} else if !sendResp.Success {
-			log.Printf("P2P Broadcast error: send rejected by %s: %s", p.DisplayName, sendResp.StatusMessage)
+			log.Printf("Queue processing error: send rejected: %s", sendResp.StatusMessage)
+			_ = updateMessageDeliveryStatus(d.MessageID, d.RecipientID, "failed")
 		} else {
-			log.Printf("P2P Broadcast: successfully sent message to %s", p.DisplayName)
+			log.Printf("Queue processing: successfully delivered message %s to recipient %s", d.MessageID, d.RecipientID)
+			// Delivery succeeded, remove from queue
+			_ = deleteMessageDelivery(d.MessageID, d.RecipientID)
 		}
 	}
 }

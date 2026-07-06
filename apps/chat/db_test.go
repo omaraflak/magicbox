@@ -42,7 +42,17 @@ func setupTestDB(t *testing.T) *sql.DB {
 			attachment_path TEXT NOT NULL DEFAULT '',
 			sent_at TEXT NOT NULL,
 			is_read BOOLEAN NOT NULL DEFAULT 0,
+			is_system BOOLEAN NOT NULL DEFAULT 0,
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS message_deliveries (
+			message_id TEXT NOT NULL,
+			recipient_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			last_attempt TEXT,
+			PRIMARY KEY (message_id, recipient_id),
+			FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 		)`,
 	}
 
@@ -242,5 +252,67 @@ func TestGetSharedMedia(t *testing.T) {
 
 	if len(msgs) != 1 || msgs[0].ID != "m1" {
 		t.Errorf("Expected only media message m1, got %+v", msgs)
+	}
+}
+
+func TestMessageDeliveries(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	convID := "conv-delivery-test"
+	nowStr := time.Now().Format(time.RFC3339)
+	_ = createConversation(convID, "Delivery Test", nowStr)
+
+	m1 := &Message{ID: "m1", ConversationID: convID, SenderID: "u1", SenderName: "A", Text: "Hi", SentAt: nowStr, IsRead: true}
+	_ = insertMessage(m1)
+
+	// Insert delivery entries
+	err := insertMessageDelivery("m1", "recipient1", "pending")
+	if err != nil {
+		t.Fatalf("insertMessageDelivery failed: %v", err)
+	}
+	_ = insertMessageDelivery("m1", "recipient2", "pending")
+
+	// Get pending deliveries
+	pd, err := getPendingDeliveries()
+	if err != nil {
+		t.Fatalf("getPendingDeliveries failed: %v", err)
+	}
+	if len(pd) != 2 {
+		t.Errorf("Expected 2 pending deliveries, got %d", len(pd))
+	}
+
+	// Update delivery status
+	err = updateMessageDeliveryStatus("m1", "recipient1", "failed")
+	if err != nil {
+		t.Fatalf("updateMessageDeliveryStatus failed: %v", err)
+	}
+
+	pd, err = getPendingDeliveries()
+	if err != nil {
+		t.Fatalf("getPendingDeliveries failed: %v", err)
+	}
+	if len(pd) != 2 {
+		t.Errorf("Expected still 2 pending/failed deliveries, got %d", len(pd))
+	}
+	if pd[0].RecipientID == "recipient1" && pd[0].Attempts != 1 {
+		t.Errorf("Expected recipient1 attempts to be 1, got %d", pd[0].Attempts)
+	}
+
+	// Delete successful delivery
+	err = deleteMessageDelivery("m1", "recipient2")
+	if err != nil {
+		t.Fatalf("deleteMessageDelivery failed: %v", err)
+	}
+
+	pd, err = getPendingDeliveries()
+	if err != nil {
+		t.Fatalf("getPendingDeliveries failed: %v", err)
+	}
+	if len(pd) != 1 {
+		t.Errorf("Expected 1 pending/failed delivery left, got %d", len(pd))
+	}
+	if pd[0].RecipientID != "recipient1" {
+		t.Errorf("Expected only recipient1 left in queue, got %s", pd[0].RecipientID)
 	}
 }

@@ -80,6 +80,18 @@ func main() {
 		sdk.NewHTMLHandler("/web").ServeHTTP(w, r)
 	})
 
+	// Start background message delivery queue processor
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		// Run initial scan at startup after a short delay
+		time.Sleep(5 * time.Second)
+		processDeliveryQueue()
+		for range ticker.C {
+			processDeliveryQueue()
+		}
+	}()
+
 	log.Fatal(http.ListenAndServe(":9090", mux))
 }
 
