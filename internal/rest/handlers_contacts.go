@@ -8,6 +8,7 @@ import (
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
+	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/protocol"
 )
 
@@ -69,15 +70,15 @@ func (s *Server) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetAddr := preferRelayAddr(multiaddrs)
+	targetAddr := p2p.PreferRelayAddr(multiaddrs)
 
-	hexPub, err := s.localEncPubKeyHex()
+	hexPub, err := s.config.Keys.EncPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local encryption public key: "+err.Error())
 		return
 	}
 
-	hexMasterPub, err := s.localMasterPubKeyHex()
+	hexMasterPub, err := s.config.Keys.MasterPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local master public key: "+err.Error())
 		return
@@ -156,15 +157,15 @@ func (s *Server) handleSendContactRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	// Build the request payload with our own info.
-	ourMultiaddr := preferRelayAddr(s.p2pService.Multiaddrs())
+	ourMultiaddr := p2p.PreferRelayAddr(s.p2pService.Multiaddrs())
 
-	ourEncPubHex, err := s.localEncPubKeyHex()
+	ourEncPubHex, err := s.config.Keys.EncPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read encryption key")
 		return
 	}
 
-	ourMasterPubHex, err := s.localMasterPubKeyHex()
+	ourMasterPubHex, err := s.config.Keys.MasterPubKeyHex()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to parse local master public key: "+err.Error())
 		return
@@ -273,13 +274,13 @@ func (s *Server) handleAcceptContactRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Send accept message back to the requester.
-	ourEncPubHex, err := s.localEncPubKeyHex()
+	ourEncPubHex, err := s.config.Keys.EncPubKeyHex()
 	if err != nil {
 		s.logger.Error("failed to read encryption key for accept message", logging.F("error", err.Error()))
 	} else {
-		ourMultiaddr := preferRelayAddr(s.p2pService.Multiaddrs())
+		ourMultiaddr := p2p.PreferRelayAddr(s.p2pService.Multiaddrs())
 
-		ourMasterPubHex, err := s.localMasterPubKeyHex()
+		ourMasterPubHex, err := s.config.Keys.MasterPubKeyHex()
 		if err != nil {
 			s.logger.Error("failed to parse local master public key for accept message", logging.F("error", err.Error()))
 			return

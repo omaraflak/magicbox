@@ -14,7 +14,10 @@ import (
 	pb "github.com/magicbox/core/api/proto/v1"
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/core"
+	"github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/db"
+	"github.com/magicbox/core/internal/invite"
+	"github.com/magicbox/core/internal/keymanager"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
 	"github.com/magicbox/core/internal/rest"
@@ -56,8 +59,37 @@ func setupGrpcTestServer(t *testing.T) (pb.MagicboxOSClient, *db.DB, *config.Con
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master identity key: %v", err)
+	}
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
+	}
+	masterPubPEM, _ := crypto.MarshalPublicKey(masterPriv.Public())
+	privPEM, _ := crypto.MarshalPublicKey(edPriv.Public()) // Public key for verifying contact reqs
+	pubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	encKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+	encPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
+
 	cfg := &config.Config{
 		JWTSecret: []byte("jwt-secret"),
+		Keys: &keymanager.KeyState{
+			MasterPublicKeyPEM: masterPubPEM,
+			PrivateKeyPEM:      privPEM,
+			PublicKeyPEM:       pubPEM,
+			EncryptionKeyPEM:   encKeyPEM,
+			EncryptionPubPEM:   encPubPEM,
+		},
 	}
 
 	p2pMock := &MockP2PService{hostID: "local-host-id"}
@@ -203,3 +235,80 @@ func TestGrpcSendToContactLoopback(t *testing.T) {
 		t.Error("expected P2P SendTo NOT to be called for local loopback transfer")
 	}
 }
+
+func TestGrpcGetInviteLink(t *testing.T) {
+	client, database, _, _, cleanup := setupGrpcTestServer(t)
+	defer cleanup()
+
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+	database.InsertAppToken("com.example.app", userID, "app-secret")
+	database.InsertAppScope("com.example.app", userID, "contacts:read")
+
+	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{"contacts:read"})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+
+	resp, err := client.GetInviteLink(ctx, &pb.GetInviteLinkRequest{})
+	if err != nil {
+		t.Fatalf("GetInviteLink failed: %v", err)
+	}
+
+	if resp.InviteLink == "" {
+		t.Fatal("expected non-empty invite link")
+	}
+
+	payload, err := invite.Parse(resp.InviteLink)
+	if err != nil {
+		t.Fatalf("failed to parse returned invite link: %v", err)
+	}
+
+	if payload.UserID != userID {
+		t.Errorf("expected UserID %q, got %q", userID, payload.UserID)
+	}
+}
+
+func TestGrpcSendContactRequest(t *testing.T) {
+	client, database, _, _, cleanup := setupGrpcTestServer(t)
+	defer cleanup()
+
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+	database.InsertAppToken("com.example.app", userID, "app-secret")
+	database.InsertAppScope("com.example.app", userID, "contacts:write")
+
+	// Generate a valid mock invite link targeting a remote peer
+	mockInvite, _ := invite.Build(&invite.Payload{
+		Multiaddr:    "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWRemotePeerID",
+		UserID:       "remote-user-id",
+		EncPubKey:    "remote-enc-pub-key-hex",
+		MasterPubKey: "remote-master-pub-key-hex",
+	})
+
+	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{"contacts:write"})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+
+	resp, err := client.SendContactRequest(ctx, &pb.SendContactRequestRequest{
+		InviteLink:  mockInvite,
+		DisplayName: "Bob",
+	})
+	if err != nil {
+		t.Fatalf("SendContactRequest failed: %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("expected success to be true, got false with message: %s", resp.StatusMessage)
+	}
+
+	// Verify request was written to DB
+	req, err := database.GetContactRequestByTargetUserID(userID, "remote-user-id")
+	if err != nil {
+		t.Fatalf("failed to fetch contact request from db: %v", err)
+	}
+	if req == nil {
+		t.Fatal("expected contact request to be found in database, got nil")
+	}
+	if req.DisplayName != "Bob" {
+		t.Errorf("expected DisplayName 'Bob', got %q", req.DisplayName)
+	}
+}
+

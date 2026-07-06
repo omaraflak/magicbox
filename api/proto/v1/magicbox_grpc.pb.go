@@ -19,11 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MagicboxOS_SendWebhook_FullMethodName       = "/magicbox.v1.MagicboxOS/SendWebhook"
-	MagicboxOS_GetProfile_FullMethodName        = "/magicbox.v1.MagicboxOS/GetProfile"
-	MagicboxOS_ListSharedVolumes_FullMethodName = "/magicbox.v1.MagicboxOS/ListSharedVolumes"
-	MagicboxOS_SendToContact_FullMethodName     = "/magicbox.v1.MagicboxOS/SendToContact"
-	MagicboxOS_ListContacts_FullMethodName      = "/magicbox.v1.MagicboxOS/ListContacts"
+	MagicboxOS_SendWebhook_FullMethodName        = "/magicbox.v1.MagicboxOS/SendWebhook"
+	MagicboxOS_GetProfile_FullMethodName         = "/magicbox.v1.MagicboxOS/GetProfile"
+	MagicboxOS_ListSharedVolumes_FullMethodName  = "/magicbox.v1.MagicboxOS/ListSharedVolumes"
+	MagicboxOS_SendToContact_FullMethodName      = "/magicbox.v1.MagicboxOS/SendToContact"
+	MagicboxOS_ListContacts_FullMethodName       = "/magicbox.v1.MagicboxOS/ListContacts"
+	MagicboxOS_GetInviteLink_FullMethodName      = "/magicbox.v1.MagicboxOS/GetInviteLink"
+	MagicboxOS_SendContactRequest_FullMethodName = "/magicbox.v1.MagicboxOS/SendContactRequest"
 )
 
 // MagicboxOSClient is the client API for MagicboxOS service.
@@ -53,6 +55,12 @@ type MagicboxOSClient interface {
 	// ListContacts returns the owning user's contact list.
 	// Requires scope: contacts:read
 	ListContacts(ctx context.Context, in *ListContactsRequest, opts ...grpc.CallOption) (*ListContactsResponse, error)
+	// GetInviteLink returns the current user's invite link for contact sharing.
+	// Requires scope: contacts:read
+	GetInviteLink(ctx context.Context, in *GetInviteLinkRequest, opts ...grpc.CallOption) (*GetInviteLinkResponse, error)
+	// SendContactRequest sends a contact request to a remote user via their invite link.
+	// Requires scope: contacts:write
+	SendContactRequest(ctx context.Context, in *SendContactRequestRequest, opts ...grpc.CallOption) (*SendContactRequestResponse, error)
 }
 
 type magicboxOSClient struct {
@@ -113,6 +121,26 @@ func (c *magicboxOSClient) ListContacts(ctx context.Context, in *ListContactsReq
 	return out, nil
 }
 
+func (c *magicboxOSClient) GetInviteLink(ctx context.Context, in *GetInviteLinkRequest, opts ...grpc.CallOption) (*GetInviteLinkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetInviteLinkResponse)
+	err := c.cc.Invoke(ctx, MagicboxOS_GetInviteLink_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *magicboxOSClient) SendContactRequest(ctx context.Context, in *SendContactRequestRequest, opts ...grpc.CallOption) (*SendContactRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendContactRequestResponse)
+	err := c.cc.Invoke(ctx, MagicboxOS_SendContactRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MagicboxOSServer is the server API for MagicboxOS service.
 // All implementations must embed UnimplementedMagicboxOSServer
 // for forward compatibility.
@@ -140,6 +168,12 @@ type MagicboxOSServer interface {
 	// ListContacts returns the owning user's contact list.
 	// Requires scope: contacts:read
 	ListContacts(context.Context, *ListContactsRequest) (*ListContactsResponse, error)
+	// GetInviteLink returns the current user's invite link for contact sharing.
+	// Requires scope: contacts:read
+	GetInviteLink(context.Context, *GetInviteLinkRequest) (*GetInviteLinkResponse, error)
+	// SendContactRequest sends a contact request to a remote user via their invite link.
+	// Requires scope: contacts:write
+	SendContactRequest(context.Context, *SendContactRequestRequest) (*SendContactRequestResponse, error)
 	mustEmbedUnimplementedMagicboxOSServer()
 }
 
@@ -164,6 +198,12 @@ func (UnimplementedMagicboxOSServer) SendToContact(context.Context, *SendToConta
 }
 func (UnimplementedMagicboxOSServer) ListContacts(context.Context, *ListContactsRequest) (*ListContactsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListContacts not implemented")
+}
+func (UnimplementedMagicboxOSServer) GetInviteLink(context.Context, *GetInviteLinkRequest) (*GetInviteLinkResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetInviteLink not implemented")
+}
+func (UnimplementedMagicboxOSServer) SendContactRequest(context.Context, *SendContactRequestRequest) (*SendContactRequestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendContactRequest not implemented")
 }
 func (UnimplementedMagicboxOSServer) mustEmbedUnimplementedMagicboxOSServer() {}
 func (UnimplementedMagicboxOSServer) testEmbeddedByValue()                    {}
@@ -276,6 +316,42 @@ func _MagicboxOS_ListContacts_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MagicboxOS_GetInviteLink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetInviteLinkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MagicboxOSServer).GetInviteLink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MagicboxOS_GetInviteLink_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MagicboxOSServer).GetInviteLink(ctx, req.(*GetInviteLinkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MagicboxOS_SendContactRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendContactRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MagicboxOSServer).SendContactRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MagicboxOS_SendContactRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MagicboxOSServer).SendContactRequest(ctx, req.(*SendContactRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MagicboxOS_ServiceDesc is the grpc.ServiceDesc for MagicboxOS service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -302,6 +378,14 @@ var MagicboxOS_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListContacts",
 			Handler:    _MagicboxOS_ListContacts_Handler,
+		},
+		{
+			MethodName: "GetInviteLink",
+			Handler:    _MagicboxOS_GetInviteLink_Handler,
+		},
+		{
+			MethodName: "SendContactRequest",
+			Handler:    _MagicboxOS_SendContactRequest_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

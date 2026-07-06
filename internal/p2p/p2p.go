@@ -36,3 +36,4 @@ type Service interface {
 	// encPubKeyHex is the hex-encoded X25519 public key of the recipient.
 	SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *Message) error
 }
+

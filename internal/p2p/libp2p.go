@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -339,3 +340,18 @@ func ParsePEMToLibp2pKey(pemBytes []byte) (crypto.PrivKey, error) {
 	}
 	return crypto.UnmarshalEd25519PrivateKey(edPriv)
 }
+
+// PreferRelayAddr returns the first relay multiaddress (/p2p-circuit) if available,
+// otherwise falls back to the first address in the slice, or empty string if slice is empty.
+func PreferRelayAddr(addrs []string) string {
+	if len(addrs) == 0 {
+		return ""
+	}
+	for _, addr := range addrs {
+		if strings.Contains(addr, "/p2p-circuit") {
+			return addr
+		}
+	}
+	return addrs[0]
+}
+

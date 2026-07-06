@@ -292,3 +292,44 @@ func TestParsePEMToLibp2pKey_X25519KeyFails(t *testing.T) {
 		t.Error("expected error when passing X25519 PEM to ParsePEMToLibp2pKey, got nil")
 	}
 }
+
+func TestPreferRelayAddr(t *testing.T) {
+	tests := []struct {
+		name     string
+		addrs    []string
+		expected string
+	}{
+		{
+			name:     "empty slice",
+			addrs:    []string{},
+			expected: "",
+		},
+		{
+			name: "no relay address",
+			addrs: []string{
+				"/ip4/127.0.0.1/tcp/4001/p2p/QmLocalID",
+				"/ip4/192.168.1.5/tcp/4001/p2p/QmLocalID",
+			},
+			expected: "/ip4/127.0.0.1/tcp/4001/p2p/QmLocalID",
+		},
+		{
+			name: "has relay address",
+			addrs: []string{
+				"/ip4/127.0.0.1/tcp/4001/p2p/QmLocalID",
+				"/ip4/1.2.3.4/tcp/4001/p2p/QmRelayID/p2p-circuit/p2p/QmLocalID",
+				"/ip4/192.168.1.5/tcp/4001/p2p/QmLocalID",
+			},
+			expected: "/ip4/1.2.3.4/tcp/4001/p2p/QmRelayID/p2p-circuit/p2p/QmLocalID",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PreferRelayAddr(tt.addrs)
+			if got != tt.expected {
+				t.Errorf("PreferRelayAddr() = %q, expected %q", got, tt.expected)
+			}
+		})
+	}
+}
+

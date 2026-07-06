@@ -338,3 +338,31 @@ func TestMnemonicStore(t *testing.T) {
 	}
 }
 
+func TestKeyState_HexPubKeys(t *testing.T) {
+	tempDir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tempDir, "core"), 0750)
+
+	paths := NewKeyPaths(tempDir)
+	keys, err := LoadOrGenerate(paths)
+	if err != nil {
+		t.Fatalf("LoadOrGenerate failed: %v", err)
+	}
+
+	encPubHex, err := keys.EncPubKeyHex()
+	if err != nil {
+		t.Fatalf("EncPubKeyHex failed: %v", err)
+	}
+	if len(encPubHex) == 0 {
+		t.Error("expected non-empty hex-encoded encryption public key")
+	}
+
+	masterPubHex, err := keys.MasterPubKeyHex()
+	if err != nil {
+		t.Fatalf("MasterPubKeyHex failed: %v", err)
+	}
+	if len(masterPubHex) == 0 {
+		t.Error("expected non-empty hex-encoded master identity public key")
+	}
+}
+
+

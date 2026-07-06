@@ -1,15 +1,11 @@
 package rest
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
-	"strings"
-
-	"github.com/magicbox/core/internal/crypto"
 )
 
 const (
@@ -58,40 +54,3 @@ func readJSON(r *http.Request, v interface{}) error {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
-
-// ---------------------------------------------------------------------------
-// P2P / Key Helpers
-// ---------------------------------------------------------------------------
-
-// preferRelayAddr returns the first relay multiaddress (/p2p-circuit) if available,
-// otherwise falls back to the first address in the slice, or empty string if slice is empty.
-func preferRelayAddr(addrs []string) string {
-	if len(addrs) == 0 {
-		return ""
-	}
-	for _, addr := range addrs {
-		if strings.Contains(addr, "/p2p-circuit") {
-			return addr
-		}
-	}
-	return addrs[0]
-}
-
-// localEncPubKeyHex retrieves and hex-encodes the local encryption public key.
-func (s *Server) localEncPubKeyHex() (string, error) {
-	pubKey, err := crypto.UnmarshalX25519PublicKey(s.config.Keys.EncryptionPubPEM)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(pubKey.Bytes()), nil
-}
-
-// localMasterPubKeyHex retrieves and hex-encodes the local master public key.
-func (s *Server) localMasterPubKeyHex() (string, error) {
-	masterPub, err := crypto.UnmarshalEd25519PublicKey(s.config.Keys.MasterPublicKeyPEM)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(masterPub), nil
-}
-

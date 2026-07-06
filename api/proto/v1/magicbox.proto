@@ -32,6 +32,14 @@ service MagicboxOS {
   // ListContacts returns the owning user's contact list.
   // Requires scope: contacts:read
   rpc ListContacts(ListContactsRequest) returns (ListContactsResponse);
+
+  // GetInviteLink returns the current user's invite link for contact sharing.
+  // Requires scope: contacts:read
+  rpc GetInviteLink(GetInviteLinkRequest) returns (GetInviteLinkResponse);
+
+  // SendContactRequest sends a contact request to a remote user via their invite link.
+  // Requires scope: contacts:write
+  rpc SendContactRequest(SendContactRequestRequest) returns (SendContactRequestResponse);
 }
 
 // --------------------------------------------------------------------------
@@ -110,4 +118,30 @@ message Contact {
   string display_name = 2;
   string multiaddr = 3;
   string target_user_id = 4;
+  // Pre-computed invite link for this contact, built from their stored identity.
+  string invite_link = 5;
+}
+
+// --------------------------------------------------------------------------
+// GetInviteLink
+// --------------------------------------------------------------------------
+
+message GetInviteLinkRequest {}
+
+message GetInviteLinkResponse {
+  string invite_link = 1;
+}
+
+// --------------------------------------------------------------------------
+// SendContactRequest
+// --------------------------------------------------------------------------
+
+message SendContactRequestRequest {
+  string invite_link = 1;
+  string display_name = 2;
+}
+
+message SendContactRequestResponse {
+  bool success = 1;
+  string status_message = 2;
 }

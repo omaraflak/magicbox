@@ -3,6 +3,7 @@
 package keymanager
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,6 +48,25 @@ type KeyState struct {
 	IdentityKeyIndex   int    `json:"identity_key_index"`
 	EncryptionKeyIndex int    `json:"encryption_key_index"`
 }
+
+// EncPubKeyHex retrieves and hex-encodes the local encryption public key.
+func (ks *KeyState) EncPubKeyHex() (string, error) {
+	pubKey, err := crypto.UnmarshalX25519PublicKey(ks.EncryptionPubPEM)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(pubKey.Bytes()), nil
+}
+
+// MasterPubKeyHex retrieves and hex-encodes the local master public key.
+func (ks *KeyState) MasterPubKeyHex() (string, error) {
+	masterPub, err := crypto.UnmarshalEd25519PublicKey(ks.MasterPublicKeyPEM)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(masterPub), nil
+}
+
 
 func readIndex(path string) (int, error) {
 	bytes, err := os.ReadFile(path)

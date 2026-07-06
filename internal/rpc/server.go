@@ -3,10 +3,12 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -17,8 +19,10 @@ import (
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/docker"
+	"github.com/magicbox/core/internal/invite"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/magicbox/core/internal/p2p"
+	"github.com/magicbox/core/internal/protocol"
 	"github.com/magicbox/core/internal/rest"
 )
 
@@ -321,15 +325,164 @@ func (s *RPCServer) ListContacts(ctx context.Context, _ *pb.ListContactsRequest)
 
 	var pbContacts []*pb.Contact
 	for _, c := range contacts {
+		// Build invite link from stored contact identity.
+		contactInviteLink, _ := invite.Build(&invite.Payload{
+			Multiaddr:    c.Multiaddr,
+			UserID:       c.TargetUserID,
+			EncPubKey:    c.EncPubKey,
+			MasterPubKey: c.MasterPubKey,
+		})
+
 		pbContacts = append(pbContacts, &pb.Contact{
 			Id:           c.ID,
 			DisplayName:  c.DisplayName,
 			Multiaddr:    c.Multiaddr,
 			TargetUserId: c.TargetUserID,
+			InviteLink:   contactInviteLink,
 		})
 	}
 
 	return &pb.ListContactsResponse{Contacts: pbContacts}, nil
+}
+
+// ---------------------------------------------------------------------------
+// GetInviteLink
+// ---------------------------------------------------------------------------
+
+func (s *RPCServer) GetInviteLink(ctx context.Context, _ *pb.GetInviteLinkRequest) (*pb.GetInviteLinkResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	if !hasScope(claims.Scopes, "contacts:read") {
+		return nil, status.Error(codes.PermissionDenied, "missing scope: contacts:read")
+	}
+
+	peerID := s.p2pService.HostID()
+	if peerID == "" {
+		return nil, status.Error(codes.Unavailable, "P2P network service unavailable")
+	}
+
+	multiaddrs := s.p2pService.Multiaddrs()
+	if len(multiaddrs) == 0 {
+		return nil, status.Error(codes.Unavailable, "P2P network has no listening addresses")
+	}
+
+	targetAddr := p2p.PreferRelayAddr(multiaddrs)
+
+	hexPub, err := s.cfg.Keys.EncPubKeyHex()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse local encryption public key: %v", err)
+	}
+
+	hexMasterPub, err := s.cfg.Keys.MasterPubKeyHex()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse local master public key: %v", err)
+	}
+
+	payload := &invite.Payload{
+		Multiaddr:    targetAddr,
+		UserID:       claims.UserID,
+		EncPubKey:    hexPub,
+		MasterPubKey: hexMasterPub,
+	}
+
+	inviteLink, err := invite.Build(payload)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to build invitation link: %v", err)
+	}
+
+	return &pb.GetInviteLinkResponse{InviteLink: inviteLink}, nil
+}
+
+// ---------------------------------------------------------------------------
+// SendContactRequest
+// ---------------------------------------------------------------------------
+
+func (s *RPCServer) SendContactRequest(ctx context.Context, req *pb.SendContactRequestRequest) (*pb.SendContactRequestResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	if !hasScope(claims.Scopes, "contacts:write") {
+		return nil, status.Error(codes.PermissionDenied, "missing scope: contacts:write")
+	}
+
+	if req.DisplayName == "" || req.InviteLink == "" {
+		return nil, status.Error(codes.InvalidArgument, "display_name and invite_link are required")
+	}
+
+	// Parse the invite link to extract the remote peer's info.
+	payload, err := invite.Parse(req.InviteLink)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid invite link: %v", err)
+	}
+
+	peerID := invite.ExtractPeerID(payload.Multiaddr)
+	if peerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "invalid invite link: could not extract peer ID")
+	}
+
+	if payload.UserID == "" {
+		return nil, status.Error(codes.InvalidArgument, "invalid invite link: missing user_id")
+	}
+
+	// Store as outgoing request.
+	reqID := uuid.NewString()
+	if err := s.db.InsertContactRequest(
+		reqID, claims.UserID, "outgoing", req.DisplayName,
+		peerID, payload.Multiaddr, payload.UserID, payload.EncPubKey, payload.MasterPubKey,
+	); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to store contact request: %v", err)
+	}
+
+	// Build the request payload with our own info.
+	ourMultiaddr := p2p.PreferRelayAddr(s.p2pService.Multiaddrs())
+
+	ourEncPubHex, err := s.cfg.Keys.EncPubKeyHex()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to read encryption key: %v", err)
+	}
+
+	ourMasterPubHex, err := s.cfg.Keys.MasterPubKeyHex()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse local master public key: %v", err)
+	}
+
+	// Look up the user's username for the display name in the request payload.
+	user, err := s.db.GetUserByID(claims.UserID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
+	}
+	if user == nil {
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+
+	requestPayload, _ := json.Marshal(protocol.ContactRequestPayload{
+		DisplayName:  user.Username,
+		Multiaddr:    ourMultiaddr,
+		EncPubKey:    ourEncPubHex,
+		UserID:       claims.UserID,
+		MasterPubKey: ourMasterPubHex,
+	})
+
+	// Enqueue the request message for delivery.
+	tempContact := db.Contact{
+		ID:           reqID,
+		Multiaddr:    payload.Multiaddr,
+		EncPubKey:    payload.EncPubKey,
+		TargetUserID: payload.UserID,
+	}
+	if err := protocol.EnqueueForContacts(s.db, []db.Contact{tempContact}, protocol.AppIDContactRequest, requestPayload); err != nil {
+		s.logger.Error("failed to enqueue contact request", logging.F("error", err.Error()))
+	}
+
+	return &pb.SendContactRequestResponse{
+		Success:       true,
+		StatusMessage: "Contact request sent",
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
