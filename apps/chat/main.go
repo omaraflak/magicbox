@@ -56,6 +56,7 @@ func main() {
 	// API routes
 	mux.HandleFunc("/api/profile", handleProfile)
 	mux.HandleFunc("/api/contacts", handleContacts)
+	mux.HandleFunc("/api/contacts/add", handleAddContact)
 	mux.HandleFunc("/api/conversations", handleConversations)
 	mux.HandleFunc("/api/conversations/", handleConversationRoutes) // /api/conversations/{id}/messages etc.
 	mux.HandleFunc("/api/events", handleEvents)

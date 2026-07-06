@@ -40,6 +40,7 @@ type MessagePayload struct {
 type ParticipantInfo struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
+	InviteLink  string `json:"invite_link,omitempty"`
 }
 
 // Helpers
@@ -155,6 +156,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 		participants = append(participants, Participant{
 			UserID:      profile.UserId,
 			DisplayName: profile.Username,
+			InviteLink:  "", // Will be populated during broadcast
 		})
 
 		// Find target details for selected contact IDs
@@ -170,6 +172,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 				participants = append(participants, Participant{
 					UserID:      foundContact.TargetUserId,
 					DisplayName: foundContact.DisplayName,
+					InviteLink:  foundContact.InviteLink,
 				})
 			}
 		}
@@ -232,7 +235,7 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, p := range uniqueParts {
-			_ = addParticipant(convID, p.UserID, p.DisplayName)
+			_ = addParticipant(convID, p.UserID, p.DisplayName, p.InviteLink)
 		}
 
 		newConv, err := getConversation(convID)
@@ -558,7 +561,19 @@ func broadcastMessage(conv *Conversation, msg *Message, attachmentBytes []byte, 
 		partsPayload = append(partsPayload, ParticipantInfo{
 			UserID:      p.UserID,
 			DisplayName: p.DisplayName,
+			InviteLink:  p.InviteLink,
 		})
+	}
+
+	// Populate our own invite link for the payload
+	inviteResp, inviteErr := client.GetInviteLink(ctx, &pb.GetInviteLinkRequest{})
+	if inviteErr == nil && inviteResp.InviteLink != "" {
+		for i := range partsPayload {
+			if partsPayload[i].UserID == selfUserID {
+				partsPayload[i].InviteLink = inviteResp.InviteLink
+				break
+			}
+		}
 	}
 
 	// Build the JSON payload to send over libp2p
@@ -671,7 +686,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 		// Save participants
 		for _, p := range payload.Participants {
-			_ = addParticipant(payload.ConversationID, p.UserID, p.DisplayName)
+			_ = addParticipant(payload.ConversationID, p.UserID, p.DisplayName, p.InviteLink)
 		}
 	} else {
 		// Conversation already exists, check if name has been explicitly set/updated by a peer in a group chat (>=3 participants)
@@ -735,4 +750,51 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	notifyClients()
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// POST /api/contacts/add
+func handleAddContact(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		InviteLink  string `json:"invite_link"`
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+
+	if req.InviteLink == "" || req.DisplayName == "" {
+		writeError(w, http.StatusBadRequest, "invite_link and display_name are required")
+		return
+	}
+
+	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to connect to core: "+err.Error())
+		return
+	}
+	defer conn.Close()
+
+	resp, err := client.SendContactRequest(ctx, &pb.SendContactRequestRequest{
+		InviteLink:  req.InviteLink,
+		DisplayName: req.DisplayName,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to send contact request: "+err.Error())
+		return
+	}
+
+	if !resp.Success {
+		writeError(w, http.StatusBadRequest, resp.StatusMessage)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": resp.StatusMessage,
+	})
 }

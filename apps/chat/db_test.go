@@ -27,6 +27,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			conversation_id TEXT NOT NULL,
 			user_id TEXT NOT NULL,
 			display_name TEXT NOT NULL,
+			invite_link TEXT NOT NULL DEFAULT '',
 			PRIMARY KEY (conversation_id, user_id),
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 		)`,
@@ -67,7 +68,7 @@ func TestCreateConversationAndGet(t *testing.T) {
 		t.Fatalf("createConversation failed: %v", err)
 	}
 
-	err = addParticipant(convID, "alice-uid", "Alice")
+	err = addParticipant(convID, "alice-uid", "Alice", "magicbox://invite/alice-link")
 	if err != nil {
 		t.Fatalf("addParticipant failed: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestInsertAndGetMessages(t *testing.T) {
 	nowStr := time.Now().Format(time.RFC3339)
 
 	_ = createConversation(convID, "Alice Chat", nowStr)
-	_ = addParticipant(convID, "alice-uid", "Alice")
+	_ = addParticipant(convID, "alice-uid", "Alice", "")
 
 	msg := &Message{
 		ID:             "msg-1",

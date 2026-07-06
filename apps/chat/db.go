@@ -33,6 +33,7 @@ func initDB() {
 			conversation_id TEXT NOT NULL,
 			user_id TEXT NOT NULL,
 			display_name TEXT NOT NULL,
+			invite_link TEXT NOT NULL DEFAULT '',
 			PRIMARY KEY (conversation_id, user_id),
 			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 		)`,
@@ -72,6 +73,7 @@ type Conversation struct {
 type Participant struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
+	InviteLink  string `json:"invite_link,omitempty"`
 }
 
 type Message struct {
@@ -94,8 +96,8 @@ func createConversation(id, name string, createdAt string) error {
 	return err
 }
 
-func addParticipant(conversationID, userID, displayName string) error {
-	_, err := dbConn.Exec("INSERT OR REPLACE INTO conversation_participants (conversation_id, user_id, display_name) VALUES (?, ?, ?)", conversationID, userID, displayName)
+func addParticipant(conversationID, userID, displayName, inviteLink string) error {
+	_, err := dbConn.Exec("INSERT OR REPLACE INTO conversation_participants (conversation_id, user_id, display_name, invite_link) VALUES (?, ?, ?, ?)", conversationID, userID, displayName, inviteLink)
 	return err
 }
 
@@ -119,7 +121,7 @@ func getConversation(id string) (*Conversation, error) {
 }
 
 func getParticipants(conversationID string) ([]Participant, error) {
-	rows, err := dbConn.Query("SELECT user_id, display_name FROM conversation_participants WHERE conversation_id = ?", conversationID)
+	rows, err := dbConn.Query("SELECT user_id, display_name, invite_link FROM conversation_participants WHERE conversation_id = ?", conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +130,7 @@ func getParticipants(conversationID string) ([]Participant, error) {
 	var parts []Participant
 	for rows.Next() {
 		var p Participant
-		if err := rows.Scan(&p.UserID, &p.DisplayName); err != nil {
+		if err := rows.Scan(&p.UserID, &p.DisplayName, &p.InviteLink); err != nil {
 			return nil, err
 		}
 		parts = append(parts, p)

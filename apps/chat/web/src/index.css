@@ -887,6 +887,77 @@ html, body, #root {
   }
 }
 
+/* Missing Contacts Banner */
+.missing-contacts-banner {
+  background: rgba(239, 68, 68, 0.08);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  backdrop-filter: blur(10px);
+}
+
+.banner-icon {
+  font-size: 16px;
+}
+
+.banner-text {
+  flex: 1;
+  min-width: 250px;
+  color: var(--text-main);
+  opacity: 0.95;
+  font-weight: 500;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.banner-btn {
+  background-color: var(--accent);
+  color: var(--text-sent);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.banner-btn:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.banner-btn:active {
+  transform: translateY(0);
+}
+
+.banner-btn:disabled {
+  background-color: var(--border);
+  color: var(--text-mute);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.banner-btn.sent {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
 
 
 

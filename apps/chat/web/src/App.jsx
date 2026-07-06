@@ -84,6 +84,11 @@ function App() {
   // Message Sending State
   const [messageText, setMessageText] = useState('');
   const [attachment, setAttachment] = useState(null);
+
+  // Missing Contacts States
+  const [addingContacts, setAddingContacts] = useState({});
+  const [sentRequests, setSentRequests] = useState({});
+  
   
   // Refs
   const messagesEndRef = useRef(null);
@@ -171,6 +176,41 @@ function App() {
     
     return () => clearTimeout(delayDebounce);
   }, [messageSearchQuery]);
+
+  const getMissingContacts = () => {
+    if (!selectedConv || !profile || !contacts) return [];
+    return selectedConv.participants.filter(p => {
+      if (p.user_id === profile.user_id) return false;
+      const isContact = contacts.some(c => c.target_user_id === p.user_id);
+      return !isContact && p.invite_link;
+    });
+  };
+
+  const handleAddContact = async (participant) => {
+    if (!participant.invite_link) return;
+    setAddingContacts(prev => ({ ...prev, [participant.user_id]: true }));
+    try {
+      const res = await fetch('api/contacts/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invite_link: participant.invite_link,
+          display_name: participant.display_name
+        })
+      });
+      if (res.ok) {
+        setSentRequests(prev => ({ ...prev, [participant.user_id]: true }));
+        fetchContacts();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to send contact request');
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    } finally {
+      setAddingContacts(prev => ({ ...prev, [participant.user_id]: false }));
+    }
+  };
 
   // Fetch calls
 
@@ -643,6 +683,31 @@ function App() {
               }}>
                 Close
               </button>
+            </div>
+          )}
+
+          {getMissingContacts().length > 0 && (
+            <div className="missing-contacts-banner">
+              <span className="banner-icon">⚠️</span>
+              <div className="banner-text">
+                Some participants in this group are not in your contacts. Add them to exchange messages:
+              </div>
+              <div className="banner-actions">
+                {getMissingContacts().map(p => {
+                  const isSent = sentRequests[p.user_id];
+                  const isLoading = addingContacts[p.user_id];
+                  return (
+                    <button
+                      key={p.user_id}
+                      className={`banner-btn ${isSent ? 'sent' : ''}`}
+                      disabled={isSent || isLoading}
+                      onClick={() => handleAddContact(p)}
+                    >
+                      {isLoading ? 'Adding...' : isSent ? `✓ ${p.display_name}` : `+ Add ${p.display_name}`}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
