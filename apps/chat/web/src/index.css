@@ -848,13 +848,28 @@ html, body, #root {
 }
 
 .media-panel {
-  width: 320px;
+  position: relative;
   background-color: var(--bg-sidebar);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   height: 100%;
-  animation: slideLeft 0.15s ease-out;
+}
+
+.resize-handle-left {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 100;
+  transition: background-color 0.15s;
+}
+
+.resize-handle-left:hover,
+.resize-handle-left:active {
+  background-color: var(--accent);
 }
 
 .media-panel-header {
@@ -876,15 +891,38 @@ html, body, #root {
   padding: 20px;
 }
 
-@keyframes slideLeft {
-  from {
-    width: 0;
-    opacity: 0;
-  }
-  to {
-    width: 320px;
-    opacity: 1;
-  }
+/* Participants Panel Items */
+.participant-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.participant-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.participant-text {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.participant-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text-main);
+}
+
+.participant-id {
+  font-size: 11px;
+  color: var(--text-mute);
 }
 
 /* Missing Contacts Banner */
@@ -916,11 +954,29 @@ html, body, #root {
   font-weight: 500;
 }
 
-.banner-actions {
+.banner-list {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.banner-list-item {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 320px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+.banner-item-name {
+  font-weight: 600;
+  color: var(--text-main);
+  font-size: 13px;
 }
 
 .banner-btn {
