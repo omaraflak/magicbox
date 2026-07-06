@@ -30,6 +30,13 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [newConvName, setNewConvName] = useState('');
   const [selectedContactIDs, setSelectedContactIDs] = useState([]);
+  const [newChatError, setNewChatError] = useState('');
+
+  useEffect(() => {
+    if (!showModal) {
+      setNewChatError('');
+    }
+  }, [showModal]);
 
   // Menu & Modal States
   const [showMenu, setShowMenu] = useState(false);
@@ -370,6 +377,7 @@ function App() {
   };
 
   const handleCreateConversation = async () => {
+    setNewChatError('');
     try {
       const res = await apiFetch('api/conversations', {
         method: 'POST',
@@ -387,11 +395,11 @@ function App() {
         fetchConversations();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to create conversation');
+        setNewChatError(data.error || 'Failed to create conversation');
       }
     } catch (err) {
       console.error(err);
-      alert('Error creating conversation');
+      setNewChatError('Error creating conversation');
     }
   };
 
@@ -614,6 +622,7 @@ function App() {
         setNewConvName={setNewConvName}
         contacts={contacts}
         handleCreateConversation={handleCreateConversation}
+        newChatError={newChatError}
       />
 
       <RenameChatModal

@@ -589,6 +589,17 @@ html, body, #root {
   flex: 1;
 }
 
+.modal-error-message {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
 .form-group {
   margin-bottom: 16px;
 }

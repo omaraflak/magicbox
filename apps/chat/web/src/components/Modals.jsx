@@ -9,7 +9,8 @@ export function NewChatModal({
   newConvName,
   setNewConvName,
   contacts,
-  handleCreateConversation
+  handleCreateConversation,
+  newChatError
 }) {
   if (!showModal) return null;
 
@@ -29,6 +30,11 @@ export function NewChatModal({
           <button className="action-btn" onClick={() => setShowModal(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {newChatError && (
+            <div className="modal-error-message">
+              {newChatError}
+            </div>
+          )}
           
           {selectedContactIDs.length > 1 && (
             <div className="form-group">
