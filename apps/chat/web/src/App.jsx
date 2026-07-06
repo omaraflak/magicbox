@@ -298,6 +298,9 @@ function App() {
     const res = await apiFetch(url);
     if (res.ok) {
       const data = await res.json();
+      if (selectedConvRef.current?.id !== convID) {
+        return;
+      }
       if (append) {
         setMessages(prev => [...(data || []), ...prev]);
         setHasMoreMessages((data || []).length === 50);
@@ -322,6 +325,9 @@ function App() {
     const res = await apiFetch(url);
     if (res.ok) {
       const data = await res.json();
+      if (selectedConvRef.current?.id !== convID) {
+        return;
+      }
       setSearchResults(data || []);
       setHasMoreSearch(false); // Search queries match all matching directly
     }
@@ -346,6 +352,9 @@ function App() {
       const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
+        if (selectedConvRef.current?.id !== convID) {
+          return;
+        }
         if (append) {
           setSharedMedia(prev => [...prev, ...(data || [])]);
         } else {

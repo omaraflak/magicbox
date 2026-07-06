@@ -325,9 +325,12 @@ func getLastMessage(conversationID string) (*Message, error) {
 	return &m, nil
 }
 
-func markMessagesAsRead(conversationID string) error {
-	_, err := dbConn.Exec("UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND is_read = 0", conversationID)
-	return err
+func markMessagesAsRead(conversationID string) (int64, error) {
+	res, err := dbConn.Exec("UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND is_read = 0", conversationID)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func deleteConversation(id string) error {

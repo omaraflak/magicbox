@@ -213,11 +213,14 @@ func handleConversationRoutes(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if err := markMessagesAsRead(convID); err != nil {
+		affected, err := markMessagesAsRead(convID)
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to mark as read: "+err.Error())
 			return
 		}
-		notifyClients()
+		if affected > 0 {
+			notifyClients()
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"message": "messages marked as read"})
 	case "rename":
 		if r.Method != http.MethodPost {
@@ -290,8 +293,10 @@ func handleMessages(w http.ResponseWriter, r *http.Request, conv *Conversation) 
 	switch r.Method {
 	case http.MethodGet:
 		// Mark messages as read first when opening conversation
-		_ = markMessagesAsRead(conv.ID)
-		notifyClients()
+		affected, _ := markMessagesAsRead(conv.ID)
+		if affected > 0 {
+			notifyClients()
+		}
 
 		q := r.URL.Query().Get("q")
 		if q != "" {

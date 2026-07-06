@@ -194,7 +194,7 @@ func TestUnreadCountAndMarkAsRead(t *testing.T) {
 		t.Errorf("Expected unread count to be 1, got %+v", convs)
 	}
 
-	err = markMessagesAsRead(convID)
+	_, err = markMessagesAsRead(convID)
 	if err != nil {
 		t.Fatalf("markMessagesAsRead failed: %v", err)
 	}
