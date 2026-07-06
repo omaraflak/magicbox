@@ -135,6 +135,52 @@ function App() {
     selectedConvRef.current = selectedConv;
   }, [selectedConv]);
 
+  // Sync state to URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const convIdFromUrl = params.get('conv');
+    const settingsFromUrl = params.get('settings') === 'true';
+
+    if (showSettings) {
+      if (!settingsFromUrl) {
+        window.history.pushState(null, '', '?settings=true');
+      }
+    } else if (selectedConv) {
+      if (convIdFromUrl !== selectedConv.id) {
+        window.history.pushState(null, '', `?conv=${selectedConv.id}`);
+      }
+    } else {
+      if (window.location.search) {
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    }
+  }, [selectedConv?.id, showSettings]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const convIdFromUrl = params.get('conv');
+      const settingsFromUrl = params.get('settings') === 'true';
+
+      if (settingsFromUrl) {
+        setShowSettings(true);
+        setSelectedConv(null);
+      } else if (convIdFromUrl) {
+        setShowSettings(false);
+        const found = conversations.find(c => c.id === convIdFromUrl);
+        if (found) {
+          setSelectedConv(found);
+        }
+      } else {
+        setShowSettings(false);
+        setSelectedConv(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [conversations]);
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -226,6 +272,19 @@ function App() {
         const updated = (data || []).find(c => c.id === active.id);
         if (updated) {
           setSelectedConv(updated);
+        }
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        const convIdFromUrl = params.get('conv');
+        const settingsFromUrl = params.get('settings') === 'true';
+
+        if (settingsFromUrl) {
+          setShowSettings(true);
+        } else if (convIdFromUrl) {
+          const found = (data || []).find(c => c.id === convIdFromUrl);
+          if (found) {
+            setSelectedConv(found);
+          }
         }
       }
     }
