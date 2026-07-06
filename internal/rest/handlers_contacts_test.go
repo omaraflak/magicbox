@@ -58,6 +58,74 @@ func TestSendContactRequest_Success(t *testing.T) {
 	}
 }
 
+func TestSendContactRequest_AutoAccept(t *testing.T) {
+	handler, database, cfg := setupTestServer(t)
+
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+
+	// Insert an existing incoming contact request from remote-user-id to local userID
+	err := database.InsertContactRequest(
+		"req-id-123", userID, "incoming", "Bob (Incoming)",
+		"QmPeerIDHere", "/ip4/127.0.0.1/tcp/4001/p2p/QmPeerIDHere", "remote-user-id", "remote-enc-pub-key", "remote-master-pub-key",
+	)
+	if err != nil {
+		t.Fatalf("failed to insert incoming request: %v", err)
+	}
+
+	token, _ := GenerateSessionToken(cfg.JWTSecret, userID, "omar", false)
+	cookie := &http.Cookie{
+		Name:  SessionCookieName,
+		Value: token,
+		Path:  "/",
+	}
+
+	// Generate a valid mock invite link targeting the same remote user
+	payload := &invite.Payload{
+		Multiaddr:    "/ip4/127.0.0.1/tcp/4001/p2p/QmPeerIDHere",
+		UserID:       "remote-user-id",
+		EncPubKey:    "remote-enc-pub-key",
+		MasterPubKey: "remote-master-pub-key",
+	}
+	inviteLink, _ := invite.Build(payload)
+
+	contactBody := map[string]string{
+		"display_name": "Bob (Accepted)",
+		"multiaddr":    inviteLink,
+	}
+	contactBytes, _ := json.Marshal(contactBody)
+	req := httptest.NewRequest("POST", "/api/v1/contacts/request", bytes.NewReader(contactBytes))
+	req.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	// Verify incoming request was deleted.
+	reqObj, err := database.GetContactRequest(userID, "req-id-123")
+	if err != nil {
+		t.Fatalf("GetContactRequest failed: %v", err)
+	}
+	if reqObj != nil {
+		t.Error("expected incoming contact request to be deleted, but it still exists")
+	}
+
+	// Verify contact was created.
+	c, err := database.GetContactByTargetUserID(userID, "remote-user-id")
+	if err != nil {
+		t.Fatalf("GetContactByTargetUserID failed: %v", err)
+	}
+	if c == nil {
+		t.Fatal("expected contact to be created in database, got nil")
+	}
+	if c.DisplayName != "Bob (Incoming)" {
+		t.Errorf("expected DisplayName 'Bob (Incoming)' (from the incoming request), got %q", c.DisplayName)
+	}
+}
+
+
 func TestListContacts_Success(t *testing.T) {
 	handler, database, cfg := setupTestServer(t)
 

@@ -397,6 +397,70 @@ func TestGrpcSendContactRequest(t *testing.T) {
 	}
 }
 
+func TestGrpcSendContactRequest_AutoAccept(t *testing.T) {
+	client, database, _, _, cleanup := setupGrpcTestServer(t)
+	defer cleanup()
+
+	userID := "user-123"
+	database.CreateUser(userID, "omar", "hash", false)
+	database.InsertAppToken("com.example.app", userID, "app-secret")
+	database.InsertAppScope("com.example.app", userID, "contacts:write")
+
+	// Insert an existing incoming contact request from remote-user-id to local userID
+	err := database.InsertContactRequest(
+		"req-id-123", userID, "incoming", "Bob (Incoming)",
+		"12D3KooWRemotePeerID", "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWRemotePeerID", "remote-user-id", "remote-enc-pub-key-hex", "remote-master-pub-key-hex",
+	)
+	if err != nil {
+		t.Fatalf("failed to insert incoming request: %v", err)
+	}
+
+	// Generate a valid mock invite link targeting the same remote user
+	mockInvite, _ := invite.Build(&invite.Payload{
+		Multiaddr:    "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWRemotePeerID",
+		UserID:       "remote-user-id",
+		EncPubKey:    "remote-enc-pub-key-hex",
+		MasterPubKey: "remote-master-pub-key-hex",
+	})
+
+	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, "com.example.app", []string{"contacts:write"})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+
+	resp, err := client.SendContactRequest(ctx, &pb.SendContactRequestRequest{
+		InviteLink:  mockInvite,
+		DisplayName: "Bob (Accepted)",
+	})
+	if err != nil {
+		t.Fatalf("SendContactRequest failed: %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("expected success to be true, got false with message: %s", resp.StatusMessage)
+	}
+
+	// Verify incoming request was deleted
+	req, err := database.GetContactRequest(userID, "req-id-123")
+	if err != nil {
+		t.Fatalf("failed to check contact request: %v", err)
+	}
+	if req != nil {
+		t.Error("expected incoming contact request to be deleted, but it still exists")
+	}
+
+	// Verify contact was created
+	c, err := database.GetContactByTargetUserID(userID, "remote-user-id")
+	if err != nil {
+		t.Fatalf("failed to query contact from db: %v", err)
+	}
+	if c == nil {
+		t.Fatal("expected contact to be created in database, got nil")
+	}
+	if c.DisplayName != "Bob (Incoming)" {
+		t.Errorf("expected DisplayName 'Bob (Incoming)' (from the incoming request), got %q", c.DisplayName)
+	}
+}
+
+
 func TestGrpcRequestPermissions_Approve(t *testing.T) {
 	client, database, _, orch, cleanup := setupGrpcTestServerWithOrch(t)
 	defer cleanup()

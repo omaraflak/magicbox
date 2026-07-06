@@ -447,6 +447,71 @@ func (s *RPCServer) SendContactRequest(ctx context.Context, req *pb.SendContactR
 		return nil, status.Error(codes.InvalidArgument, "invalid invite link: missing user_id")
 	}
 
+	// Check if there is already an incoming request from this user.
+	incomingReq, err := s.db.GetIncomingContactRequestByTargetUserID(claims.UserID, payload.UserID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to query incoming contact request: %v", err)
+	}
+
+	if incomingReq != nil {
+		// Incoming request exists! Accept it automatically.
+		existing, err := s.db.GetContactByTargetUserID(claims.UserID, incomingReq.TargetUserID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to query existing contact: %v", err)
+		}
+
+		var contactID string
+		if existing != nil {
+			contactID = existing.ID
+			if err := s.db.UpdateContactFromRequest(existing.ID, incomingReq.PeerID, incomingReq.Multiaddr, incomingReq.EncPubKey, incomingReq.MasterPubKey); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to update contact: %v", err)
+			}
+		} else {
+			contactID = uuid.NewString()
+			if err := s.db.AddContact(
+				contactID, claims.UserID, incomingReq.DisplayName,
+				incomingReq.PeerID, incomingReq.Multiaddr,
+				incomingReq.TargetUserID, incomingReq.EncPubKey, incomingReq.MasterPubKey,
+			); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to create contact: %v", err)
+			}
+		}
+
+		// Send accept message back to the requester.
+		ourEncPubHex, err := s.cfg.Keys.EncPubKeyHex()
+		if err == nil {
+			ourMultiaddr := p2p.PreferRelayAddr(s.p2pService.Multiaddrs())
+			ourMasterPubHex, err := s.cfg.Keys.MasterPubKeyHex()
+			if err == nil {
+				user, err := s.db.GetUserByID(claims.UserID)
+				if err == nil && user != nil {
+					acceptPayload, _ := json.Marshal(protocol.ContactAcceptPayload{
+						DisplayName:  user.Username,
+						Multiaddr:    ourMultiaddr,
+						EncPubKey:    ourEncPubHex,
+						UserID:       claims.UserID,
+						MasterPubKey: ourMasterPubHex,
+					})
+					contactForQueue := db.Contact{
+						ID:           contactID,
+						Multiaddr:    incomingReq.Multiaddr,
+						EncPubKey:    incomingReq.EncPubKey,
+						TargetUserID: incomingReq.TargetUserID,
+					}
+					_ = protocol.EnqueueForContacts(s.db, []db.Contact{contactForQueue}, protocol.AppIDContactAccept, acceptPayload)
+				}
+			}
+		}
+
+		// Delete the incoming request.
+		_ = s.db.DeleteContactRequest(claims.UserID, incomingReq.ID)
+
+		return &pb.SendContactRequestResponse{
+			Success:       true,
+			StatusMessage: "Contact request accepted automatically from existing invitation",
+		}, nil
+	}
+
 	// Store as outgoing request.
 	reqID := uuid.NewString()
 	if err := s.db.InsertContactRequest(
