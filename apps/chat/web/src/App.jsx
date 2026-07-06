@@ -130,6 +130,11 @@ function App() {
     return res;
   };
 
+  const selectedConvRef = useRef(selectedConv);
+  useEffect(() => {
+    selectedConvRef.current = selectedConv;
+  }, [selectedConv]);
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -147,8 +152,9 @@ function App() {
     eventSource.onmessage = (event) => {
       if (event.data === 'update') {
         fetchConversations();
-        if (selectedConv) {
-          fetchMessages(selectedConv.id, '', false);
+        const active = selectedConvRef.current;
+        if (active) {
+          fetchMessages(active.id, '', false);
         }
       }
     };
@@ -156,7 +162,7 @@ function App() {
     return () => {
       eventSource.close();
     };
-  }, [selectedConv?.id]);
+  }, []);
 
   useEffect(() => {
     if (selectedConv) {
@@ -215,8 +221,9 @@ function App() {
     if (res.ok) {
       const data = await res.json();
       setConversations(data || []);
-      if (selectedConv) {
-        const updated = (data || []).find(c => c.id === selectedConv.id);
+      const active = selectedConvRef.current;
+      if (active) {
+        const updated = (data || []).find(c => c.id === active.id);
         if (updated) {
           setSelectedConv(updated);
         }
