@@ -23,7 +23,6 @@ export function Sidebar({
           </div>
           <div className="user-info">
             <span className="username">{profile ? profile.username : 'Loading...'}</span>
-            <span className="user-status">Online</span>
           </div>
         </div>
         <button className="action-btn" onClick={() => setShowModal(true)} title="New Conversation">

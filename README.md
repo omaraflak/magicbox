@@ -33,18 +33,28 @@ docker run -d \
 
 If you are developing Magicbox and want to build the stack from source:
 
+1. Build the development images using a `:dev` tag:
+
 ```bash
-docker build -t docker.io/omaraflak/magicbox-core:latest .
-docker build -t docker.io/omaraflak/magicbox-drive:latest -f apps/drive/Dockerfile .
-docker build -t docker.io/omaraflak/magicbox-ai:latest -f apps/ai/Dockerfile .
-docker build -t docker.io/omaraflak/magicbox-chat:latest -f apps/chat/Dockerfile .
-docker compose up -d
+docker build -t docker.io/omaraflak/magicbox-core:dev .
+docker build -t docker.io/omaraflak/magicbox-drive:dev -f apps/drive/Dockerfile .
+docker build -t docker.io/omaraflak/magicbox-ai:dev -f apps/ai/Dockerfile .
+docker build -t docker.io/omaraflak/magicbox-chat:dev -f apps/chat/Dockerfile .
 ```
+
+2. Start the development stack:
+
+```bash
+MAGICBOX_TAG=dev docker compose up -d
+```
+
+> [!TIP]
+> **Developing a single app:** If you are only developing a specific app (e.g., Magic Chat) and want to use production versions for the rest of the stack, change the image tag to `:dev` in that app's `magicbox.json` manifest, build only that app's image with `:dev`, and leave the other manifests pointing to `:latest`. The development core server will run your local build for the app under development and pull the latest production images from Docker Hub for the others.
 
 If you are on **macOS** you might need to do this instead to start the container:
 
 ```bash
-MAGICBOX_HOST_ROOT=/tmp/magicbox docker compose up -d
+MAGICBOX_HOST_ROOT=/tmp/magicbox MAGICBOX_TAG=dev docker compose up -d
 ```
 
 Open `http://localhost:9090` (Core Dashboard), `http://localhost:9090/drive` (Drive), or `http://localhost:9090/ai` (AI) once the containers are running.
