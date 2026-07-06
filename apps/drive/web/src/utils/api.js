@@ -1,3 +1,67 @@
+function showCustomAlert(message) {
+  const overlay = document.createElement('div');
+  overlay.style.position = 'fixed';
+  overlay.style.top = '0';
+  overlay.style.left = '0';
+  overlay.style.right = '0';
+  overlay.style.bottom = '0';
+  overlay.style.background = 'rgba(0, 0, 0, 0.7)';
+  overlay.style.backdropFilter = 'blur(8px)';
+  overlay.style.display = 'flex';
+  overlay.style.justifyContent = 'center';
+  overlay.style.alignItems = 'center';
+  overlay.style.zIndex = '100000';
+
+  const card = document.createElement('div');
+  card.style.background = '#1e293b';
+  card.style.border = '1px solid #334155';
+  card.style.borderRadius = '12px';
+  card.style.padding = '24px';
+  card.style.maxWidth = '400px';
+  card.style.width = '90%';
+  card.style.textAlign = 'center';
+  card.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.3)';
+  card.style.color = '#f8fafc';
+  card.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+
+  const title = document.createElement('h3');
+  title.innerText = '⚠️ Attention Required';
+  title.style.fontSize = '1.1rem';
+  title.style.fontWeight = '600';
+  title.style.marginBottom = '12px';
+  title.style.color = '#ef4444';
+
+  const text = document.createElement('p');
+  text.innerText = message;
+  text.style.fontSize = '0.85rem';
+  text.style.color = '#94a3b8';
+  text.style.marginBottom = '24px';
+  text.style.lineHeight = '1.5';
+
+  const btn = document.createElement('button');
+  btn.innerText = 'Dismiss';
+  btn.style.background = '#334155';
+  btn.style.color = '#f8fafc';
+  btn.style.border = 'none';
+  btn.style.borderRadius = '6px';
+  btn.style.padding = '8px 20px';
+  btn.style.fontSize = '0.85rem';
+  btn.style.cursor = 'pointer';
+  btn.style.fontWeight = '500';
+  btn.style.transition = 'background-color 0.2s';
+  btn.onmouseover = () => btn.style.background = '#475569';
+  btn.onmouseout = () => btn.style.background = '#334155';
+  btn.onclick = () => {
+    document.body.removeChild(overlay);
+  };
+
+  card.appendChild(title);
+  card.appendChild(text);
+  card.appendChild(btn);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
 let API_BASE = '/api';
 if (window.location.pathname.startsWith('/u/')) {
   const segments = window.location.pathname.split('/');
@@ -15,7 +79,7 @@ async function apiFetch(url, options = {}) {
         return new Promise((resolve, reject) => {
           const popup = window.open(`/consent?req_id=${err.request_id}`, 'ConsentRequired', 'width=500,height=600');
           if (!popup) {
-            alert('Consent popup was blocked. Please allow popups for this site.');
+            showCustomAlert('Consent popup was blocked. Please allow popups for this site.');
             reject(new Error('Consent popup blocked'));
             return;
           }

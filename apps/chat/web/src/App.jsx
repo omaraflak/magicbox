@@ -31,6 +31,7 @@ function App() {
   const [newConvName, setNewConvName] = useState('');
   const [selectedContactIDs, setSelectedContactIDs] = useState([]);
   const [newChatError, setNewChatError] = useState('');
+  const [errorModalMsg, setErrorModalMsg] = useState('');
 
   useEffect(() => {
     if (!showModal) {
@@ -107,7 +108,7 @@ function App() {
           return new Promise((resolve, reject) => {
             const popup = window.open(`/consent?req_id=${err.request_id}`, 'ConsentRequired', 'width=500,height=600');
             if (!popup) {
-              alert('Consent popup was blocked. Please allow popups for this site.');
+              setErrorModalMsg('Consent popup was blocked. Please allow popups for this site.');
               reject(new Error('Consent popup blocked'));
               return;
             }
@@ -243,11 +244,11 @@ function App() {
         fetchContacts();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to send contact request');
+        setErrorModalMsg(data.error || 'Failed to send contact request');
       }
     } catch (err) {
       console.error(err);
-      alert('Error sending contact request');
+      setErrorModalMsg('Error sending contact request');
     } finally {
       setAddingContacts(prev => ({ ...prev, [participant.user_id]: false }));
     }
@@ -427,11 +428,11 @@ function App() {
         fetchMessages(selectedConv.id, '', false);
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to send message');
+        setErrorModalMsg(data.error || 'Failed to send message');
       }
     } catch (err) {
       console.error(err);
-      alert('Error sending message');
+      setErrorModalMsg('Error sending message');
     }
   };
 
@@ -447,11 +448,11 @@ function App() {
         fetchConversations();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to rename conversation');
+        setErrorModalMsg(data.error || 'Failed to rename conversation');
       }
     } catch (err) {
       console.error(err);
-      alert('Error renaming conversation');
+      setErrorModalMsg('Error renaming conversation');
     }
   };
 
@@ -466,11 +467,11 @@ function App() {
         fetchConversations();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to delete conversation');
+        setErrorModalMsg(data.error || 'Failed to delete conversation');
       }
     } catch (err) {
       console.error(err);
-      alert('Error deleting conversation');
+      setErrorModalMsg('Error deleting conversation');
     }
   };
 
@@ -662,6 +663,38 @@ function App() {
         mediaPanelWidth={mediaPanelWidth}
         startResizingMedia={startResizingMedia}
       />
+
+      {errorModalMsg && (
+        <div 
+          className="modal-overlay" 
+          onClick={() => setErrorModalMsg('')}
+        >
+          <div 
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              maxWidth: '400px', 
+              width: '90%',
+              textAlign: 'center',
+            }}
+          >
+            <div className="modal-header">
+              <span className="modal-title" style={{ color: 'var(--danger)' }}>⚠️ Error</span>
+              <button className="action-btn" onClick={() => setErrorModalMsg('')}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.5 }}>
+                {errorModalMsg}
+              </p>
+            </div>
+            <div className="modal-footer" style={{ justifyContent: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => setErrorModalMsg('')}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
