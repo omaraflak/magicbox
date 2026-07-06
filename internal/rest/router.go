@@ -61,6 +61,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/apps/{id}/update", auth(http.HandlerFunc(s.handleUpdateApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rebuild", auth(http.HandlerFunc(s.handleRebuildApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rotate-token", auth(http.HandlerFunc(s.handleRotateToken)))
+	mux.Handle("GET /api/v1/apps/permissions/requests", auth(http.HandlerFunc(s.handleListPendingPermissions)))
+	mux.Handle("POST /api/v1/apps/permissions/requests/{id}/approve", auth(http.HandlerFunc(s.handleApprovePermissionRequest)))
+	mux.Handle("POST /api/v1/apps/permissions/requests/{id}/reject", auth(http.HandlerFunc(s.handleRejectPermissionRequest)))
+
 
 	// Contact routes.
 	mux.Handle("GET /api/v1/contacts", auth(http.HandlerFunc(s.handleListContacts)))

@@ -40,6 +40,23 @@ service MagicboxOS {
   // SendContactRequest sends a contact request to a remote user via their invite link.
   // Requires scope: contacts:write
   rpc SendContactRequest(SendContactRequestRequest) returns (SendContactRequestResponse);
+
+  // RequestPermissions asks the user dynamically for new permission scopes.
+  rpc RequestPermissions(RequestPermissionsRequest) returns (RequestPermissionsResponse);
+}
+
+// --------------------------------------------------------------------------
+// RequestPermissions
+// --------------------------------------------------------------------------
+
+message RequestPermissionsRequest {
+  repeated string scopes = 1;
+  string reason = 2;
+}
+
+message RequestPermissionsResponse {
+  bool granted = 1;
+  string new_app_token = 2;
 }
 
 // --------------------------------------------------------------------------

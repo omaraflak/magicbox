@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -28,16 +30,31 @@ type Orchestrator struct {
 	Cfg            *config.Config
 	Logger         *logging.Logger
 	TokenGenerator TokenGeneratorFunc
+
+	mu                 sync.RWMutex
+	pendingPermissions map[string]*PermissionRequest
+}
+
+type PermissionRequest struct {
+	ID        string   `json:"id"`
+	AppID     string   `json:"app_id"`
+	AppName   string   `json:"app_name"`
+	Scopes    []string `json:"scopes"`
+	Reason    string   `json:"reason"`
+	Status    string   `json:"status"` // "pending", "approved", "rejected"
+	userID    string
+	decision  chan bool
 }
 
 // NewOrchestrator creates a new Orchestrator with the given dependencies.
 func NewOrchestrator(database *db.DB, dockerClient *docker.Client, cfg *config.Config, logger *logging.Logger, tokenGen TokenGeneratorFunc) *Orchestrator {
 	return &Orchestrator{
-		DB:             database,
-		Docker:         dockerClient,
-		Cfg:            cfg,
-		Logger:         logger,
-		TokenGenerator: tokenGen,
+		DB:                 database,
+		Docker:             dockerClient,
+		Cfg:                cfg,
+		Logger:             logger,
+		TokenGenerator:     tokenGen,
+		pendingPermissions: make(map[string]*PermissionRequest),
 	}
 }
 
@@ -569,3 +586,133 @@ func generateTokenSecret() (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+// RequestPermissions registers a permission request and blocks until the user approves or rejects it,
+// or until the context is cancelled, or the request times out (5 minutes).
+func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID, reason string, scopes []string) (bool, string, error) {
+	app, err := o.DB.GetAppByAppIDAndUserID(appID, userID)
+	if err != nil {
+		return false, "", fmt.Errorf("database query error: %w", err)
+	}
+	if app == nil {
+		return false, "", fmt.Errorf("calling app not found")
+	}
+
+	reqID := uuid.NewString()
+	req := &PermissionRequest{
+		ID:       reqID,
+		AppID:    appID,
+		AppName:  app.Name,
+		Scopes:   scopes,
+		Reason:   reason,
+		Status:   "pending",
+		userID:   userID,
+		decision: make(chan bool),
+	}
+
+	o.mu.Lock()
+	o.pendingPermissions[reqID] = req
+	o.mu.Unlock()
+
+	defer func() {
+		o.mu.Lock()
+		delete(o.pendingPermissions, reqID)
+		o.mu.Unlock()
+	}()
+
+	o.Logger.Info("App requesting permissions dynamically", logging.F("app_id", appID), logging.F("request_id", reqID), logging.F("scopes", scopes))
+
+	// Block until approved, rejected, cancelled, or times out
+	select {
+	case approved := <-req.decision:
+		if !approved {
+			return false, "", nil
+		}
+
+		// Insert new scopes into DB
+		for _, s := range scopes {
+			if err := o.DB.InsertAppScope(appID, userID, s); err != nil {
+				o.Logger.Error("failed to save new app scope", logging.F("app_id", appID), logging.F("scope", s), logging.F("error", err.Error()))
+			}
+		}
+
+		// Fetch all scopes from DB to generate new JWT
+		allScopes, err := o.DB.ListAppScopes(appID, userID)
+		if err != nil {
+			return false, "", fmt.Errorf("failed to fetch updated scopes: %w", err)
+		}
+
+		// Fetch token secret to sign JWT
+		token, err := o.DB.GetAppToken(appID, userID)
+		if err != nil || token == nil {
+			return false, "", fmt.Errorf("failed to fetch app token secret: %w", err)
+		}
+
+		newAppToken, err := o.TokenGenerator([]byte(token.TokenSecret), userID, appID, allScopes)
+		if err != nil {
+			return false, "", fmt.Errorf("failed to generate new app token: %w", err)
+		}
+
+		return true, newAppToken, nil
+
+	case <-ctx.Done():
+		return false, "", ctx.Err()
+
+	case <-time.After(5 * time.Minute):
+		return false, "", fmt.Errorf("permission request timed out")
+	}
+}
+
+// ListPendingPermissions returns all pending permission requests for a given user.
+func (o *Orchestrator) ListPendingPermissions(userID string) []*PermissionRequest {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	list := make([]*PermissionRequest, 0)
+	for _, req := range o.pendingPermissions {
+		if req.userID == userID {
+			list = append(list, req)
+		}
+	}
+	return list
+}
+
+
+// ApprovePermissionRequest approves a pending request by sending true to its channel.
+func (o *Orchestrator) ApprovePermissionRequest(reqID string) bool {
+	o.mu.RLock()
+	req, exists := o.pendingPermissions[reqID]
+	o.mu.RUnlock()
+
+	if !exists {
+		return false
+	}
+
+	select {
+	case req.decision <- true:
+		req.Status = "approved"
+		return true
+	default:
+		return false
+	}
+}
+
+// RejectPermissionRequest rejects a pending request by sending false to its channel.
+func (o *Orchestrator) RejectPermissionRequest(reqID string) bool {
+	o.mu.RLock()
+	req, exists := o.pendingPermissions[reqID]
+	o.mu.RUnlock()
+
+	if !exists {
+		return false
+	}
+
+	select {
+	case req.decision <- false:
+		req.Status = "rejected"
+		return true
+	default:
+		return false
+	}
+}
+

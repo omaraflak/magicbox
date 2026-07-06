@@ -2,10 +2,13 @@ package rest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/magicbox/core/internal/db"
 	"golang.org/x/crypto/bcrypt"
@@ -303,3 +306,90 @@ func TestAppProxy_DockerNotInitialized(t *testing.T) {
 		t.Errorf("expected 500 Internal Server Error, got %d (body: %s)", rr.Code, rr.Body.String())
 	}
 }
+
+func TestDynamicPermissions_RestFlow(t *testing.T) {
+	handler, database, _, orchestrator := setupTestServerWithOrch(t)
+
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
+	_ = database.CreateUser("u1", "user", string(hash), false)
+	cookie := getSessionCookieForUser(t, handler, "user", "pass")
+
+	app := &db.App{
+		ID:        "app-1",
+		AppID:     "com.example.app",
+		UserID:    "u1",
+		Status:    "running",
+		RouteSlug: "app",
+		Name:      "Example App",
+	}
+	_ = database.InsertApp(app)
+	_ = database.InsertAppToken("com.example.app", "u1", "secret-token")
+
+
+	// Verify no pending requests originally
+	reqList := httptest.NewRequest("GET", "/api/v1/apps/permissions/requests", nil)
+	reqList.AddCookie(cookie)
+	rrList := httptest.NewRecorder()
+	handler.ServeHTTP(rrList, reqList)
+
+	if rrList.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rrList.Code)
+	}
+	if !strings.Contains(rrList.Body.String(), "[]") {
+		t.Errorf("expected empty list, got %s", rrList.Body.String())
+	}
+
+	// Trigger a permission request block asynchronously
+	decisionCh := make(chan bool)
+	go func() {
+		granted, _, err := orchestrator.RequestPermissions(context.Background(), "com.example.app", "u1", "Reason details", []string{"contacts:read"})
+		if err != nil {
+			t.Errorf("RequestPermissions error: %v", err)
+		}
+		decisionCh <- granted
+	}()
+
+	// Wait a bit for orchestrator to register it
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify it shows up in GET list
+	reqList2 := httptest.NewRequest("GET", "/api/v1/apps/permissions/requests", nil)
+	reqList2.AddCookie(cookie)
+	rrList2 := httptest.NewRecorder()
+	handler.ServeHTTP(rrList2, reqList2)
+
+	if rrList2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rrList2.Code)
+	}
+	if !strings.Contains(rrList2.Body.String(), `"app_id":"com.example.app"`) {
+		t.Errorf("expected request in list, got %s", rrList2.Body.String())
+	}
+
+	// Extract the ID from list JSON response
+	bodyStr := rrList2.Body.String()
+	idStart := strings.Index(bodyStr, `"id":"`) + 6
+	idEnd := strings.Index(bodyStr[idStart:], `"`) + idStart
+	reqID := bodyStr[idStart:idEnd]
+
+	// Approve it via POST /approve
+	reqApprove := httptest.NewRequest("POST", "/api/v1/apps/permissions/requests/"+reqID+"/approve", nil)
+	reqApprove.AddCookie(cookie)
+	rrApprove := httptest.NewRecorder()
+	handler.ServeHTTP(rrApprove, reqApprove)
+
+	if rrApprove.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (body: %s)", rrApprove.Code, rrApprove.Body.String())
+	}
+
+	// Verify dynamic request goroutine returns true
+	select {
+	case granted := <-decisionCh:
+		if !granted {
+			t.Error("expected permission request to be granted")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for permission request to approve")
+	}
+}
+

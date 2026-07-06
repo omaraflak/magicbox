@@ -486,6 +486,32 @@ func (s *RPCServer) SendContactRequest(ctx context.Context, req *pb.SendContactR
 }
 
 // ---------------------------------------------------------------------------
+// RequestPermissions
+// ---------------------------------------------------------------------------
+
+func (s *RPCServer) RequestPermissions(ctx context.Context, req *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	if len(req.Scopes) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one scope is required")
+	}
+
+	granted, newAppToken, err := s.orchestrator.RequestPermissions(ctx, claims.AppID, claims.UserID, req.Reason, req.Scopes)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "permission request failed: %v", err)
+	}
+
+	return &pb.RequestPermissionsResponse{
+		Granted:     granted,
+		NewAppToken: newAppToken,
+	}, nil
+}
+
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

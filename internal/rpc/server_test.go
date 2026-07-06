@@ -5,6 +5,7 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -126,6 +127,91 @@ func setupGrpcTestServer(t *testing.T) (pb.MagicboxOSClient, *db.DB, *config.Con
 
 	return client, database, cfg, p2pMock, cleanup
 }
+
+func setupGrpcTestServerWithOrch(t *testing.T) (pb.MagicboxOSClient, *db.DB, *config.Config, *core.Orchestrator, func()) {
+	tempDB := filepath.Join(t.TempDir(), "test.db")
+	database, err := db.Open(tempDB)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if err := database.Migrate(); err != nil {
+		t.Fatalf("Migrate failed: %v", err)
+	}
+
+	logger, err := logging.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master identity key: %v", err)
+	}
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
+	}
+	masterPubPEM, _ := crypto.MarshalPublicKey(masterPriv.Public())
+	privPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	pubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	encKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+	encPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
+
+	cfg := &config.Config{
+		JWTSecret: []byte("jwt-secret"),
+		Keys: &keymanager.KeyState{
+			MasterPublicKeyPEM: masterPubPEM,
+			PrivateKeyPEM:      privPEM,
+			PublicKeyPEM:       pubPEM,
+			EncryptionKeyPEM:   encKeyPEM,
+			EncryptionPubPEM:   encPubPEM,
+		},
+	}
+
+	p2pMock := &MockP2PService{hostID: "local-host-id"}
+	orch := core.NewOrchestrator(database, nil, cfg, logger, rest.GenerateAppToken)
+
+	server := NewRPCServer(database, nil, orch, logger, cfg, p2pMock)
+
+	const bufSize = 1024 * 1024
+	lis := bufconn.Listen(bufSize)
+	s := grpc.NewServer(grpc.UnaryInterceptor(server.authInterceptor))
+	pb.RegisterMagicboxOSServer(s, server)
+	go func() {
+		s.Serve(lis)
+	}()
+
+	dialer := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+	conn, err := grpc.DialContext(context.Background(), "bufnet",
+		grpc.WithContextDialer(dialer),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+
+	client := pb.NewMagicboxOSClient(conn)
+
+	cleanup := func() {
+		conn.Close()
+		s.GracefulStop()
+		database.Close()
+	}
+
+	return client, database, cfg, orch, cleanup
+}
+
 
 func TestGrpcGetProfile(t *testing.T) {
 	client, database, _, _, cleanup := setupGrpcTestServer(t)
@@ -311,4 +397,125 @@ func TestGrpcSendContactRequest(t *testing.T) {
 		t.Errorf("expected DisplayName 'Bob', got %q", req.DisplayName)
 	}
 }
+
+func TestGrpcRequestPermissions_Approve(t *testing.T) {
+	client, database, _, orch, cleanup := setupGrpcTestServerWithOrch(t)
+	defer cleanup()
+
+	userID := "user-123"
+	appID := "com.example.app"
+	database.CreateUser(userID, "omar", "hash", false)
+	database.InsertApp(&db.App{
+		ID:          "app-id-123",
+		AppID:       appID,
+		Name:        "Example App",
+		Image:       "image",
+		Version:     "1.0.0",
+		RouteSlug:   "slug",
+		Host:        "host",
+		UserID:      userID,
+		Status:      "running",
+		ContainerID: "container-id",
+	})
+	database.InsertAppToken(appID, userID, "app-secret")
+	database.InsertAppScope(appID, userID, "profile:read")
+
+	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, appID, []string{"profile:read"})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+
+	// Concurrently approve the permission request
+	go func() {
+		// Wait a bit for orchestrator to receive the request
+		time.Sleep(50 * time.Millisecond)
+		reqs := orch.ListPendingPermissions(userID)
+		if len(reqs) != 1 {
+			t.Errorf("expected 1 pending permission request, got %d", len(reqs))
+			return
+		}
+		if reqs[0].AppID != appID || reqs[0].Reason != "need contacts" {
+			t.Errorf("unexpected pending request: %+v", reqs[0])
+		}
+		orch.ApprovePermissionRequest(reqs[0].ID)
+	}()
+
+	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
+		Scopes: []string{"contacts:read"},
+		Reason: "need contacts",
+	})
+	if err != nil {
+		t.Fatalf("RequestPermissions failed: %v", err)
+	}
+
+	if !resp.Granted {
+		t.Error("expected permissions to be granted")
+	}
+
+	if resp.NewAppToken == "" {
+		t.Error("expected a new app token, got empty string")
+	}
+
+	// Verify that contacts:read is now in DB scopes
+	scopes, err := database.ListAppScopes(appID, userID)
+	if err != nil {
+		t.Fatalf("ListAppScopes failed: %v", err)
+	}
+	hasContactsRead := false
+	for _, s := range scopes {
+		if s == "contacts:read" {
+			hasContactsRead = true
+			break
+		}
+	}
+	if !hasContactsRead {
+		t.Error("expected contacts:read to be added to database app scopes")
+	}
+}
+
+func TestGrpcRequestPermissions_Reject(t *testing.T) {
+	client, database, _, orch, cleanup := setupGrpcTestServerWithOrch(t)
+	defer cleanup()
+
+	userID := "user-123"
+	appID := "com.example.app"
+	database.CreateUser(userID, "omar", "hash", false)
+	database.InsertApp(&db.App{
+		ID:          "app-id-123",
+		AppID:       appID,
+		Name:        "Example App",
+		Image:       "image",
+		Version:     "1.0.0",
+		RouteSlug:   "slug",
+		Host:        "host",
+		UserID:      userID,
+		Status:      "running",
+		ContainerID: "container-id",
+	})
+	database.InsertAppToken(appID, userID, "app-secret")
+	database.InsertAppScope(appID, userID, "profile:read")
+
+	token, _ := rest.GenerateAppToken([]byte("app-secret"), userID, appID, []string{"profile:read"})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+
+	// Concurrently reject the request
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		reqs := orch.ListPendingPermissions(userID)
+		if len(reqs) == 1 {
+			orch.RejectPermissionRequest(reqs[0].ID)
+		}
+	}()
+
+	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
+		Scopes: []string{"contacts:write"},
+		Reason: "need write",
+	})
+	if err != nil {
+		t.Fatalf("RequestPermissions failed: %v", err)
+	}
+
+	if resp.Granted {
+		t.Error("expected permissions to be rejected, but got granted")
+	}
+}
+
 

@@ -93,3 +93,67 @@ func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {
 	server.onRestart = func() {}
 	return server.Handler(), database, cfg
 }
+
+func setupTestServerWithOrch(t *testing.T) (http.Handler, *db.DB, *config.Config, *core.Orchestrator) {
+	tempDir := t.TempDir()
+	tempDB := filepath.Join(tempDir, "test.db")
+
+	database, err := db.Open(tempDB)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if err := database.Migrate(); err != nil {
+		t.Fatalf("Migrate failed: %v", err)
+	}
+
+	logger, err := logging.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	mnemonic, err := crypto.GenerateMnemonic()
+	if err != nil {
+		t.Fatalf("failed to generate mnemonic: %v", err)
+	}
+	masterPriv, err := crypto.DeriveIdentityKey(mnemonic, 0)
+	if err != nil {
+		t.Fatalf("failed to derive master identity key: %v", err)
+	}
+	edPriv, err := crypto.DeriveIdentityKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive identity key: %v", err)
+	}
+	xPriv, err := crypto.DeriveEncryptionKey(mnemonic, 1)
+	if err != nil {
+		t.Fatalf("failed to derive encryption key: %v", err)
+	}
+	masterPubPEM, _ := crypto.MarshalPublicKey(masterPriv.Public())
+	privPEM, _ := crypto.MarshalPrivateKey(edPriv)
+	pubPEM, _ := crypto.MarshalPublicKey(edPriv.Public())
+	encKeyPEM, _ := crypto.MarshalPrivateKey(xPriv)
+	encPubPEM, _ := crypto.MarshalPublicKey(xPriv.PublicKey())
+
+	cfg := &config.Config{
+		Root:      tempDir,
+		JWTSecret: []byte("my-test-super-secret-key-signature-123"),
+		Keys: &keymanager.KeyState{
+			MasterPublicKeyPEM: masterPubPEM,
+			PrivateKeyPEM:      privPEM,
+			PublicKeyPEM:       pubPEM,
+			EncryptionKeyPEM:   encKeyPEM,
+			EncryptionPubPEM:   encPubPEM,
+			IdentityKeyIndex:   1,
+			EncryptionKeyIndex: 1,
+		},
+		MnemonicStore: keymanager.NewMnemonicStore(),
+	}
+
+	p2pMock := &MockP2PService{hostID: "QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"}
+	orch := core.NewOrchestrator(database, nil, cfg, logger, GenerateAppToken)
+
+	server := NewServer(cfg, database, nil, logger, orch, p2pMock)
+	server.onRestart = func() {}
+	return server.Handler(), database, cfg, orch
+}
+

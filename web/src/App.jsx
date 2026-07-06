@@ -5,6 +5,7 @@ import LoginView from './components/LoginView';
 import DashboardView from './components/DashboardView';
 import AdminConsoleView from './components/AdminConsoleView';
 import SettingsView from './components/SettingsView';
+import AppViewer from './components/AppViewer';
 
 // Modals
 import InstallAppModal from './components/InstallAppModal';
@@ -33,6 +34,7 @@ export default function App() {
 
     // Core Business Data
     const [apps, setApps] = useState([]);
+    const [activeApp, setActiveApp] = useState(null);
     const [users, setUsers] = useState([]);
     const [registries, setRegistries] = useState([]);
     const [logs, setLogs] = useState([]);
@@ -40,6 +42,7 @@ export default function App() {
     const [contacts, setContacts] = useState([]);
     const [contactRequests, setContactRequests] = useState([]);
     const [invitationInfo, setInvitationInfo] = useState(null);
+    const [pendingPermissions, setPendingPermissions] = useState([]);
 
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
@@ -196,6 +199,36 @@ export default function App() {
         const interval = setInterval(loadApps, 5000);
         return () => clearInterval(interval);
     }, [view, csrfToken]);
+
+    const loadPendingPermissions = async () => {
+        if (!user) return;
+        const { status, data } = await callAPI('GET', '/apps/permissions/requests');
+        if (status === 200) {
+            setPendingPermissions(data || []);
+        }
+    };
+
+    useEffect(() => {
+        if (!user) return;
+        loadPendingPermissions();
+        const interval = setInterval(loadPendingPermissions, 5000);
+        return () => clearInterval(interval);
+    }, [user, csrfToken]);
+
+    const handleAllowPermission = async (id) => {
+        const { status } = await callAPI('POST', `/apps/permissions/requests/${id}/approve`);
+        if (status === 200) {
+            loadPendingPermissions();
+            loadApps();
+        }
+    };
+
+    const handleDenyPermission = async (id) => {
+        const { status } = await callAPI('POST', `/apps/permissions/requests/${id}/reject`);
+        if (status === 200) {
+            loadPendingPermissions();
+        }
+    };
 
     // 3. Fetch Admin Data (Runs when switching to admin tabs)
     const loadUsers = async () => {
@@ -740,8 +773,20 @@ export default function App() {
                                 setActionError('');
                                 setInstallModalOpen(true);
                             }}
+                            onOpenApp={(app) => {
+                                setActiveApp(app);
+                                navigate('app');
+                            }}
                         />
                     </div>
+                )}
+
+                {view === 'app' && activeApp && (
+                    <AppViewer 
+                        app={activeApp}
+                        user={user}
+                        onBack={() => navigate('dashboard')}
+                    />
                 )}
 
                 {view === 'settings' && (
@@ -890,6 +935,51 @@ export default function App() {
                     onAcknowledge={handleAcknowledgeMnemonic}
                     loading={actionLoading}
                 />
+            )}
+
+            {pendingPermissions.length > 0 && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => handleDenyPermission(pendingPermissions[0].id)}
+                    title="Permission Request"
+                >
+                    <div className="modal-desc" style={{ marginBottom: '16px' }}>
+                        <p style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>
+                            📦 {pendingPermissions[0].app_name} is requesting additional permissions
+                        </p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+                            App ID: <code>{pendingPermissions[0].app_id}</code>
+                        </p>
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+                            <p style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Reason</p>
+                            <p style={{ fontSize: '0.9rem', lineHeight: '1.4', margin: 0 }}>"{pendingPermissions[0].reason}"</p>
+                        </div>
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
+                            <p style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Scopes Requested</p>
+                            <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                                {pendingPermissions[0].scopes.map((scope, idx) => (
+                                    <li key={idx} style={{ fontSize: '0.9rem', marginBottom: '4px', fontFamily: 'monospace' }}>
+                                        {scope}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        <button 
+                            className="btn btn-secondary" 
+                            onClick={() => handleDenyPermission(pendingPermissions[0].id)}
+                        >
+                            Deny
+                        </button>
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={() => handleAllowPermission(pendingPermissions[0].id)}
+                        >
+                            Allow & Grant
+                        </button>
+                    </div>
+                </Modal>
             )}
         </div>
     );

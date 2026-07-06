@@ -26,6 +26,7 @@ const (
 	MagicboxOS_ListContacts_FullMethodName       = "/magicbox.v1.MagicboxOS/ListContacts"
 	MagicboxOS_GetInviteLink_FullMethodName      = "/magicbox.v1.MagicboxOS/GetInviteLink"
 	MagicboxOS_SendContactRequest_FullMethodName = "/magicbox.v1.MagicboxOS/SendContactRequest"
+	MagicboxOS_RequestPermissions_FullMethodName = "/magicbox.v1.MagicboxOS/RequestPermissions"
 )
 
 // MagicboxOSClient is the client API for MagicboxOS service.
@@ -61,6 +62,8 @@ type MagicboxOSClient interface {
 	// SendContactRequest sends a contact request to a remote user via their invite link.
 	// Requires scope: contacts:write
 	SendContactRequest(ctx context.Context, in *SendContactRequestRequest, opts ...grpc.CallOption) (*SendContactRequestResponse, error)
+	// RequestPermissions asks the user dynamically for new permission scopes.
+	RequestPermissions(ctx context.Context, in *RequestPermissionsRequest, opts ...grpc.CallOption) (*RequestPermissionsResponse, error)
 }
 
 type magicboxOSClient struct {
@@ -141,6 +144,16 @@ func (c *magicboxOSClient) SendContactRequest(ctx context.Context, in *SendConta
 	return out, nil
 }
 
+func (c *magicboxOSClient) RequestPermissions(ctx context.Context, in *RequestPermissionsRequest, opts ...grpc.CallOption) (*RequestPermissionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestPermissionsResponse)
+	err := c.cc.Invoke(ctx, MagicboxOS_RequestPermissions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MagicboxOSServer is the server API for MagicboxOS service.
 // All implementations must embed UnimplementedMagicboxOSServer
 // for forward compatibility.
@@ -174,6 +187,8 @@ type MagicboxOSServer interface {
 	// SendContactRequest sends a contact request to a remote user via their invite link.
 	// Requires scope: contacts:write
 	SendContactRequest(context.Context, *SendContactRequestRequest) (*SendContactRequestResponse, error)
+	// RequestPermissions asks the user dynamically for new permission scopes.
+	RequestPermissions(context.Context, *RequestPermissionsRequest) (*RequestPermissionsResponse, error)
 	mustEmbedUnimplementedMagicboxOSServer()
 }
 
@@ -204,6 +219,9 @@ func (UnimplementedMagicboxOSServer) GetInviteLink(context.Context, *GetInviteLi
 }
 func (UnimplementedMagicboxOSServer) SendContactRequest(context.Context, *SendContactRequestRequest) (*SendContactRequestResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendContactRequest not implemented")
+}
+func (UnimplementedMagicboxOSServer) RequestPermissions(context.Context, *RequestPermissionsRequest) (*RequestPermissionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestPermissions not implemented")
 }
 func (UnimplementedMagicboxOSServer) mustEmbedUnimplementedMagicboxOSServer() {}
 func (UnimplementedMagicboxOSServer) testEmbeddedByValue()                    {}
@@ -352,6 +370,24 @@ func _MagicboxOS_SendContactRequest_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MagicboxOS_RequestPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestPermissionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MagicboxOSServer).RequestPermissions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MagicboxOS_RequestPermissions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MagicboxOSServer).RequestPermissions(ctx, req.(*RequestPermissionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MagicboxOS_ServiceDesc is the grpc.ServiceDesc for MagicboxOS service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -386,6 +422,10 @@ var MagicboxOS_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendContactRequest",
 			Handler:    _MagicboxOS_SendContactRequest_Handler,
+		},
+		{
+			MethodName: "RequestPermissions",
+			Handler:    _MagicboxOS_RequestPermissions_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

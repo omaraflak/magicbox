@@ -290,3 +290,59 @@ func (s *Server) getOwnedApp(w http.ResponseWriter, r *http.Request) (*db.App, b
 
 	return app, true
 }
+
+func (s *Server) handleListPendingPermissions(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	requests := s.orchestrator.ListPendingPermissions(claims.UserID)
+	writeJSON(w, http.StatusOK, requests)
+}
+
+func (s *Server) handleApprovePermissionRequest(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	reqID := r.PathValue("id")
+	if reqID == "" {
+		writeError(w, http.StatusBadRequest, "missing request id")
+		return
+	}
+
+	ok := s.orchestrator.ApprovePermissionRequest(reqID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "pending request not found or decision already sent")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "permission request approved"})
+}
+
+func (s *Server) handleRejectPermissionRequest(w http.ResponseWriter, r *http.Request) {
+	claims := GetUserFromContext(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	reqID := r.PathValue("id")
+	if reqID == "" {
+		writeError(w, http.StatusBadRequest, "missing request id")
+		return
+	}
+
+	ok := s.orchestrator.RejectPermissionRequest(reqID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "pending request not found or decision already sent")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "permission request rejected"})
+}
+

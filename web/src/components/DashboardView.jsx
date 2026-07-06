@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Badge from './Badge';
 
-function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, isRebuilding, isUninstalling, isStarting, isStopping }) {
+function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateToken, onRebuildApp, onOpenApp, isRebuilding, isUninstalling, isStarting, isStopping }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
 
@@ -65,15 +65,13 @@ function AppCard({ app, user, onStartApp, onStopApp, onUninstallApp, onRotateTok
                 {/* Primary Action */}
                 <div className="action-buttons">
                     {app.status === 'running' ? (
-                        <a 
-                            href={appUrl} 
-                            target="_blank" 
-                            rel="noreferrer" 
+                        <button 
                             className={`btn btn-primary btn-sm ${isTransitioning ? 'disabled' : ''}`}
-                            style={isTransitioning ? { pointerEvents: 'none', opacity: 0.5 } : {}}
+                            onClick={() => onOpenApp(app)}
+                            disabled={isTransitioning}
                         >
                             Open App
-                        </a>
+                        </button>
                     ) : (
                         <button 
                             className="btn btn-primary btn-sm" 
@@ -131,7 +129,8 @@ export default function DashboardView({
     uninstallingAppId,
     startingAppId,
     stoppingAppId,
-    onOpenInstallModal 
+    onOpenInstallModal,
+    onOpenApp
 }) {
     return (
         <div className="dashboard-layout" style={{ padding: '24px 0' }}>
@@ -166,6 +165,7 @@ export default function DashboardView({
                                 isUninstalling={uninstallingAppId === app.id}
                                 isStarting={startingAppId === app.id}
                                 isStopping={stoppingAppId === app.id}
+                                onOpenApp={onOpenApp}
                             />
                         ))}
                     </div>
