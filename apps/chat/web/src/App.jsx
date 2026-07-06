@@ -153,7 +153,7 @@ function App() {
     init();
 
     // Subscribe to SSE updates
-    const eventSource = new EventSource('/api/events');
+    const eventSource = new EventSource('api/events');
     eventSource.onmessage = (event) => {
       if (event.data === 'update') {
         fetchConversations();
@@ -182,7 +182,7 @@ function App() {
   const handleAddContact = async (participant) => {
     setAddingContacts(prev => ({ ...prev, [participant.user_id]: true }));
     try {
-      const res = await apiFetch('/api/contacts/add', {
+      const res = await apiFetch('api/contacts/add', {
         method: 'POST',
         body: JSON.stringify({
           invite_link: participant.invite_link,
@@ -205,7 +205,7 @@ function App() {
   };
 
   const fetchProfile = async () => {
-    const res = await apiFetch('/api/profile');
+    const res = await apiFetch('api/profile');
     if (res.ok) {
       const data = await res.json();
       setProfile(data);
@@ -213,7 +213,7 @@ function App() {
   };
 
   const fetchContacts = async () => {
-    const res = await apiFetch('/api/contacts');
+    const res = await apiFetch('api/contacts');
     if (res.ok) {
       const data = await res.json();
       setContacts(data);
@@ -221,7 +221,7 @@ function App() {
   };
 
   const fetchConversations = async () => {
-    const res = await apiFetch('/api/conversations');
+    const res = await apiFetch('api/conversations');
     if (res.ok) {
       const data = await res.json();
       setConversations(data);
@@ -235,7 +235,7 @@ function App() {
   };
 
   const fetchMessages = async (convID, before = '', append = false) => {
-    let url = `/api/conversations/${convID}/messages?limit=50`;
+    let url = `api/conversations/${convID}/messages?limit=50`;
     if (before) {
       url += `&before=${encodeURIComponent(before)}`;
     }
@@ -262,7 +262,7 @@ function App() {
       setSearchResults([]);
       return;
     }
-    const url = `/api/conversations/${convID}/messages?q=${encodeURIComponent(query)}`;
+    const url = `api/conversations/${convID}/messages?q=${encodeURIComponent(query)}`;
     const res = await apiFetch(url);
     if (res.ok) {
       const data = await res.json();
@@ -282,7 +282,7 @@ function App() {
 
   const fetchSharedMedia = async (convID, before = '', append = false) => {
     setIsLoadingMoreMedia(true);
-    let url = `/api/conversations/${convID}/attachments?limit=20`;
+    let url = `api/conversations/${convID}/attachments?limit=20`;
     if (before) {
       url += `&before=${encodeURIComponent(before)}`;
     }
@@ -306,7 +306,7 @@ function App() {
 
   const handleCreateConversation = async () => {
     try {
-      const res = await apiFetch('/api/conversations', {
+      const res = await apiFetch('api/conversations', {
         method: 'POST',
         body: JSON.stringify({
           name: newConvName,
@@ -345,7 +345,7 @@ function App() {
     if (fileInputRef.current) fileInputRef.current.value = '';
 
     try {
-      const res = await apiFetch(`/api/conversations/${selectedConv.id}/messages`, {
+      const res = await apiFetch(`api/conversations/${selectedConv.id}/messages`, {
         method: 'POST',
         body: formData,
       });
@@ -364,7 +364,7 @@ function App() {
 
   const handleRenameConversation = async () => {
     try {
-      const res = await apiFetch(`/api/conversations/${selectedConv.id}/rename`, {
+      const res = await apiFetch(`api/conversations/${selectedConv.id}/rename`, {
         method: 'POST',
         body: JSON.stringify({ name: renameInput }),
       });
@@ -384,7 +384,7 @@ function App() {
 
   const handleDeleteConversation = async () => {
     try {
-      const res = await apiFetch(`/api/conversations/${selectedConv.id}`, {
+      const res = await apiFetch(`api/conversations/${selectedConv.id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
