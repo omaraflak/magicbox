@@ -609,8 +609,8 @@ func (o *Orchestrator) ListPendingPermissions(userID string) []*PermissionReques
 }
 
 
-// ApprovePermissionRequest approves a pending request by inserting the scopes into DB and recreating the app container.
-func (o *Orchestrator) ApprovePermissionRequest(ctx context.Context, reqID string) bool {
+// ApprovePermissionRequest approves a pending request by inserting the approved scopes into DB and recreating the app container.
+func (o *Orchestrator) ApprovePermissionRequest(ctx context.Context, reqID string, approvedScopes []string) bool {
 	o.mu.Lock()
 	req, exists := o.pendingPermissions[reqID]
 	if exists {
@@ -632,6 +632,19 @@ func (o *Orchestrator) ApprovePermissionRequest(ctx context.Context, reqID strin
 
 	// Save new scopes to DB
 	for _, r := range req.Requests {
+		if len(approvedScopes) > 0 {
+			approved := false
+			for _, s := range approvedScopes {
+				if s == r.Scope {
+					approved = true
+					break
+				}
+			}
+			if !approved {
+				continue
+			}
+		}
+
 		if err := o.DB.InsertAppScope(req.AppID, req.userID, r.Scope); err != nil {
 			o.Logger.Error("failed to save new app scope", logging.F("app_id", req.AppID), logging.F("scope", r.Scope), logging.F("error", err.Error()))
 		}

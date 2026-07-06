@@ -973,7 +973,7 @@ export default function App() {
                 />
             )}
 
-            {pendingPermissions.length > 0 && (
+            {pendingPermissions.length > 0 && view !== 'consent' && (
                 <Modal
                     isOpen={true}
                     onClose={() => handleDenyPermission(pendingPermissions[0].id)}

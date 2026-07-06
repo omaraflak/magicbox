@@ -446,7 +446,7 @@ func TestGrpcRequestPermissions_Approve(t *testing.T) {
 	}
 
 	// Approve it using the RequestID
-	ok := orch.ApprovePermissionRequest(context.Background(), resp.RequestId)
+	ok := orch.ApprovePermissionRequest(context.Background(), resp.RequestId, nil)
 	if !ok {
 		t.Fatal("expected ApprovePermissionRequest to succeed")
 	}

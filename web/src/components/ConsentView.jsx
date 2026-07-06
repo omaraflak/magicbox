@@ -1,10 +1,29 @@
 import React, { useEffect, useState } from 'react';
 
+// Light theme color palette
+const colors = {
+    bg: '#ffffff',
+    textPrimary: '#0f172a',
+    textMuted: '#64748b',
+    borderColor: '#e2e8f0',
+    scopeBg: '#f8fafc',
+    scopeBorder: '#e2e8f0',
+    accentColor: '#0284c7',
+};
+
+const IconBack = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ cursor: 'pointer' }}><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+);
+
 export default function ConsentView({ callAPI }) {
     const [request, setRequest] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Pager & Decisions State
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [decisions, setDecisions] = useState({});
 
     const reqId = new URLSearchParams(window.location.search).get('req_id');
 
@@ -42,37 +61,44 @@ export default function ConsentView({ callAPI }) {
         return () => clearInterval(interval);
     }, [reqId]);
 
-    const handleApprove = async () => {
-        setActionLoading(true);
-        try {
-            const { status } = await callAPI('POST', `/apps/permissions/requests/${reqId}/approve`);
-            if (status === 200) {
-                window.opener?.postMessage({ type: 'consent_decision', request_id: reqId, approved: true }, '*');
-                window.close();
-            } else {
-                setError('Failed to approve request');
-            }
-        } catch (e) {
-            setError('Connection error');
-        } finally {
-            setActionLoading(false);
-        }
-    };
+    const handleDecision = async (approved) => {
+        const currentScope = request.requests[currentIndex].scope;
+        const newDecisions = { ...decisions, [currentScope]: approved };
+        setDecisions(newDecisions);
 
-    const handleReject = async () => {
-        setActionLoading(true);
-        try {
-            const { status } = await callAPI('POST', `/apps/permissions/requests/${reqId}/reject`);
-            if (status === 200) {
-                window.opener?.postMessage({ type: 'consent_decision', request_id: reqId, approved: false }, '*');
-                window.close();
-            } else {
-                setError('Failed to reject request');
+        if (currentIndex < request.requests.length - 1) {
+            setCurrentIndex(prev => prev + 1);
+        } else {
+            // Last scope: submit all decisions!
+            setActionLoading(true);
+            try {
+                const approvedList = Object.keys(newDecisions).filter(s => newDecisions[s] === true);
+                
+                if (approvedList.length > 0) {
+                    const { status } = await callAPI('POST', `/apps/permissions/requests/${reqId}/approve`, {
+                        approved_scopes: approvedList
+                    });
+                    if (status === 200) {
+                        window.opener?.postMessage({ type: 'consent_decision', request_id: reqId, approved: true }, '*');
+                        window.close();
+                    } else {
+                        setError('Failed to approve permission requests');
+                    }
+                } else {
+                    // All scopes denied
+                    const { status } = await callAPI('POST', `/apps/permissions/requests/${reqId}/reject`);
+                    if (status === 200) {
+                        window.opener?.postMessage({ type: 'consent_decision', request_id: reqId, approved: false }, '*');
+                        window.close();
+                    } else {
+                        setError('Failed to reject permission requests');
+                    }
+                }
+            } catch (e) {
+                setError('Connection error');
+            } finally {
+                setActionLoading(false);
             }
-        } catch (e) {
-            setError('Connection error');
-        } finally {
-            setActionLoading(false);
         }
     };
 
@@ -96,7 +122,7 @@ export default function ConsentView({ callAPI }) {
             <div style={containerStyle}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                     <div style={spinnerStyle}></div>
-                    <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>Loading permission details...</p>
+                    <p style={{ marginTop: '16px', color: colors.textMuted }}>Loading permission details...</p>
                 </div>
             </div>
         );
@@ -107,74 +133,99 @@ export default function ConsentView({ callAPI }) {
             <div style={containerStyle}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                     <span style={{ fontSize: '3rem' }}>⚠️</span>
-                    <h3 style={{ margin: '16px 0 8px 0', color: 'var(--text-primary)' }}>An Error Occurred</h3>
-                    <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>{error}</p>
-                    <button className="btn btn-secondary" onClick={() => window.close()}>Close Window</button>
+                    <h3 style={{ margin: '16px 0 8px 0', color: colors.textPrimary }}>An Error Occurred</h3>
+                    <p style={{ color: colors.textMuted, marginBottom: '24px' }}>{error}</p>
+                    <button style={btnSecondaryStyle} onClick={() => window.close()}>Close Window</button>
                 </div>
             </div>
         );
     }
 
+    const currentReq = request.requests[currentIndex];
+    const total = request.requests.length;
+
     return (
         <div style={containerStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+            {/* Top segment progress bar */}
+            {total > 1 && (
+                <div style={{ display: 'flex', gap: '6px', width: '100%', marginBottom: '16px' }}>
+                    {request.requests.map((_, idx) => (
+                        <div 
+                            key={idx} 
+                            style={{ 
+                                flex: 1, 
+                                height: '4px', 
+                                borderRadius: '2px', 
+                                background: idx === currentIndex ? colors.accentColor : (idx < currentIndex ? '#94a3b8' : '#e2e8f0'),
+                                transition: 'background 0.3s ease'
+                            }}
+                        />
+                    ))}
+                </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: `1px solid ${colors.borderColor}`, paddingBottom: '16px' }}>
+                {currentIndex > 0 && (
+                    <button 
+                        onClick={() => setCurrentIndex(prev => prev - 1)}
+                        style={{ background: 'none', border: 'none', padding: 0, color: colors.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                        <IconBack />
+                    </button>
+                )}
                 <span style={{ fontSize: '2.5rem' }}>🛡️</span>
                 <div style={{ textAlign: 'left' }}>
-                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 600 }}>Permission Request</h3>
-                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>from {request.app_name}</p>
+                    <h3 style={{ margin: 0, color: colors.textPrimary, fontWeight: 600 }}>Permission Request</h3>
+                    <p style={{ margin: 0, color: colors.textMuted, fontSize: '0.9rem' }}>from {request.app_name}</p>
                 </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0', textAlign: 'left' }}>
-                <p style={{ color: 'var(--text-primary)', marginBottom: '20px', lineHeight: 1.5 }}>
-                    <strong>{request.app_name}</strong> is requesting the following permissions on your Magicbox:
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0', textAlign: 'left' }}>
+                <p style={{ color: colors.textPrimary, marginBottom: '20px', lineHeight: 1.5 }}>
+                    <strong>{request.app_name}</strong> is requesting the following permission ({currentIndex + 1} of {total}):
                 </p>
 
-                {request.requests.map((req, idx) => (
-                    <div key={idx} style={scopeItemStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                            <span style={{ color: '#38bdf8' }}>●</span>
-                            <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{getScopeLabel(req.scope)}</strong>
-                        </div>
-                        {req.reason && (
-                            <p style={{ margin: '0 0 0 16px', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                                "{req.reason}"
-                            </p>
-                        )}
+                <div style={scopeItemStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <span style={{ color: colors.accentColor }}>●</span>
+                        <strong style={{ color: colors.textPrimary, fontSize: '1rem' }}>{getScopeLabel(currentReq.scope)}</strong>
                     </div>
-                ))}
+                    {currentReq.reason && (
+                        <p style={{ margin: '0 0 0 16px', color: colors.textMuted, fontSize: '0.9rem', fontStyle: 'italic', lineHeight: 1.4 }}>
+                            "{currentReq.reason}"
+                        </p>
+                    )}
+                </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: `1px solid ${colors.borderColor}`, paddingTop: '16px' }}>
                 <button 
-                    className="btn btn-danger" 
                     disabled={actionLoading}
-                    onClick={handleReject}
-                    style={{ padding: '10px 20px' }}
+                    onClick={() => handleDecision(false)}
+                    style={btnDangerStyle}
                 >
                     Deny
                 </button>
                 <button 
-                    className="btn btn-primary" 
                     disabled={actionLoading}
-                    onClick={handleApprove}
-                    style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    onClick={() => handleDecision(true)}
+                    style={btnPrimaryStyle}
                 >
                     {actionLoading && <span style={miniSpinnerStyle}></span>}
-                    Allow Access
+                    {currentIndex === total - 1 ? 'Allow & Approve' : 'Allow'}
                 </button>
             </div>
         </div>
     );
 }
 
-// Styling (Premium dark overlay layout)
+// Styling (Premium light theme full-screen layout)
 const containerStyle = {
     display: 'flex',
     flexDirection: 'column',
     width: '100vw',
     height: '100vh',
-    background: '#0a0a0f',
+    background: colors.bg,
     fontFamily: "'Outfit', sans-serif",
     padding: '24px',
     boxSizing: 'border-box',
@@ -182,18 +233,18 @@ const containerStyle = {
 };
 
 const scopeItemStyle = {
-    background: 'rgba(255, 255, 255, 0.02)',
-    border: '1px solid rgba(255, 255, 255, 0.05)',
+    background: colors.scopeBg,
+    border: `1px solid ${colors.scopeBorder}`,
     borderRadius: '8px',
-    padding: '12px 16px',
+    padding: '16px 20px',
     marginBottom: '12px',
 };
 
 const spinnerStyle = {
     width: '40px',
     height: '40px',
-    border: '3px solid rgba(56, 189, 248, 0.1)',
-    borderTop: '3px solid #38bdf8',
+    border: '3px solid rgba(2, 132, 199, 0.1)',
+    borderTop: `3px solid ${colors.accentColor}`,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     margin: '0 auto'
@@ -207,4 +258,40 @@ const miniSpinnerStyle = {
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     display: 'inline-block'
+};
+
+// Explicit light mode button style overrides to ensure premium look independent of global index.css
+const btnBaseStyle = {
+    fontFamily: "'Outfit', sans-serif",
+    fontSize: '0.95rem',
+    fontWeight: 500,
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: 'none',
+    outline: 'none',
+};
+
+const btnPrimaryStyle = {
+    ...btnBaseStyle,
+    background: colors.accentColor,
+    color: '#ffffff',
+    padding: '10px 24px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+};
+
+const btnDangerStyle = {
+    ...btnBaseStyle,
+    background: '#ef4444',
+    color: '#ffffff',
+    padding: '10px 20px',
+};
+
+const btnSecondaryStyle = {
+    ...btnBaseStyle,
+    background: '#e2e8f0',
+    color: '#334155',
+    padding: '10px 20px',
 };

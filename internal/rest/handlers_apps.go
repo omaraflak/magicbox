@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"encoding/json"
 	"github.com/magicbox/core/internal/db"
 	"github.com/magicbox/core/internal/logging"
 )
@@ -315,7 +316,14 @@ func (s *Server) handleApprovePermissionRequest(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ok := s.orchestrator.ApprovePermissionRequest(r.Context(), reqID)
+	var body struct {
+		ApprovedScopes []string `json:"approved_scopes"`
+	}
+	if r.ContentLength > 0 {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	ok := s.orchestrator.ApprovePermissionRequest(r.Context(), reqID, body.ApprovedScopes)
 	if !ok {
 		writeError(w, http.StatusNotFound, "pending request not found or decision already sent")
 		return

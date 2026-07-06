@@ -340,9 +340,10 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 		t.Errorf("expected empty list, got %s", rrList.Body.String())
 	}
 
-	// Trigger a permission request synchronously
+	// Trigger a permission request synchronously for multiple scopes
 	granted, _, reqID, err := orchestrator.RequestPermissions(context.Background(), "com.example.app", "u1", []core.ScopeWithReason{
-		{Scope: "contacts:read", Reason: "Reason details"},
+		{Scope: "contacts:read", Reason: "Reason 1"},
+		{Scope: "contacts:write", Reason: "Reason 2"},
 	})
 	if err != nil {
 		t.Fatalf("RequestPermissions error: %v", err)
@@ -367,8 +368,12 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 		t.Errorf("expected request in list, got %s", rrList2.Body.String())
 	}
 
-	// Approve it via POST /approve
-	reqApprove := httptest.NewRequest("POST", "/api/v1/apps/permissions/requests/"+reqID+"/approve", nil)
+	// Approve only contacts:read via POST /approve
+	bodyObj := map[string][]string{
+		"approved_scopes": {"contacts:read"},
+	}
+	bodyBytes, _ := json.Marshal(bodyObj)
+	reqApprove := httptest.NewRequest("POST", "/api/v1/apps/permissions/requests/"+reqID+"/approve", bytes.NewReader(bodyBytes))
 	reqApprove.AddCookie(cookie)
 	rrApprove := httptest.NewRecorder()
 	handler.ServeHTTP(rrApprove, reqApprove)
@@ -377,13 +382,13 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d (body: %s)", rrApprove.Code, rrApprove.Body.String())
 	}
 
-	// Verify scope is in DB after approval
+	// Verify only contacts:read is in DB scopes (contacts:write is filtered out!)
 	scopes, err := database.ListAppScopes("com.example.app", "u1")
 	if err != nil {
 		t.Fatalf("ListAppScopes failed: %v", err)
 	}
 	if len(scopes) != 1 || scopes[0] != "contacts:read" {
-		t.Errorf("expected contacts:read scope to be granted, got %v", scopes)
+		t.Errorf("expected only contacts:read scope to be granted, got %v", scopes)
 	}
 }
 
