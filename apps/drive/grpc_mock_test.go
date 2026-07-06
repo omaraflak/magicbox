@@ -27,6 +27,10 @@ func (s *mockCoreServer) SendToContact(ctx context.Context, req *pb.SendToContac
 	return &pb.SendToContactResponse{Success: true}, nil
 }
 
+func (s *mockCoreServer) IsAppInstalled(ctx context.Context, req *pb.IsAppInstalledRequest) (*pb.IsAppInstalledResponse, error) {
+	return &pb.IsAppInstalledResponse{Installed: true}, nil
+}
+
 func setupMockCoreServer(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

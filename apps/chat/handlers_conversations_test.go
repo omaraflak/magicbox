@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	pb "github.com/magicbox/core/api/proto/v1"
 )
 
 func TestHandleConversations_Get(t *testing.T) {
@@ -165,5 +168,29 @@ func TestHandleMessages_Post(t *testing.T) {
 	pd, _ := getPendingDeliveries()
 	if len(pd) != 1 || pd[0].RecipientID != "alice-uid" {
 		t.Errorf("Expected delivery to be queued for Alice, got %+v", pd)
+	}
+}
+
+func TestHandleConversations_Post_AppNotInstalled(t *testing.T) {
+	mockServer, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Configure mock to return Installed: false
+	mockServer.isAppInstalledFunc = func(ctx context.Context, req *pb.IsAppInstalledRequest) (*pb.IsAppInstalledResponse, error) {
+		return &pb.IsAppInstalledResponse{Installed: false}, nil
+	}
+
+	body := `{"participant_ids":["c1"]}`
+	req := httptest.NewRequest("POST", "/api/conversations", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	handleConversations(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 Bad Request, got %d", rr.Code)
+	}
+
+	if !strings.Contains(rr.Body.String(), "does not have Magic Chat installed") {
+		t.Errorf("Expected error message about app installation, got: %s", rr.Body.String())
 	}
 }

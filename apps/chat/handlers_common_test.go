@@ -22,6 +22,7 @@ type mockCoreServer struct {
 	getInviteLinkFunc      func(context.Context, *pb.GetInviteLinkRequest) (*pb.GetInviteLinkResponse, error)
 	hasScopesFunc          func(context.Context, *pb.HasScopesRequest) (*pb.HasScopesResponse, error)
 	requestPermissionsFunc func(context.Context, *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error)
+	isAppInstalledFunc     func(context.Context, *pb.IsAppInstalledRequest) (*pb.IsAppInstalledResponse, error)
 }
 
 func (m *mockCoreServer) GetProfile(ctx context.Context, req *pb.GetProfileRequest) (*pb.GetProfileResponse, error) {
@@ -76,6 +77,13 @@ func (m *mockCoreServer) RequestPermissions(ctx context.Context, req *pb.Request
 		return m.requestPermissionsFunc(ctx, req)
 	}
 	return &pb.RequestPermissionsResponse{Granted: true}, nil
+}
+
+func (m *mockCoreServer) IsAppInstalled(ctx context.Context, req *pb.IsAppInstalledRequest) (*pb.IsAppInstalledResponse, error) {
+	if m.isAppInstalledFunc != nil {
+		return m.isAppInstalledFunc(ctx, req)
+	}
+	return &pb.IsAppInstalledResponse{Installed: true}, nil
 }
 
 // Setup helpers

@@ -55,15 +55,32 @@ func handleSendFile(w http.ResponseWriter, r *http.Request) {
 
 	contactName := contactID
 	client, conn, ctx, err := getCoreClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to connect to core: "+err.Error())
+		return
+	}
+	defer conn.Close()
+
+	// Check if the contact has the drive app installed
+	checkResp, err := client.IsAppInstalled(ctx, &pb.IsAppInstalledRequest{
+		ContactId: contactID,
+		AppId:     "com.magicbox.drive",
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to check if app is installed on contact: "+err.Error())
+		return
+	}
+	if !checkResp.Installed {
+		writeError(w, http.StatusBadRequest, "Recipient contact does not have Magic Drive installed.")
+		return
+	}
+
+	contactsResp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
 	if err == nil {
-		defer conn.Close()
-		contactsResp, err := client.ListContacts(ctx, &pb.ListContactsRequest{})
-		if err == nil {
-			for _, c := range contactsResp.Contacts {
-				if c.Id == contactID {
-					contactName = c.DisplayName
-					break
-				}
+		for _, c := range contactsResp.Contacts {
+			if c.Id == contactID {
+				contactName = c.DisplayName
+				break
 			}
 		}
 	}

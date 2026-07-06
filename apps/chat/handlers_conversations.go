@@ -84,6 +84,20 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if foundContact != nil {
+				// Check if the contact has the chat app installed
+				checkResp, err := client.IsAppInstalled(ctx, &pb.IsAppInstalledRequest{
+					ContactId: foundContact.Id,
+					AppId:     "com.magicbox.chat",
+				})
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to check if app is installed on contact: "+err.Error())
+					return
+				}
+				if !checkResp.Installed {
+					writeError(w, http.StatusBadRequest, foundContact.DisplayName+" does not have Magic Chat installed.")
+					return
+				}
+
 				participants = append(participants, Participant{
 					UserID:      foundContact.TargetUserId,
 					DisplayName: foundContact.DisplayName,
