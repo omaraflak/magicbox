@@ -57,6 +57,33 @@ func initDB() {
 			log.Fatalf("Failed to run schema query %q: %v", q, err)
 		}
 	}
+
+	// Migrate existing database schemas if invite_link is missing.
+	var hasInviteLink bool
+	rows, err := dbConn.Query("PRAGMA table_info(conversation_participants)")
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var cid int
+			var name, typeStr string
+			var notnull int
+			var dfltValue interface{}
+			var pk int
+			if err := rows.Scan(&cid, &name, &typeStr, &notnull, &dfltValue, &pk); err == nil {
+				if name == "invite_link" {
+					hasInviteLink = true
+					break
+				}
+			}
+		}
+	}
+	if !hasInviteLink {
+		log.Println("Migrating database: adding invite_link column to conversation_participants table")
+		_, err = dbConn.Exec("ALTER TABLE conversation_participants ADD COLUMN invite_link TEXT NOT NULL DEFAULT ''")
+		if err != nil {
+			log.Printf("Warning: failed to add invite_link column: %v", err)
+		}
+	}
 }
 
 // Structs
