@@ -27,6 +27,7 @@ const (
 	MagicboxOS_GetInviteLink_FullMethodName      = "/magicbox.v1.MagicboxOS/GetInviteLink"
 	MagicboxOS_SendContactRequest_FullMethodName = "/magicbox.v1.MagicboxOS/SendContactRequest"
 	MagicboxOS_RequestPermissions_FullMethodName = "/magicbox.v1.MagicboxOS/RequestPermissions"
+	MagicboxOS_HasScopes_FullMethodName          = "/magicbox.v1.MagicboxOS/HasScopes"
 )
 
 // MagicboxOSClient is the client API for MagicboxOS service.
@@ -64,6 +65,8 @@ type MagicboxOSClient interface {
 	SendContactRequest(ctx context.Context, in *SendContactRequestRequest, opts ...grpc.CallOption) (*SendContactRequestResponse, error)
 	// RequestPermissions asks the user dynamically for new permission scopes.
 	RequestPermissions(ctx context.Context, in *RequestPermissionsRequest, opts ...grpc.CallOption) (*RequestPermissionsResponse, error)
+	// HasScopes checks if the calling app is already granted a set of scopes.
+	HasScopes(ctx context.Context, in *HasScopesRequest, opts ...grpc.CallOption) (*HasScopesResponse, error)
 }
 
 type magicboxOSClient struct {
@@ -154,6 +157,16 @@ func (c *magicboxOSClient) RequestPermissions(ctx context.Context, in *RequestPe
 	return out, nil
 }
 
+func (c *magicboxOSClient) HasScopes(ctx context.Context, in *HasScopesRequest, opts ...grpc.CallOption) (*HasScopesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HasScopesResponse)
+	err := c.cc.Invoke(ctx, MagicboxOS_HasScopes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MagicboxOSServer is the server API for MagicboxOS service.
 // All implementations must embed UnimplementedMagicboxOSServer
 // for forward compatibility.
@@ -189,6 +202,8 @@ type MagicboxOSServer interface {
 	SendContactRequest(context.Context, *SendContactRequestRequest) (*SendContactRequestResponse, error)
 	// RequestPermissions asks the user dynamically for new permission scopes.
 	RequestPermissions(context.Context, *RequestPermissionsRequest) (*RequestPermissionsResponse, error)
+	// HasScopes checks if the calling app is already granted a set of scopes.
+	HasScopes(context.Context, *HasScopesRequest) (*HasScopesResponse, error)
 	mustEmbedUnimplementedMagicboxOSServer()
 }
 
@@ -222,6 +237,9 @@ func (UnimplementedMagicboxOSServer) SendContactRequest(context.Context, *SendCo
 }
 func (UnimplementedMagicboxOSServer) RequestPermissions(context.Context, *RequestPermissionsRequest) (*RequestPermissionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestPermissions not implemented")
+}
+func (UnimplementedMagicboxOSServer) HasScopes(context.Context, *HasScopesRequest) (*HasScopesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HasScopes not implemented")
 }
 func (UnimplementedMagicboxOSServer) mustEmbedUnimplementedMagicboxOSServer() {}
 func (UnimplementedMagicboxOSServer) testEmbeddedByValue()                    {}
@@ -388,6 +406,24 @@ func _MagicboxOS_RequestPermissions_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MagicboxOS_HasScopes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HasScopesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MagicboxOSServer).HasScopes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MagicboxOS_HasScopes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MagicboxOSServer).HasScopes(ctx, req.(*HasScopesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MagicboxOS_ServiceDesc is the grpc.ServiceDesc for MagicboxOS service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -426,6 +462,10 @@ var MagicboxOS_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RequestPermissions",
 			Handler:    _MagicboxOS_RequestPermissions_Handler,
+		},
+		{
+			MethodName: "HasScopes",
+			Handler:    _MagicboxOS_HasScopes_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

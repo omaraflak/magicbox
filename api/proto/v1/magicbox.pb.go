@@ -21,17 +21,164 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type RequestPermissionsRequest struct {
+type HasScopesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Scopes        []string               `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HasScopesRequest) Reset() {
+	*x = HasScopesRequest{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HasScopesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HasScopesRequest) ProtoMessage() {}
+
+func (x *HasScopesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HasScopesRequest.ProtoReflect.Descriptor instead.
+func (*HasScopesRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *HasScopesRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type HasScopesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	HasAll        bool                   `protobuf:"varint,1,opt,name=has_all,json=hasAll,proto3" json:"has_all,omitempty"`
+	MissingScopes []string               `protobuf:"bytes,2,rep,name=missing_scopes,json=missingScopes,proto3" json:"missing_scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HasScopesResponse) Reset() {
+	*x = HasScopesResponse{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HasScopesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HasScopesResponse) ProtoMessage() {}
+
+func (x *HasScopesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HasScopesResponse.ProtoReflect.Descriptor instead.
+func (*HasScopesResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *HasScopesResponse) GetHasAll() bool {
+	if x != nil {
+		return x.HasAll
+	}
+	return false
+}
+
+func (x *HasScopesResponse) GetMissingScopes() []string {
+	if x != nil {
+		return x.MissingScopes
+	}
+	return nil
+}
+
+type ScopeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         string                 `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScopeRequest) Reset() {
+	*x = ScopeRequest{}
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScopeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScopeRequest) ProtoMessage() {}
+
+func (x *ScopeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScopeRequest.ProtoReflect.Descriptor instead.
+func (*ScopeRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ScopeRequest) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *ScopeRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RequestPermissionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Requests      []*ScopeRequest        `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RequestPermissionsRequest) Reset() {
 	*x = RequestPermissionsRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[0]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43,7 +190,7 @@ func (x *RequestPermissionsRequest) String() string {
 func (*RequestPermissionsRequest) ProtoMessage() {}
 
 func (x *RequestPermissionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[0]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -56,21 +203,14 @@ func (x *RequestPermissionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPermissionsRequest.ProtoReflect.Descriptor instead.
 func (*RequestPermissionsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{0}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *RequestPermissionsRequest) GetScopes() []string {
+func (x *RequestPermissionsRequest) GetRequests() []*ScopeRequest {
 	if x != nil {
-		return x.Scopes
+		return x.Requests
 	}
 	return nil
-}
-
-func (x *RequestPermissionsRequest) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
 }
 
 type RequestPermissionsResponse struct {
@@ -83,7 +223,7 @@ type RequestPermissionsResponse struct {
 
 func (x *RequestPermissionsResponse) Reset() {
 	*x = RequestPermissionsResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[1]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -95,7 +235,7 @@ func (x *RequestPermissionsResponse) String() string {
 func (*RequestPermissionsResponse) ProtoMessage() {}
 
 func (x *RequestPermissionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[1]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -108,7 +248,7 @@ func (x *RequestPermissionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPermissionsResponse.ProtoReflect.Descriptor instead.
 func (*RequestPermissionsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{1}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RequestPermissionsResponse) GetGranted() bool {
@@ -139,7 +279,7 @@ type SendWebhookRequest struct {
 
 func (x *SendWebhookRequest) Reset() {
 	*x = SendWebhookRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[2]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -151,7 +291,7 @@ func (x *SendWebhookRequest) String() string {
 func (*SendWebhookRequest) ProtoMessage() {}
 
 func (x *SendWebhookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[2]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -164,7 +304,7 @@ func (x *SendWebhookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendWebhookRequest.ProtoReflect.Descriptor instead.
 func (*SendWebhookRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{2}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SendWebhookRequest) GetTargetAppId() string {
@@ -198,7 +338,7 @@ type SendWebhookResponse struct {
 
 func (x *SendWebhookResponse) Reset() {
 	*x = SendWebhookResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[3]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -210,7 +350,7 @@ func (x *SendWebhookResponse) String() string {
 func (*SendWebhookResponse) ProtoMessage() {}
 
 func (x *SendWebhookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[3]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -223,7 +363,7 @@ func (x *SendWebhookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendWebhookResponse.ProtoReflect.Descriptor instead.
 func (*SendWebhookResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{3}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SendWebhookResponse) GetHttpStatus() int32 {
@@ -241,7 +381,7 @@ type GetProfileRequest struct {
 
 func (x *GetProfileRequest) Reset() {
 	*x = GetProfileRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[4]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -253,7 +393,7 @@ func (x *GetProfileRequest) String() string {
 func (*GetProfileRequest) ProtoMessage() {}
 
 func (x *GetProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[4]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -266,7 +406,7 @@ func (x *GetProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileRequest.ProtoReflect.Descriptor instead.
 func (*GetProfileRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{4}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{7}
 }
 
 type GetProfileResponse struct {
@@ -280,7 +420,7 @@ type GetProfileResponse struct {
 
 func (x *GetProfileResponse) Reset() {
 	*x = GetProfileResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[5]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -292,7 +432,7 @@ func (x *GetProfileResponse) String() string {
 func (*GetProfileResponse) ProtoMessage() {}
 
 func (x *GetProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[5]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -305,7 +445,7 @@ func (x *GetProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileResponse.ProtoReflect.Descriptor instead.
 func (*GetProfileResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{5}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetProfileResponse) GetUserId() string {
@@ -337,7 +477,7 @@ type ListSharedVolumesRequest struct {
 
 func (x *ListSharedVolumesRequest) Reset() {
 	*x = ListSharedVolumesRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[6]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +489,7 @@ func (x *ListSharedVolumesRequest) String() string {
 func (*ListSharedVolumesRequest) ProtoMessage() {}
 
 func (x *ListSharedVolumesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[6]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +502,7 @@ func (x *ListSharedVolumesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedVolumesRequest.ProtoReflect.Descriptor instead.
 func (*ListSharedVolumesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{6}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{9}
 }
 
 type ListSharedVolumesResponse struct {
@@ -374,7 +514,7 @@ type ListSharedVolumesResponse struct {
 
 func (x *ListSharedVolumesResponse) Reset() {
 	*x = ListSharedVolumesResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[7]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -386,7 +526,7 @@ func (x *ListSharedVolumesResponse) String() string {
 func (*ListSharedVolumesResponse) ProtoMessage() {}
 
 func (x *ListSharedVolumesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[7]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -399,7 +539,7 @@ func (x *ListSharedVolumesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedVolumesResponse.ProtoReflect.Descriptor instead.
 func (*ListSharedVolumesResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListSharedVolumesResponse) GetVolumes() []*SharedVolume {
@@ -420,7 +560,7 @@ type SharedVolume struct {
 
 func (x *SharedVolume) Reset() {
 	*x = SharedVolume{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[8]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +572,7 @@ func (x *SharedVolume) String() string {
 func (*SharedVolume) ProtoMessage() {}
 
 func (x *SharedVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[8]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +585,7 @@ func (x *SharedVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedVolume.ProtoReflect.Descriptor instead.
 func (*SharedVolume) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SharedVolume) GetName() string {
@@ -473,7 +613,7 @@ type SendToContactRequest struct {
 
 func (x *SendToContactRequest) Reset() {
 	*x = SendToContactRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[9]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +625,7 @@ func (x *SendToContactRequest) String() string {
 func (*SendToContactRequest) ProtoMessage() {}
 
 func (x *SendToContactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[9]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +638,7 @@ func (x *SendToContactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendToContactRequest.ProtoReflect.Descriptor instead.
 func (*SendToContactRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SendToContactRequest) GetContactId() string {
@@ -532,7 +672,7 @@ type SendToContactResponse struct {
 
 func (x *SendToContactResponse) Reset() {
 	*x = SendToContactResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[10]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +684,7 @@ func (x *SendToContactResponse) String() string {
 func (*SendToContactResponse) ProtoMessage() {}
 
 func (x *SendToContactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[10]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +697,7 @@ func (x *SendToContactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendToContactResponse.ProtoReflect.Descriptor instead.
 func (*SendToContactResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SendToContactResponse) GetSuccess() bool {
@@ -582,7 +722,7 @@ type ListContactsRequest struct {
 
 func (x *ListContactsRequest) Reset() {
 	*x = ListContactsRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[11]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +734,7 @@ func (x *ListContactsRequest) String() string {
 func (*ListContactsRequest) ProtoMessage() {}
 
 func (x *ListContactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[11]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +747,7 @@ func (x *ListContactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContactsRequest.ProtoReflect.Descriptor instead.
 func (*ListContactsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{14}
 }
 
 type ListContactsResponse struct {
@@ -619,7 +759,7 @@ type ListContactsResponse struct {
 
 func (x *ListContactsResponse) Reset() {
 	*x = ListContactsResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[12]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +771,7 @@ func (x *ListContactsResponse) String() string {
 func (*ListContactsResponse) ProtoMessage() {}
 
 func (x *ListContactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[12]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +784,7 @@ func (x *ListContactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListContactsResponse.ProtoReflect.Descriptor instead.
 func (*ListContactsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{12}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListContactsResponse) GetContacts() []*Contact {
@@ -668,7 +808,7 @@ type Contact struct {
 
 func (x *Contact) Reset() {
 	*x = Contact{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[13]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -680,7 +820,7 @@ func (x *Contact) String() string {
 func (*Contact) ProtoMessage() {}
 
 func (x *Contact) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[13]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -693,7 +833,7 @@ func (x *Contact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Contact.ProtoReflect.Descriptor instead.
 func (*Contact) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{13}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Contact) GetId() string {
@@ -739,7 +879,7 @@ type GetInviteLinkRequest struct {
 
 func (x *GetInviteLinkRequest) Reset() {
 	*x = GetInviteLinkRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[14]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -751,7 +891,7 @@ func (x *GetInviteLinkRequest) String() string {
 func (*GetInviteLinkRequest) ProtoMessage() {}
 
 func (x *GetInviteLinkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[14]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -764,7 +904,7 @@ func (x *GetInviteLinkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInviteLinkRequest.ProtoReflect.Descriptor instead.
 func (*GetInviteLinkRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{14}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{17}
 }
 
 type GetInviteLinkResponse struct {
@@ -776,7 +916,7 @@ type GetInviteLinkResponse struct {
 
 func (x *GetInviteLinkResponse) Reset() {
 	*x = GetInviteLinkResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[15]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -788,7 +928,7 @@ func (x *GetInviteLinkResponse) String() string {
 func (*GetInviteLinkResponse) ProtoMessage() {}
 
 func (x *GetInviteLinkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[15]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -801,7 +941,7 @@ func (x *GetInviteLinkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInviteLinkResponse.ProtoReflect.Descriptor instead.
 func (*GetInviteLinkResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{15}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetInviteLinkResponse) GetInviteLink() string {
@@ -821,7 +961,7 @@ type SendContactRequestRequest struct {
 
 func (x *SendContactRequestRequest) Reset() {
 	*x = SendContactRequestRequest{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[16]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +973,7 @@ func (x *SendContactRequestRequest) String() string {
 func (*SendContactRequestRequest) ProtoMessage() {}
 
 func (x *SendContactRequestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[16]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +986,7 @@ func (x *SendContactRequestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendContactRequestRequest.ProtoReflect.Descriptor instead.
 func (*SendContactRequestRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{16}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SendContactRequestRequest) GetInviteLink() string {
@@ -873,7 +1013,7 @@ type SendContactRequestResponse struct {
 
 func (x *SendContactRequestResponse) Reset() {
 	*x = SendContactRequestResponse{}
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[17]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -885,7 +1025,7 @@ func (x *SendContactRequestResponse) String() string {
 func (*SendContactRequestResponse) ProtoMessage() {}
 
 func (x *SendContactRequestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_v1_magicbox_proto_msgTypes[17]
+	mi := &file_api_proto_v1_magicbox_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -898,7 +1038,7 @@ func (x *SendContactRequestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendContactRequestResponse.ProtoReflect.Descriptor instead.
 func (*SendContactRequestResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{17}
+	return file_api_proto_v1_magicbox_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SendContactRequestResponse) GetSuccess() bool {
@@ -919,10 +1059,17 @@ var File_api_proto_v1_magicbox_proto protoreflect.FileDescriptor
 
 const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\n" +
-	"\x1bapi/proto/v1/magicbox.proto\x12\vmagicbox.v1\"K\n" +
-	"\x19RequestPermissionsRequest\x12\x16\n" +
-	"\x06scopes\x18\x01 \x03(\tR\x06scopes\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"Z\n" +
+	"\x1bapi/proto/v1/magicbox.proto\x12\vmagicbox.v1\"*\n" +
+	"\x10HasScopesRequest\x12\x16\n" +
+	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"S\n" +
+	"\x11HasScopesResponse\x12\x17\n" +
+	"\ahas_all\x18\x01 \x01(\bR\x06hasAll\x12%\n" +
+	"\x0emissing_scopes\x18\x02 \x03(\tR\rmissingScopes\"<\n" +
+	"\fScopeRequest\x12\x14\n" +
+	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"R\n" +
+	"\x19RequestPermissionsRequest\x125\n" +
+	"\brequests\x18\x01 \x03(\v2\x19.magicbox.v1.ScopeRequestR\brequests\"Z\n" +
 	"\x1aRequestPermissionsResponse\x12\x18\n" +
 	"\agranted\x18\x01 \x01(\bR\agranted\x12\"\n" +
 	"\rnew_app_token\x18\x02 \x01(\tR\vnewAppToken\"x\n" +
@@ -973,7 +1120,7 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\"]\n" +
 	"\x1aSendContactRequestResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12%\n" +
-	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage2\xe4\x05\n" +
+	"\x0estatus_message\x18\x02 \x01(\tR\rstatusMessage2\xb0\x06\n" +
 	"\n" +
 	"MagicboxOS\x12P\n" +
 	"\vSendWebhook\x12\x1f.magicbox.v1.SendWebhookRequest\x1a .magicbox.v1.SendWebhookResponse\x12M\n" +
@@ -984,7 +1131,8 @@ const file_api_proto_v1_magicbox_proto_rawDesc = "" +
 	"\fListContacts\x12 .magicbox.v1.ListContactsRequest\x1a!.magicbox.v1.ListContactsResponse\x12V\n" +
 	"\rGetInviteLink\x12!.magicbox.v1.GetInviteLinkRequest\x1a\".magicbox.v1.GetInviteLinkResponse\x12e\n" +
 	"\x12SendContactRequest\x12&.magicbox.v1.SendContactRequestRequest\x1a'.magicbox.v1.SendContactRequestResponse\x12e\n" +
-	"\x12RequestPermissions\x12&.magicbox.v1.RequestPermissionsRequest\x1a'.magicbox.v1.RequestPermissionsResponseB2Z0github.com/magicbox/core/api/proto/v1;magicboxpbb\x06proto3"
+	"\x12RequestPermissions\x12&.magicbox.v1.RequestPermissionsRequest\x1a'.magicbox.v1.RequestPermissionsResponse\x12J\n" +
+	"\tHasScopes\x12\x1d.magicbox.v1.HasScopesRequest\x1a\x1e.magicbox.v1.HasScopesResponseB2Z0github.com/magicbox/core/api/proto/v1;magicboxpbb\x06proto3"
 
 var (
 	file_api_proto_v1_magicbox_proto_rawDescOnce sync.Once
@@ -998,51 +1146,57 @@ func file_api_proto_v1_magicbox_proto_rawDescGZIP() []byte {
 	return file_api_proto_v1_magicbox_proto_rawDescData
 }
 
-var file_api_proto_v1_magicbox_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_api_proto_v1_magicbox_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_api_proto_v1_magicbox_proto_goTypes = []any{
-	(*RequestPermissionsRequest)(nil),  // 0: magicbox.v1.RequestPermissionsRequest
-	(*RequestPermissionsResponse)(nil), // 1: magicbox.v1.RequestPermissionsResponse
-	(*SendWebhookRequest)(nil),         // 2: magicbox.v1.SendWebhookRequest
-	(*SendWebhookResponse)(nil),        // 3: magicbox.v1.SendWebhookResponse
-	(*GetProfileRequest)(nil),          // 4: magicbox.v1.GetProfileRequest
-	(*GetProfileResponse)(nil),         // 5: magicbox.v1.GetProfileResponse
-	(*ListSharedVolumesRequest)(nil),   // 6: magicbox.v1.ListSharedVolumesRequest
-	(*ListSharedVolumesResponse)(nil),  // 7: magicbox.v1.ListSharedVolumesResponse
-	(*SharedVolume)(nil),               // 8: magicbox.v1.SharedVolume
-	(*SendToContactRequest)(nil),       // 9: magicbox.v1.SendToContactRequest
-	(*SendToContactResponse)(nil),      // 10: magicbox.v1.SendToContactResponse
-	(*ListContactsRequest)(nil),        // 11: magicbox.v1.ListContactsRequest
-	(*ListContactsResponse)(nil),       // 12: magicbox.v1.ListContactsResponse
-	(*Contact)(nil),                    // 13: magicbox.v1.Contact
-	(*GetInviteLinkRequest)(nil),       // 14: magicbox.v1.GetInviteLinkRequest
-	(*GetInviteLinkResponse)(nil),      // 15: magicbox.v1.GetInviteLinkResponse
-	(*SendContactRequestRequest)(nil),  // 16: magicbox.v1.SendContactRequestRequest
-	(*SendContactRequestResponse)(nil), // 17: magicbox.v1.SendContactRequestResponse
+	(*HasScopesRequest)(nil),           // 0: magicbox.v1.HasScopesRequest
+	(*HasScopesResponse)(nil),          // 1: magicbox.v1.HasScopesResponse
+	(*ScopeRequest)(nil),               // 2: magicbox.v1.ScopeRequest
+	(*RequestPermissionsRequest)(nil),  // 3: magicbox.v1.RequestPermissionsRequest
+	(*RequestPermissionsResponse)(nil), // 4: magicbox.v1.RequestPermissionsResponse
+	(*SendWebhookRequest)(nil),         // 5: magicbox.v1.SendWebhookRequest
+	(*SendWebhookResponse)(nil),        // 6: magicbox.v1.SendWebhookResponse
+	(*GetProfileRequest)(nil),          // 7: magicbox.v1.GetProfileRequest
+	(*GetProfileResponse)(nil),         // 8: magicbox.v1.GetProfileResponse
+	(*ListSharedVolumesRequest)(nil),   // 9: magicbox.v1.ListSharedVolumesRequest
+	(*ListSharedVolumesResponse)(nil),  // 10: magicbox.v1.ListSharedVolumesResponse
+	(*SharedVolume)(nil),               // 11: magicbox.v1.SharedVolume
+	(*SendToContactRequest)(nil),       // 12: magicbox.v1.SendToContactRequest
+	(*SendToContactResponse)(nil),      // 13: magicbox.v1.SendToContactResponse
+	(*ListContactsRequest)(nil),        // 14: magicbox.v1.ListContactsRequest
+	(*ListContactsResponse)(nil),       // 15: magicbox.v1.ListContactsResponse
+	(*Contact)(nil),                    // 16: magicbox.v1.Contact
+	(*GetInviteLinkRequest)(nil),       // 17: magicbox.v1.GetInviteLinkRequest
+	(*GetInviteLinkResponse)(nil),      // 18: magicbox.v1.GetInviteLinkResponse
+	(*SendContactRequestRequest)(nil),  // 19: magicbox.v1.SendContactRequestRequest
+	(*SendContactRequestResponse)(nil), // 20: magicbox.v1.SendContactRequestResponse
 }
 var file_api_proto_v1_magicbox_proto_depIdxs = []int32{
-	8,  // 0: magicbox.v1.ListSharedVolumesResponse.volumes:type_name -> magicbox.v1.SharedVolume
-	13, // 1: magicbox.v1.ListContactsResponse.contacts:type_name -> magicbox.v1.Contact
-	2,  // 2: magicbox.v1.MagicboxOS.SendWebhook:input_type -> magicbox.v1.SendWebhookRequest
-	4,  // 3: magicbox.v1.MagicboxOS.GetProfile:input_type -> magicbox.v1.GetProfileRequest
-	6,  // 4: magicbox.v1.MagicboxOS.ListSharedVolumes:input_type -> magicbox.v1.ListSharedVolumesRequest
-	9,  // 5: magicbox.v1.MagicboxOS.SendToContact:input_type -> magicbox.v1.SendToContactRequest
-	11, // 6: magicbox.v1.MagicboxOS.ListContacts:input_type -> magicbox.v1.ListContactsRequest
-	14, // 7: magicbox.v1.MagicboxOS.GetInviteLink:input_type -> magicbox.v1.GetInviteLinkRequest
-	16, // 8: magicbox.v1.MagicboxOS.SendContactRequest:input_type -> magicbox.v1.SendContactRequestRequest
-	0,  // 9: magicbox.v1.MagicboxOS.RequestPermissions:input_type -> magicbox.v1.RequestPermissionsRequest
-	3,  // 10: magicbox.v1.MagicboxOS.SendWebhook:output_type -> magicbox.v1.SendWebhookResponse
-	5,  // 11: magicbox.v1.MagicboxOS.GetProfile:output_type -> magicbox.v1.GetProfileResponse
-	7,  // 12: magicbox.v1.MagicboxOS.ListSharedVolumes:output_type -> magicbox.v1.ListSharedVolumesResponse
-	10, // 13: magicbox.v1.MagicboxOS.SendToContact:output_type -> magicbox.v1.SendToContactResponse
-	12, // 14: magicbox.v1.MagicboxOS.ListContacts:output_type -> magicbox.v1.ListContactsResponse
-	15, // 15: magicbox.v1.MagicboxOS.GetInviteLink:output_type -> magicbox.v1.GetInviteLinkResponse
-	17, // 16: magicbox.v1.MagicboxOS.SendContactRequest:output_type -> magicbox.v1.SendContactRequestResponse
-	1,  // 17: magicbox.v1.MagicboxOS.RequestPermissions:output_type -> magicbox.v1.RequestPermissionsResponse
-	10, // [10:18] is the sub-list for method output_type
-	2,  // [2:10] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	2,  // 0: magicbox.v1.RequestPermissionsRequest.requests:type_name -> magicbox.v1.ScopeRequest
+	11, // 1: magicbox.v1.ListSharedVolumesResponse.volumes:type_name -> magicbox.v1.SharedVolume
+	16, // 2: magicbox.v1.ListContactsResponse.contacts:type_name -> magicbox.v1.Contact
+	5,  // 3: magicbox.v1.MagicboxOS.SendWebhook:input_type -> magicbox.v1.SendWebhookRequest
+	7,  // 4: magicbox.v1.MagicboxOS.GetProfile:input_type -> magicbox.v1.GetProfileRequest
+	9,  // 5: magicbox.v1.MagicboxOS.ListSharedVolumes:input_type -> magicbox.v1.ListSharedVolumesRequest
+	12, // 6: magicbox.v1.MagicboxOS.SendToContact:input_type -> magicbox.v1.SendToContactRequest
+	14, // 7: magicbox.v1.MagicboxOS.ListContacts:input_type -> magicbox.v1.ListContactsRequest
+	17, // 8: magicbox.v1.MagicboxOS.GetInviteLink:input_type -> magicbox.v1.GetInviteLinkRequest
+	19, // 9: magicbox.v1.MagicboxOS.SendContactRequest:input_type -> magicbox.v1.SendContactRequestRequest
+	3,  // 10: magicbox.v1.MagicboxOS.RequestPermissions:input_type -> magicbox.v1.RequestPermissionsRequest
+	0,  // 11: magicbox.v1.MagicboxOS.HasScopes:input_type -> magicbox.v1.HasScopesRequest
+	6,  // 12: magicbox.v1.MagicboxOS.SendWebhook:output_type -> magicbox.v1.SendWebhookResponse
+	8,  // 13: magicbox.v1.MagicboxOS.GetProfile:output_type -> magicbox.v1.GetProfileResponse
+	10, // 14: magicbox.v1.MagicboxOS.ListSharedVolumes:output_type -> magicbox.v1.ListSharedVolumesResponse
+	13, // 15: magicbox.v1.MagicboxOS.SendToContact:output_type -> magicbox.v1.SendToContactResponse
+	15, // 16: magicbox.v1.MagicboxOS.ListContacts:output_type -> magicbox.v1.ListContactsResponse
+	18, // 17: magicbox.v1.MagicboxOS.GetInviteLink:output_type -> magicbox.v1.GetInviteLinkResponse
+	20, // 18: magicbox.v1.MagicboxOS.SendContactRequest:output_type -> magicbox.v1.SendContactRequestResponse
+	4,  // 19: magicbox.v1.MagicboxOS.RequestPermissions:output_type -> magicbox.v1.RequestPermissionsResponse
+	1,  // 20: magicbox.v1.MagicboxOS.HasScopes:output_type -> magicbox.v1.HasScopesResponse
+	12, // [12:21] is the sub-list for method output_type
+	3,  // [3:12] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_v1_magicbox_proto_init() }
@@ -1056,7 +1210,7 @@ func file_api_proto_v1_magicbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_v1_magicbox_proto_rawDesc), len(file_api_proto_v1_magicbox_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

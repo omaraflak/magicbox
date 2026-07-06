@@ -53,6 +53,7 @@ func getCoreClient() (pb.MagicboxOSClient, io.Closer, context.Context, error) {
 	return client, conn, ctx, err
 }
 
+
 func jsonEncode(w http.ResponseWriter, data interface{}) error {
 	return json.NewEncoder(w).Encode(data)
 }
@@ -63,6 +64,11 @@ func jsonEncode(w http.ResponseWriter, data interface{}) error {
 func handleProfile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if err := env.EnsureScopes([]string{"profile:read"}, []string{"Read your basic user profile (username, user ID)"}); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -90,6 +96,11 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 func handleContacts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if err := env.EnsureScopes([]string{"contacts:read"}, []string{"Access contacts to display names and profile invite links"}); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -125,6 +136,11 @@ func handleConversations(w http.ResponseWriter, r *http.Request) {
 		var req CreateConvRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			return
+		}
+
+		if err := env.EnsureScopes([]string{"profile:read", "contacts:read"}, []string{"Read your basic user profile", "Access contacts to display names and profile invite links"}); err != nil {
+			writeError(w, http.StatusForbidden, err.Error())
 			return
 		}
 
@@ -450,6 +466,22 @@ func handleMessages(w http.ResponseWriter, r *http.Request, conv *Conversation) 
 			return
 		}
 
+		// Check scopes dynamic requirements
+		var scopes []string
+		var reasons []string
+		scopes = append(scopes, "profile:read")
+		reasons = append(reasons, "Read your basic user profile to set sender ID and display name")
+
+		if len(attachBytes) > 0 {
+			scopes = append(scopes, "shared:storage:rw")
+			reasons = append(reasons, "Access storage to save and send file attachments")
+		}
+
+		if err := env.EnsureScopes(scopes, reasons); err != nil {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+
 		// Connect to Core for metadata
 		client, conn, ctx, err := getCoreClient()
 		if err != nil {
@@ -770,6 +802,11 @@ func handleAddContact(w http.ResponseWriter, r *http.Request) {
 
 	if req.InviteLink == "" || req.DisplayName == "" {
 		writeError(w, http.StatusBadRequest, "invite_link and display_name are required")
+		return
+	}
+
+	if err := env.EnsureScopes([]string{"contacts:write"}, []string{"Send contact requests directly to other users"}); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 

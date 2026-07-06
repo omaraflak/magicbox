@@ -67,5 +67,28 @@ func main() {
 		sdk.NewHTMLHandler("/web").ServeHTTP(w, r)
 	})
 
-	log.Fatal(http.ListenAndServe(":9090", mux))
+	log.Fatal(http.ListenAndServe(":9090", scopeMiddleware(mux)))
 }
+
+func scopeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if env == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if strings.HasPrefix(r.URL.Path, "/api/contacts") || strings.HasPrefix(r.URL.Path, "/api/files/send") {
+			if err := env.EnsureScopes([]string{"profile:read", "contacts:read"}, []string{"Read your user profile", "Access contacts to select file transfer recipients"}); err != nil {
+				writeError(w, http.StatusForbidden, err.Error())
+				return
+			}
+		} else if strings.HasPrefix(r.URL.Path, "/api/") {
+			if err := env.EnsureScopes([]string{"profile:read", "shared:storage:rw"}, []string{"Read your user profile", "Access files in your shared storage folder"}); err != nil {
+				writeError(w, http.StatusForbidden, err.Error())
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+

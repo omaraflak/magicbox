@@ -43,15 +43,35 @@ service MagicboxOS {
 
   // RequestPermissions asks the user dynamically for new permission scopes.
   rpc RequestPermissions(RequestPermissionsRequest) returns (RequestPermissionsResponse);
+
+  // HasScopes checks if the calling app is already granted a set of scopes.
+  rpc HasScopes(HasScopesRequest) returns (HasScopesResponse);
+}
+
+// --------------------------------------------------------------------------
+// HasScopes
+// --------------------------------------------------------------------------
+
+message HasScopesRequest {
+  repeated string scopes = 1;
+}
+
+message HasScopesResponse {
+  bool has_all = 1;
+  repeated string missing_scopes = 2;
 }
 
 // --------------------------------------------------------------------------
 // RequestPermissions
 // --------------------------------------------------------------------------
 
-message RequestPermissionsRequest {
-  repeated string scopes = 1;
+message ScopeRequest {
+  string scope = 1;
   string reason = 2;
+}
+
+message RequestPermissionsRequest {
+  repeated ScopeRequest requests = 1;
 }
 
 message RequestPermissionsResponse {

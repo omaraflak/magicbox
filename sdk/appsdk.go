@@ -129,3 +129,64 @@ func (e *Env) VerifyWebhook(r *http.Request) bool {
 	secret := r.Header.Get("X-Magicbox-Webhook-Secret")
 	return secret != "" && secret == e.WebhookSecret
 }
+
+// EnsureScopes checks if the calling app is already granted a set of scopes,
+// and if not, requests them dynamically from the core, blocking until user decision.
+// If granted, it updates the ApiToken of the Env instance automatically.
+func (e *Env) EnsureScopes(scopes []string, reasons []string) error {
+	if len(scopes) != len(reasons) {
+		return fmt.Errorf("ensure scopes: scopes and reasons length mismatch")
+	}
+
+	// Dial core and get client
+	client, conn, ctx, err := e.GetCoreClient()
+	if err != nil {
+		return fmt.Errorf("ensure scopes: failed to dial core: %w", err)
+	}
+	defer conn.Close()
+
+	// Check if already has scopes
+	hasResp, err := client.HasScopes(ctx, &pb.HasScopesRequest{Scopes: scopes})
+	if err != nil {
+		return fmt.Errorf("ensure scopes: failed to check scopes: %w", err)
+	}
+
+	if hasResp.HasAll {
+		return nil
+	}
+
+	// Request missing scopes
+	var reqs []*pb.ScopeRequest
+	missingMap := make(map[string]bool)
+	for _, s := range hasResp.MissingScopes {
+		missingMap[s] = true
+	}
+
+	for i, s := range scopes {
+		if missingMap[s] {
+			reqs = append(reqs, &pb.ScopeRequest{
+				Scope:  s,
+				Reason: reasons[i],
+			})
+		}
+	}
+
+	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
+		Requests: reqs,
+	})
+	if err != nil {
+		return fmt.Errorf("ensure scopes: failed to request permissions: %w", err)
+	}
+
+	if !resp.Granted {
+		return fmt.Errorf("ensure scopes: permissions denied by user")
+	}
+
+	// Update local memory token so future calls use it
+	if resp.NewAppToken != "" {
+		e.ApiToken = resp.NewAppToken
+	}
+
+	return nil
+}
+

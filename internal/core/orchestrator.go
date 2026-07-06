@@ -35,14 +35,18 @@ type Orchestrator struct {
 	pendingPermissions map[string]*PermissionRequest
 }
 
+type ScopeWithReason struct {
+	Scope  string `json:"scope"`
+	Reason string `json:"reason"`
+}
+
 type PermissionRequest struct {
-	ID        string   `json:"id"`
-	AppID     string   `json:"app_id"`
-	AppName   string   `json:"app_name"`
-	Scopes    []string `json:"scopes"`
-	Reason    string   `json:"reason"`
-	Status    string   `json:"status"` // "pending", "approved", "rejected"
-	userID    string
+	ID       string            `json:"id"`
+	AppID    string            `json:"app_id"`
+	AppName  string            `json:"app_name"`
+	Requests []ScopeWithReason `json:"requests"`
+	Status   string            `json:"status"` // "pending", "approved", "rejected"
+	userID   string
 	decision  chan bool
 }
 
@@ -108,16 +112,6 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 	if err := os.MkdirAll(appDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create app directory: %w", err)
 	}
-	// Ensure shared directories exist.
-	for _, scope := range manifest.RequiredScopes {
-		volName, _, ok := ScopeToVolumeAccess(scope)
-		if ok {
-			sharedDir := filepath.Join(o.Cfg.Root, "users", user.Username, "shared", volName)
-			if err := os.MkdirAll(sharedDir, 0750); err != nil {
-				return nil, fmt.Errorf("failed to create shared directory: %w", err)
-			}
-		}
-	}
 
 	// 7. Insert app record (status=installing), token, and scopes.
 	app := &db.App{
@@ -138,11 +132,6 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 	}
 	if err := o.DB.InsertAppToken(manifest.AppID, userID, tokenSecret); err != nil {
 		return nil, fmt.Errorf("failed to insert app token: %w", err)
-	}
-	for _, scope := range manifest.RequiredScopes {
-		if err := o.DB.InsertAppScope(manifest.AppID, userID, scope); err != nil {
-			return nil, fmt.Errorf("failed to insert app scope: %w", err)
-		}
 	}
 
 	// Run the remainder of installation (image pull, container creation and start) in the background.
@@ -589,7 +578,7 @@ func generateTokenSecret() (string, error) {
 
 // RequestPermissions registers a permission request and blocks until the user approves or rejects it,
 // or until the context is cancelled, or the request times out (5 minutes).
-func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID, reason string, scopes []string) (bool, string, error) {
+func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID string, requests []ScopeWithReason) (bool, string, error) {
 	app, err := o.DB.GetAppByAppIDAndUserID(appID, userID)
 	if err != nil {
 		return false, "", fmt.Errorf("database query error: %w", err)
@@ -603,8 +592,7 @@ func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID, re
 		ID:       reqID,
 		AppID:    appID,
 		AppName:  app.Name,
-		Scopes:   scopes,
-		Reason:   reason,
+		Requests: requests,
 		Status:   "pending",
 		userID:   userID,
 		decision: make(chan bool),
@@ -620,7 +608,7 @@ func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID, re
 		o.mu.Unlock()
 	}()
 
-	o.Logger.Info("App requesting permissions dynamically", logging.F("app_id", appID), logging.F("request_id", reqID), logging.F("scopes", scopes))
+	o.Logger.Info("App requesting permissions dynamically", logging.F("app_id", appID), logging.F("request_id", reqID), logging.F("requests", requests))
 
 	// Block until approved, rejected, cancelled, or times out
 	select {
@@ -629,10 +617,22 @@ func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID, re
 			return false, "", nil
 		}
 
+		// Fetch user details to get username for directory creation
+		user, _ := o.DB.GetUserByID(userID)
+
 		// Insert new scopes into DB
-		for _, s := range scopes {
-			if err := o.DB.InsertAppScope(appID, userID, s); err != nil {
-				o.Logger.Error("failed to save new app scope", logging.F("app_id", appID), logging.F("scope", s), logging.F("error", err.Error()))
+		for _, req := range requests {
+			if err := o.DB.InsertAppScope(appID, userID, req.Scope); err != nil {
+				o.Logger.Error("failed to save new app scope", logging.F("app_id", appID), logging.F("scope", req.Scope), logging.F("error", err.Error()))
+			}
+
+			// Ensure shared directory exists if it's a volume mount scope
+			volName, _, ok := ScopeToVolumeAccess(req.Scope)
+			if ok && user != nil {
+				sharedDir := filepath.Join(o.Cfg.Root, "users", user.Username, "shared", volName)
+				if err := os.MkdirAll(sharedDir, 0750); err != nil {
+					o.Logger.Error("failed to create dynamic shared directory", logging.F("dir", sharedDir), logging.F("error", err.Error()))
+				}
 			}
 		}
 

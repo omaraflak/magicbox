@@ -945,24 +945,23 @@ export default function App() {
                 >
                     <div className="modal-desc" style={{ marginBottom: '16px' }}>
                         <p style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>
-                            📦 {pendingPermissions[0].app_name} is requesting additional permissions
+                            📦 {pendingPermissions[0].app_name} is requesting security permissions
                         </p>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '20px' }}>
                             App ID: <code>{pendingPermissions[0].app_id}</code>
                         </p>
-                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
-                            <p style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Reason</p>
-                            <p style={{ fontSize: '0.9rem', lineHeight: '1.4', margin: 0 }}>"{pendingPermissions[0].reason}"</p>
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
-                            <p style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Scopes Requested</p>
-                            <ul style={{ paddingLeft: '20px', margin: 0 }}>
-                                {pendingPermissions[0].scopes.map((scope, idx) => (
-                                    <li key={idx} style={{ fontSize: '0.9rem', marginBottom: '4px', fontFamily: 'monospace' }}>
-                                        {scope}
-                                    </li>
-                                ))}
-                            </ul>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                            {pendingPermissions[0].requests.map((req, idx) => (
+                                <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                                    <p style={{ fontWeight: 600, fontSize: '0.9rem', fontFamily: 'monospace', color: 'var(--accent-violet)', margin: '0 0 6px 0' }}>
+                                        🛡️ {req.scope}
+                                    </p>
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0, lineHeight: '1.4' }}>
+                                        "{req.reason}"
+                                    </p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>

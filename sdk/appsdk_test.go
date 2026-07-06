@@ -1,10 +1,16 @@
 package sdk
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	pb "github.com/magicbox/core/api/proto/v1"
+	"google.golang.org/grpc"
 )
 
 func TestLoadEnv_Success(t *testing.T) {
@@ -104,3 +110,146 @@ func TestVerifyWebhook(t *testing.T) {
 		})
 	}
 }
+
+type mockMagicboxOSServer struct {
+	pb.UnimplementedMagicboxOSServer
+	hasScopesFunc         func(context.Context, *pb.HasScopesRequest) (*pb.HasScopesResponse, error)
+	requestPermissionsFunc func(context.Context, *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error)
+}
+
+func (m *mockMagicboxOSServer) HasScopes(ctx context.Context, req *pb.HasScopesRequest) (*pb.HasScopesResponse, error) {
+	if m.hasScopesFunc != nil {
+		return m.hasScopesFunc(ctx, req)
+	}
+	return &pb.HasScopesResponse{HasAll: true}, nil
+}
+
+func (m *mockMagicboxOSServer) RequestPermissions(ctx context.Context, req *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error) {
+	if m.requestPermissionsFunc != nil {
+		return m.requestPermissionsFunc(ctx, req)
+	}
+	return &pb.RequestPermissionsResponse{Granted: true, NewAppToken: "new-token"}, nil
+}
+
+func TestEnsureScopes_AlreadyGranted(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	srv := grpc.NewServer()
+	mockSrv := &mockMagicboxOSServer{
+		hasScopesFunc: func(ctx context.Context, req *pb.HasScopesRequest) (*pb.HasScopesResponse, error) {
+			return &pb.HasScopesResponse{HasAll: true}, nil
+		},
+	}
+	pb.RegisterMagicboxOSServer(srv, mockSrv)
+	go srv.Serve(lis)
+	defer srv.Stop()
+
+	env := &Env{
+		ApiToken: "old-token",
+		CoreURL:  "127.0.0.1:" + strings.Split(lis.Addr().String(), ":")[1],
+		UserID:   "user-1",
+		AppID:    "app-1",
+	}
+
+	err = env.EnsureScopes([]string{"scope-1"}, []string{"reason-1"})
+	if err != nil {
+		t.Fatalf("EnsureScopes failed: %v", err)
+	}
+
+	if env.ApiToken != "old-token" {
+		t.Errorf("expected ApiToken to remain 'old-token', got %q", env.ApiToken)
+	}
+}
+
+func TestEnsureScopes_NeedsRequest_Approved(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	srv := grpc.NewServer()
+	mockSrv := &mockMagicboxOSServer{
+		hasScopesFunc: func(ctx context.Context, req *pb.HasScopesRequest) (*pb.HasScopesResponse, error) {
+			return &pb.HasScopesResponse{
+				HasAll:        false,
+				MissingScopes: []string{"scope-1"},
+			}, nil
+		},
+		requestPermissionsFunc: func(ctx context.Context, req *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error) {
+			if len(req.Requests) != 1 || req.Requests[0].Scope != "scope-1" || req.Requests[0].Reason != "reason-1" {
+				return &pb.RequestPermissionsResponse{Granted: false}, nil
+			}
+			return &pb.RequestPermissionsResponse{
+				Granted:     true,
+				NewAppToken: "new-token",
+			}, nil
+		},
+	}
+	pb.RegisterMagicboxOSServer(srv, mockSrv)
+	go srv.Serve(lis)
+	defer srv.Stop()
+
+	env := &Env{
+		ApiToken: "old-token",
+		CoreURL:  "127.0.0.1:" + strings.Split(lis.Addr().String(), ":")[1],
+		UserID:   "user-1",
+		AppID:    "app-1",
+	}
+
+	err = env.EnsureScopes([]string{"scope-1"}, []string{"reason-1"})
+	if err != nil {
+		t.Fatalf("EnsureScopes failed: %v", err)
+	}
+
+	if env.ApiToken != "new-token" {
+		t.Errorf("expected ApiToken to update to 'new-token', got %q", env.ApiToken)
+	}
+}
+
+func TestEnsureScopes_NeedsRequest_Denied(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	srv := grpc.NewServer()
+	mockSrv := &mockMagicboxOSServer{
+		hasScopesFunc: func(ctx context.Context, req *pb.HasScopesRequest) (*pb.HasScopesResponse, error) {
+			return &pb.HasScopesResponse{
+				HasAll:        false,
+				MissingScopes: []string{"scope-1"},
+			}, nil
+		},
+		requestPermissionsFunc: func(ctx context.Context, req *pb.RequestPermissionsRequest) (*pb.RequestPermissionsResponse, error) {
+			return &pb.RequestPermissionsResponse{
+				Granted: false,
+			}, nil
+		},
+	}
+	pb.RegisterMagicboxOSServer(srv, mockSrv)
+	go srv.Serve(lis)
+	defer srv.Stop()
+
+	env := &Env{
+		ApiToken: "old-token",
+		CoreURL:  "127.0.0.1:" + strings.Split(lis.Addr().String(), ":")[1],
+		UserID:   "user-1",
+		AppID:    "app-1",
+	}
+
+	err = env.EnsureScopes([]string{"scope-1"}, []string{"reason-1"})
+	if err == nil {
+		t.Fatal("expected EnsureScopes to fail due to denial, but succeeded")
+	}
+
+	if env.ApiToken != "old-token" {
+		t.Errorf("expected ApiToken to remain 'old-token', got %q", env.ApiToken)
+	}
+}
+

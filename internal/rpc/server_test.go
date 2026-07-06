@@ -432,15 +432,16 @@ func TestGrpcRequestPermissions_Approve(t *testing.T) {
 			t.Errorf("expected 1 pending permission request, got %d", len(reqs))
 			return
 		}
-		if reqs[0].AppID != appID || reqs[0].Reason != "need contacts" {
+		if reqs[0].AppID != appID || len(reqs[0].Requests) != 1 || reqs[0].Requests[0].Reason != "need contacts" {
 			t.Errorf("unexpected pending request: %+v", reqs[0])
 		}
 		orch.ApprovePermissionRequest(reqs[0].ID)
 	}()
 
 	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
-		Scopes: []string{"contacts:read"},
-		Reason: "need contacts",
+		Requests: []*pb.ScopeRequest{
+			{Scope: "contacts:read", Reason: "need contacts"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("RequestPermissions failed: %v", err)
@@ -506,8 +507,9 @@ func TestGrpcRequestPermissions_Reject(t *testing.T) {
 	}()
 
 	resp, err := client.RequestPermissions(ctx, &pb.RequestPermissionsRequest{
-		Scopes: []string{"contacts:write"},
-		Reason: "need write",
+		Requests: []*pb.ScopeRequest{
+			{Scope: "contacts:write", Reason: "need write"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("RequestPermissions failed: %v", err)

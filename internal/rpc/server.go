@@ -495,11 +495,22 @@ func (s *RPCServer) RequestPermissions(ctx context.Context, req *pb.RequestPermi
 		return nil, status.Error(codes.Unauthenticated, "no claims in context")
 	}
 
-	if len(req.Scopes) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "at least one scope is required")
+	if len(req.Requests) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one scope request is required")
 	}
 
-	granted, newAppToken, err := s.orchestrator.RequestPermissions(ctx, claims.AppID, claims.UserID, req.Reason, req.Scopes)
+	var coreRequests []core.ScopeWithReason
+	for _, r := range req.Requests {
+		if r.Scope == "" {
+			return nil, status.Error(codes.InvalidArgument, "scope cannot be empty")
+		}
+		coreRequests = append(coreRequests, core.ScopeWithReason{
+			Scope:  r.Scope,
+			Reason: r.Reason,
+		})
+	}
+
+	granted, newAppToken, err := s.orchestrator.RequestPermissions(ctx, claims.AppID, claims.UserID, coreRequests)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "permission request failed: %v", err)
 	}
@@ -509,6 +520,36 @@ func (s *RPCServer) RequestPermissions(ctx context.Context, req *pb.RequestPermi
 		NewAppToken: newAppToken,
 	}, nil
 }
+
+func (s *RPCServer) HasScopes(ctx context.Context, req *pb.HasScopesRequest) (*pb.HasScopesResponse, error) {
+	claims := claimsFromContext(ctx)
+	if claims == nil {
+		return nil, status.Error(codes.Unauthenticated, "no claims in context")
+	}
+
+	grantedScopes, err := s.db.ListAppScopes(claims.AppID, claims.UserID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to query app scopes: %v", err)
+	}
+
+	grantedMap := make(map[string]bool)
+	for _, sc := range grantedScopes {
+		grantedMap[sc] = true
+	}
+
+	var missing []string
+	for _, sc := range req.Scopes {
+		if !grantedMap[sc] {
+			missing = append(missing, sc)
+		}
+	}
+
+	return &pb.HasScopesResponse{
+		HasAll:        len(missing) == 0,
+		MissingScopes: missing,
+	}, nil
+}
+
 
 
 // ---------------------------------------------------------------------------

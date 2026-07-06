@@ -15,36 +15,17 @@ function scopeToHumanReadable(scope) {
 
 export default function InstallAppModal({ isOpen, onClose, onInstall, error, loading }) {
     const [manifestContent, setManifestContent] = useState('');
-    const [scopes, setScopes] = useState([]);
 
     // Clear state on open/close
     useEffect(() => {
         if (!isOpen) {
             setManifestContent('');
-            setScopes([]);
         }
     }, [isOpen]);
 
     const handleContentChange = (e) => {
         const value = e.target.value;
         setManifestContent(value);
-
-        if (!value.trim()) {
-            setScopes([]);
-            return;
-        }
-
-        try {
-            const parsed = JSON.parse(value);
-            if (parsed.required_scopes && Array.isArray(parsed.required_scopes)) {
-                setScopes(parsed.required_scopes);
-            } else {
-                setScopes([]);
-            }
-        } catch (err) {
-            // Ignored; parsed invalid json is fine while editing
-            setScopes([]);
-        }
     };
 
     const handleSubmit = (e) => {
@@ -71,7 +52,6 @@ export default function InstallAppModal({ isOpen, onClose, onInstall, error, loa
   "image": "docker.io/omaraflak/magicbox-drive:latest",
   "entry_port": 9090,
   "route_slug": "drive",
-  "required_scopes": ["profile:read"],
   "volume_mounts": []
 }'
                         value={manifestContent}
@@ -79,24 +59,7 @@ export default function InstallAppModal({ isOpen, onClose, onInstall, error, loa
                     />
                 </div>
 
-                {scopes.length > 0 && (
-                    <div className="permissions-consent" style={{ marginTop: '16px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px' }}>
-                        <h4 className="consent-title" style={{ color: 'var(--accent-violet)', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>
-                            Security Permissions Requested
-                        </h4>
-                        <p className="consent-desc" style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                            This application requested access to the following resources. Click install to confirm.
-                        </p>
-                        <ul className="consent-list" style={{ listStyle: 'none', paddingLeft: 0 }}>
-                            {scopes.map((scope, idx) => (
-                                <li className="consent-item" key={idx} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
-                                    <span className="consent-icon">🛡️</span>
-                                    <span>{scopeToHumanReadable(scope)}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
+
 
                 {error && <div className="error-box" style={{ marginTop: '12px' }}>{error}</div>}
                 

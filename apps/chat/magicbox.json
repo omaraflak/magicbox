@@ -6,12 +6,7 @@
   "entry_port": 9090,
   "route_slug": "chat",
   "webhook_path": "/internal/magicbox-webhook",
-  "required_scopes": [
-    "profile:read",
-    "shared:storage:rw",
-    "contacts:read",
-    "contacts:write"
-  ],
+
   "volume_mounts": [
     {
       "type": "shared",

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -343,7 +344,9 @@ func TestDynamicPermissions_RestFlow(t *testing.T) {
 	// Trigger a permission request block asynchronously
 	decisionCh := make(chan bool)
 	go func() {
-		granted, _, err := orchestrator.RequestPermissions(context.Background(), "com.example.app", "u1", "Reason details", []string{"contacts:read"})
+		granted, _, err := orchestrator.RequestPermissions(context.Background(), "com.example.app", "u1", []core.ScopeWithReason{
+			{Scope: "contacts:read", Reason: "Reason details"},
+		})
 		if err != nil {
 			t.Errorf("RequestPermissions error: %v", err)
 		}
