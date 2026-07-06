@@ -171,15 +171,6 @@ func (o *Orchestrator) Install(ctx context.Context, userID string, manifestData 
 
 		// 10. Build container config and create+start container.
 		var volumeMounts []docker.AppVolumeMount
-		for _, scope := range manifest.RequiredScopes {
-			volName, readOnly, ok := ScopeToVolumeAccess(scope)
-			if ok {
-				volumeMounts = append(volumeMounts, docker.AppVolumeMount{
-					Name:     volName,
-					ReadOnly: readOnly,
-				})
-			}
-		}
 
 		containerCfg := &docker.AppContainerConfig{
 			AppID:         manifest.AppID,
@@ -651,6 +642,27 @@ func (o *Orchestrator) RequestPermissions(ctx context.Context, appID, userID str
 		newAppToken, err := o.TokenGenerator([]byte(token.TokenSecret), userID, appID, allScopes)
 		if err != nil {
 			return false, "", fmt.Errorf("failed to generate new app token: %w", err)
+		}
+
+		// Restart container to apply new volume mounts if any volume scopes were added
+		hasVolumeScope := false
+		for _, req := range requests {
+			_, _, ok := ScopeToVolumeAccess(req.Scope)
+			if ok {
+				hasVolumeScope = true
+				break
+			}
+		}
+
+		if hasVolumeScope && o.Docker != nil {
+			o.Logger.Info("Recreating app container to apply new volume mounts", logging.F("app_id", appID))
+			if app.ContainerID != "" {
+				_ = o.Docker.StopContainer(ctx, app.ContainerID, 10)
+				_ = o.Docker.RemoveContainer(ctx, app.ContainerID)
+			}
+			if err := o.Start(ctx, app.ID); err != nil {
+				o.Logger.Error("failed to restart container after scope grant", logging.F("app_id", appID), logging.F("error", err.Error()))
+			}
 		}
 
 		return true, newAppToken, nil

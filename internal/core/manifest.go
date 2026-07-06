@@ -18,7 +18,6 @@ type Manifest struct {
 	RouteSlug      string          `json:"route_slug"`
 	WebhookPath    string          `json:"webhook_path"`
 	Host           string          `json:"host"`
-	RequiredScopes []string        `json:"required_scopes"`
 	VolumeMounts   []VolumeMount   `json:"volume_mounts"`
 	ResourceLimits *ResourceLimits `json:"resource_limits"`
 }
@@ -41,7 +40,6 @@ var (
 	appIDRegex     = regexp.MustCompile(`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*){2,}$`)
 	semverRegex    = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 	routeSlugRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$`)
-	scopeRegex     = regexp.MustCompile(`^(profile:read|contacts:read|shared:[a-z][a-z0-9-]*:(ro|rw))$`)
 	volumeNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	hostRegex       = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$`)
 )
@@ -133,25 +131,7 @@ func ValidateManifest(m *Manifest) []string {
 		errs = append(errs, "webhook_path must start with /")
 	}
 
-	// required_scopes: non-empty, each must match pattern.
-	if len(m.RequiredScopes) == 0 {
-		errs = append(errs, "required_scopes must contain at least one scope")
-	} else {
-		for _, scope := range m.RequiredScopes {
-			if !scopeRegex.MatchString(scope) {
-				errs = append(errs, fmt.Sprintf("invalid scope %q", scope))
-			}
-		}
-	}
 
-	// Build set of granted shared volume names from scopes for cross-validation.
-	scopeVolumes := make(map[string]bool)
-	for _, scope := range m.RequiredScopes {
-		parts := strings.Split(scope, ":")
-		if len(parts) == 3 && parts[0] == "shared" {
-			scopeVolumes[parts[1]] = true
-		}
-	}
 
 	// volume_mounts validation.
 	for i, vol := range m.VolumeMounts {
@@ -163,9 +143,6 @@ func ValidateManifest(m *Manifest) []string {
 		}
 		if vol.Access != "read-only" && vol.Access != "read-write" {
 			errs = append(errs, fmt.Sprintf("volume_mounts[%d].access must be \"read-only\" or \"read-write\"", i))
-		}
-		if !scopeVolumes[vol.Name] {
-			errs = append(errs, fmt.Sprintf("volume_mounts[%d].name %q has no corresponding scope in required_scopes", i, vol.Name))
 		}
 	}
 
