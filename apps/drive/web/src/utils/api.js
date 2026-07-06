@@ -5,14 +5,54 @@ if (window.location.pathname.startsWith('/u/')) {
   API_BASE = `${appBase}/api`;
 }
 
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (res.status === 403) {
+    const clone = res.clone();
+    try {
+      const err = await clone.json();
+      if (err.error === 'consent_required' && err.request_id) {
+        return new Promise((resolve, reject) => {
+          const popup = window.open(`/consent?req_id=${err.request_id}`, 'ConsentRequired', 'width=500,height=600');
+          if (!popup) {
+            alert('Consent popup was blocked. Please allow popups for this site.');
+            reject(new Error('Consent popup blocked'));
+            return;
+          }
+
+          const listener = async (event) => {
+            if (event.data?.type === 'consent_decision' && event.data?.request_id === err.request_id) {
+              window.removeEventListener('message', listener);
+              if (event.data?.approved) {
+                try {
+                  const retryRes = await apiFetch(url, options);
+                  resolve(retryRes);
+                } catch (retryErr) {
+                  reject(retryErr);
+                }
+              } else {
+                reject(new Error('Permission denied by user'));
+              }
+            }
+          };
+          window.addEventListener('message', listener);
+        });
+      }
+    } catch (e) {
+      // not consent_required
+    }
+  }
+  return res;
+}
+
 export async function fetchInfo() {
-  const res = await fetch(`${API_BASE}/info`);
+  const res = await apiFetch(`${API_BASE}/info`);
   if (!res.ok) throw new Error(`Failed to fetch info: ${res.statusText}`);
   return res.json();
 }
 
 export async function listFiles(volume, path = '') {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/files?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}`
   );
   if (!res.ok) throw new Error(`Failed to list files: ${res.statusText}`);
@@ -75,13 +115,13 @@ export async function getDownloadPlan(volume, path, filename) {
   } else {
     url += `&file=${encodeURIComponent(filename)}`;
   }
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`Failed to fetch download plan: ${res.statusText}`);
   return res.json();
 }
 
 export async function downloadFile(volume, path, filename) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/files/download?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`
   );
   if (!res.ok) throw new Error(`Failed to download file: ${res.statusText}`);
@@ -97,7 +137,7 @@ export async function downloadFile(volume, path, filename) {
 }
 
 export async function deleteFile(volume, path, filename) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/files?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}`,
     { method: 'DELETE' }
   );
@@ -106,7 +146,7 @@ export async function deleteFile(volume, path, filename) {
 }
 
 export async function createFolder(volume, path, name) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/folders?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}`,
     {
       method: 'POST',
@@ -125,7 +165,7 @@ export async function moveFile(volume, path, filename, destPath, newName = '') {
   if (newName) {
     url += `&new_name=${encodeURIComponent(newName)}`;
   }
-  const res = await fetch(url, { method: 'POST' });
+  const res = await apiFetch(url, { method: 'POST' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to move/rename file: ${res.statusText}`);
@@ -134,14 +174,14 @@ export async function moveFile(volume, path, filename, destPath, newName = '') {
 }
 
 export async function fetchContacts() {
-  const res = await fetch(`${API_BASE}/contacts`);
+  const res = await apiFetch(`${API_BASE}/contacts`);
   if (!res.ok) throw new Error(`Failed to fetch contacts: ${res.statusText}`);
   return res.json();
 }
 
 export async function sendFile(volume, path, filename, contactID) {
   const url = `${API_BASE}/files/send?volume=${encodeURIComponent(volume)}&path=${encodeURIComponent(path)}&file=${encodeURIComponent(filename)}&contact_id=${encodeURIComponent(contactID)}`;
-  const res = await fetch(url, { method: 'POST' });
+  const res = await apiFetch(url, { method: 'POST' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to send file: ${res.statusText}`);
@@ -151,7 +191,7 @@ export async function sendFile(volume, path, filename, contactID) {
 
 export async function restoreTrashFile(filename) {
   const url = `${API_BASE}/trash/restore?file=${encodeURIComponent(filename)}`;
-  const res = await fetch(url, { method: 'POST' });
+  const res = await apiFetch(url, { method: 'POST' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to restore file: ${res.statusText}`);
@@ -161,7 +201,7 @@ export async function restoreTrashFile(filename) {
 
 export async function emptyTrash() {
   const url = `${API_BASE}/trash/empty`;
-  const res = await fetch(url, { method: 'POST' });
+  const res = await apiFetch(url, { method: 'POST' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to empty trash: ${res.statusText}`);
@@ -170,13 +210,13 @@ export async function emptyTrash() {
 }
 
 export async function fetchTransfers() {
-  const res = await fetch(`${API_BASE}/transfers`);
+  const res = await apiFetch(`${API_BASE}/transfers`);
   if (!res.ok) throw new Error(`Failed to fetch sent history: ${res.statusText}`);
   return res.json();
 }
 
 export async function fetchFileTransfers(filename, path = '') {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/transfers/file?file=${encodeURIComponent(filename)}&path=${encodeURIComponent(path)}`
   );
   if (!res.ok) throw new Error(`Failed to fetch file sent history: ${res.statusText}`);
@@ -184,19 +224,19 @@ export async function fetchFileTransfers(filename, path = '') {
 }
 
 export async function fetchAutoSendFolders() {
-  const res = await fetch(`${API_BASE}/auto-send/all`);
+  const res = await apiFetch(`${API_BASE}/auto-send/all`);
   if (!res.ok) throw new Error(`Failed to fetch auto-send folders list: ${res.statusText}`);
   return res.json();
 }
 
 export async function fetchAutoSendConfig(path) {
-  const res = await fetch(`${API_BASE}/auto-send?path=${encodeURIComponent(path)}`);
+  const res = await apiFetch(`${API_BASE}/auto-send?path=${encodeURIComponent(path)}`);
   if (!res.ok) throw new Error(`Failed to fetch auto-send folder config: ${res.statusText}`);
   return res.json();
 }
 
 export async function saveAutoSendConfig(path, contactIDs) {
-  const res = await fetch(`${API_BASE}/auto-send`, {
+  const res = await apiFetch(`${API_BASE}/auto-send`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -211,7 +251,7 @@ export async function saveAutoSendConfig(path, contactIDs) {
 }
 
 export async function disableAutoSend(path) {
-  const res = await fetch(`${API_BASE}/auto-send?path=${encodeURIComponent(path)}`, {
+  const res = await apiFetch(`${API_BASE}/auto-send?path=${encodeURIComponent(path)}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -222,19 +262,19 @@ export async function disableAutoSend(path) {
 }
 
 export async function fetchRecentTransfers(limit = 15) {
-  const res = await fetch(`${API_BASE}/transfers?limit=${limit}`);
+  const res = await apiFetch(`${API_BASE}/transfers?limit=${limit}`);
   if (!res.ok) throw new Error(`Failed to fetch recent transfers: ${res.statusText}`);
   return res.json();
 }
 
 export async function fetchActiveTransfers() {
-  const res = await fetch(`${API_BASE}/transfers/active-list`);
+  const res = await apiFetch(`${API_BASE}/transfers/active-list`);
   if (!res.ok) throw new Error(`Failed to fetch active transfers: ${res.statusText}`);
   return res.json();
 }
 
 export async function pasteItems(action, srcVolume, srcPath, destVolume, destPath, items) {
-  const res = await fetch(`${API_BASE}/files/paste`, {
+  const res = await apiFetch(`${API_BASE}/files/paste`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

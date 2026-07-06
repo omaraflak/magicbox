@@ -79,11 +79,17 @@ func scopeMiddleware(next http.Handler) http.Handler {
 
 		if strings.HasPrefix(r.URL.Path, "/api/contacts") || strings.HasPrefix(r.URL.Path, "/api/files/send") {
 			if err := env.EnsureScopes([]string{"profile:read", "contacts:read"}, []string{"Read your user profile", "Access contacts to select file transfer recipients"}); err != nil {
+				if sdk.WriteConsentError(w, err) {
+					return
+				}
 				writeError(w, http.StatusForbidden, err.Error())
 				return
 			}
 		} else if strings.HasPrefix(r.URL.Path, "/api/") {
 			if err := env.EnsureScopes([]string{"profile:read", "shared:storage:rw"}, []string{"Read your user profile", "Access files in your shared storage folder"}); err != nil {
+				if sdk.WriteConsentError(w, err) {
+					return
+				}
 				writeError(w, http.StatusForbidden, err.Error())
 				return
 			}
