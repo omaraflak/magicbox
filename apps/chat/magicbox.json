@@ -1,12 +1,11 @@
 {
   "app_id": "com.magicbox.chat",
   "name": "Magic Chat",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "image": "docker.io/omaraflak/magicbox-chat:latest",
   "entry_port": 9090,
   "route_slug": "chat",
   "webhook_path": "/internal/magicbox-webhook",
-
   "volume_mounts": [
     {
       "type": "shared",

@@ -30,7 +30,6 @@ func setupTest(t *testing.T) (*db.DB, *logging.Logger) {
 	return database, logger
 }
 
-
 func TestRegisterSystemHandlers_DoesNotPanic(t *testing.T) {
 	database, logger := setupTest(t)
 

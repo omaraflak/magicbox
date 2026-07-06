@@ -57,4 +57,4 @@ If you are on **macOS** you might need to do this instead to start the container
 MAGICBOX_HOST_ROOT=/tmp/magicbox MAGICBOX_TAG=dev docker compose up -d
 ```
 
-Open `http://localhost:9090` (Core Dashboard), `http://localhost:9090/drive` (Drive), or `http://localhost:9090/ai` (AI) once the containers are running.
+Open `http://localhost:9090`.

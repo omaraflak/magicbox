@@ -59,8 +59,6 @@ export default function InstallAppModal({ isOpen, onClose, onInstall, error, loa
                     />
                 </div>
 
-
-
                 {error && <div className="error-box" style={{ marginTop: '12px' }}>{error}</div>}
                 
                 <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>

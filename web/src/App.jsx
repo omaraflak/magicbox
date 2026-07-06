@@ -248,7 +248,6 @@ export default function App() {
         return () => clearInterval(interval);
     }, [user, csrfToken, activeAppSlug]);
 
-
     // 3. Fetch Admin Data (Runs when switching to admin tabs)
     const loadUsers = async () => {
         const { status, data } = await callAPI('GET', '/admin/users');
@@ -277,7 +276,6 @@ export default function App() {
         const { status, data } = await callAPI('GET', '/contacts');
         if (status === 200) setContacts(data || []);
     };
-
 
     const loadInvitationInfo = async () => {
         const { status, data } = await callAPI('GET', '/me/invitation');
@@ -950,7 +948,6 @@ export default function App() {
                     loading={actionLoading}
                 />
             )}
-
 
         </div>
     );

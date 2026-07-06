@@ -51,7 +51,6 @@ func (m *MockP2PService) SendTo(ctx context.Context, peerMultiaddr string, encPu
 	return nil
 }
 
-
 // setupGrpcTestServer initializes an in-memory gRPC server connection.
 func setupGrpcTestServer(t *testing.T) (pb.MagicboxOSClient, *db.DB, *config.Config, *MockP2PService, func()) {
 	tempDB := filepath.Join(t.TempDir(), "test.db")
@@ -220,7 +219,6 @@ func setupGrpcTestServerWithOrch(t *testing.T) (pb.MagicboxOSClient, *db.DB, *co
 
 	return client, database, cfg, orch, cleanup
 }
-
 
 func TestGrpcGetProfile(t *testing.T) {
 	client, database, _, _, cleanup := setupGrpcTestServer(t)
@@ -470,7 +468,6 @@ func TestGrpcSendContactRequest_AutoAccept(t *testing.T) {
 	}
 }
 
-
 func TestGrpcRequestPermissions_Approve(t *testing.T) {
 	client, database, _, orch, cleanup := setupGrpcTestServerWithOrch(t)
 	defer cleanup()
@@ -663,5 +660,3 @@ func TestGrpcIsAppInstalled(t *testing.T) {
 		t.Error("expected P2P message to be sent")
 	}
 }
-
-

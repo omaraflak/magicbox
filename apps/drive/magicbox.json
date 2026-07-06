@@ -1,12 +1,11 @@
 {
   "app_id": "com.magicbox.drive",
   "name": "Magic Drive",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "image": "docker.io/omaraflak/magicbox-drive:latest",
   "entry_port": 9090,
   "route_slug": "drive",
   "webhook_path": "/internal/magicbox-webhook",
-
   "volume_mounts": [
     {
       "type": "shared",

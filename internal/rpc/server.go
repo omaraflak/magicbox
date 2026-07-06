@@ -744,8 +744,6 @@ func (s *RPCServer) IsAppInstalled(ctx context.Context, req *pb.IsAppInstalledRe
 	return &pb.IsAppInstalledResponse{Installed: installed}, nil
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
