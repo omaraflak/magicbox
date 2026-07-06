@@ -44,7 +44,6 @@ export default function App() {
     const [contacts, setContacts] = useState([]);
     const [contactRequests, setContactRequests] = useState([]);
     const [invitationInfo, setInvitationInfo] = useState(null);
-    const [pendingPermissions, setPendingPermissions] = useState([]);
 
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
@@ -238,35 +237,6 @@ export default function App() {
         return () => clearInterval(interval);
     }, [user, csrfToken, activeAppSlug]);
 
-    const loadPendingPermissions = async () => {
-        if (!user) return;
-        const { status, data } = await callAPI('GET', '/apps/permissions/requests');
-        if (status === 200) {
-            setPendingPermissions(data || []);
-        }
-    };
-
-    useEffect(() => {
-        if (!user) return;
-        loadPendingPermissions();
-        const interval = setInterval(loadPendingPermissions, 5000);
-        return () => clearInterval(interval);
-    }, [user, csrfToken]);
-
-    const handleAllowPermission = async (id) => {
-        const { status } = await callAPI('POST', `/apps/permissions/requests/${id}/approve`);
-        if (status === 200) {
-            loadPendingPermissions();
-            loadApps();
-        }
-    };
-
-    const handleDenyPermission = async (id) => {
-        const { status } = await callAPI('POST', `/apps/permissions/requests/${id}/reject`);
-        if (status === 200) {
-            loadPendingPermissions();
-        }
-    };
 
     // 3. Fetch Admin Data (Runs when switching to admin tabs)
     const loadUsers = async () => {
@@ -973,49 +943,7 @@ export default function App() {
                 />
             )}
 
-            {pendingPermissions.length > 0 && view !== 'consent' && (
-                <Modal
-                    isOpen={true}
-                    onClose={() => handleDenyPermission(pendingPermissions[0].id)}
-                    title="Permission Request"
-                >
-                    <div className="modal-desc" style={{ marginBottom: '16px' }}>
-                        <p style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>
-                            📦 {pendingPermissions[0].app_name} is requesting security permissions
-                        </p>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '20px' }}>
-                            App ID: <code>{pendingPermissions[0].app_id}</code>
-                        </p>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-                            {pendingPermissions[0].requests.map((req, idx) => (
-                                <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                                    <p style={{ fontWeight: 600, fontSize: '0.9rem', fontFamily: 'monospace', color: 'var(--accent-violet)', margin: '0 0 6px 0' }}>
-                                        🛡️ {req.scope}
-                                    </p>
-                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0, lineHeight: '1.4' }}>
-                                        "{req.reason}"
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                        <button 
-                            className="btn btn-secondary" 
-                            onClick={() => handleDenyPermission(pendingPermissions[0].id)}
-                        >
-                            Deny
-                        </button>
-                        <button 
-                            className="btn btn-primary" 
-                            onClick={() => handleAllowPermission(pendingPermissions[0].id)}
-                        >
-                            Allow & Grant
-                        </button>
-                    </div>
-                </Modal>
-            )}
+
         </div>
     );
 }
