@@ -63,7 +63,6 @@ func initDB() {
 	var hasInviteLink bool
 	rows, err := dbConn.Query("PRAGMA table_info(conversation_participants)")
 	if err == nil {
-		defer rows.Close()
 		for rows.Next() {
 			var cid int
 			var name, typeStr string
@@ -77,6 +76,7 @@ func initDB() {
 				}
 			}
 		}
+		rows.Close()
 	}
 	if !hasInviteLink {
 		log.Println("Migrating database: adding invite_link column to conversation_participants table")
@@ -90,7 +90,6 @@ func initDB() {
 	var hasIsSystem bool
 	mRows, err := dbConn.Query("PRAGMA table_info(messages)")
 	if err == nil {
-		defer mRows.Close()
 		for mRows.Next() {
 			var cid int
 			var name, typeStr string
@@ -104,6 +103,7 @@ func initDB() {
 				}
 			}
 		}
+		mRows.Close()
 	}
 	if !hasIsSystem {
 		log.Println("Migrating database: adding is_system column to messages table")
