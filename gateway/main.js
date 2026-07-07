@@ -50,6 +50,9 @@ form.addEventListener('submit', async (e) => {
       streamMuxers: [yamux()],
       services: {
         identify: identify()
+      },
+      connectionGater: {
+        denyDialMultiaddr: () => false
       }
     });
     await p2pNode.start();
