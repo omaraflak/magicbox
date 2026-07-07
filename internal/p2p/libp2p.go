@@ -78,6 +78,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPrivate(),
 		libp2p.Transport(libp2pwebrtc.New),
+		libp2p.DefaultTransports,
 	}
 
 	if len(s.listenAddrs) > 0 {
@@ -100,6 +101,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 			libp2p.EnableHolePunching(),
 			libp2p.ForceReachabilityPrivate(),
 			libp2p.Transport(libp2pwebrtc.New),
+			libp2p.DefaultTransports,
 			libp2p.ListenAddrStrings(
 				"/ip4/0.0.0.0/tcp/0",
 				"/ip4/0.0.0.0/udp/0/quic-v1",
