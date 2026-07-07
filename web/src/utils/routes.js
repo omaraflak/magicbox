@@ -7,6 +7,7 @@ export const ROUTES = {
     SETTINGS: '/settings',
     SETTINGS_SECURITY: '/settings/security',
     SETTINGS_CONTACTS: '/settings/contacts',
+    SETTINGS_REMOTE: '/settings/remote',
     SETTINGS_ADMIN: '/settings/admin',
     SETTINGS_ADMIN_USERS: '/settings/admin/users',
     SETTINGS_ADMIN_REGISTRIES: '/settings/admin/registries',
@@ -41,6 +42,9 @@ export function viewFromPath(pathname) {
     if (pathname === '/settings/contacts') {
         return { view: 'settings', section: 'contacts', tab: 'users' };
     }
+    if (pathname === '/settings/remote') {
+        return { view: 'settings', section: 'remote', tab: 'users' };
+    }
     if (pathname.startsWith('/settings/admin')) {
         const segment = pathname.replace('/settings/admin', '').replace(/^\//, '');
         const tab = ADMIN_SUBTABS.includes(segment) ? segment : 'users';
@@ -58,7 +62,7 @@ export function viewFromPath(pathname) {
 /**
  * Build a URL path for a given view, settings section, and admin sub-tab.
  * @param {string} view - 'dashboard', 'settings', or 'app'
- * @param {string} section - 'profile', 'security', 'contacts', or 'admin'
+ * @param {string} section - 'profile', 'security', 'contacts', 'remote', or 'admin'
  * @param {string} tab - 'users', 'registries', or 'logs'
  * @param {string} appSlug - route slug of the app if view is 'app'
  * @param {string} appPath - sub-path within the app if view is 'app'
@@ -74,6 +78,9 @@ export function pathFromView(view, section = 'profile', tab = 'users', appSlug =
         }
         if (section === 'contacts') {
             return ROUTES.SETTINGS_CONTACTS;
+        }
+        if (section === 'remote') {
+            return ROUTES.SETTINGS_REMOTE;
         }
         if (section === 'admin') {
             return tab === 'users' ? ROUTES.SETTINGS_ADMIN : `/settings/admin/${tab}`;

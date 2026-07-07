@@ -1,13 +1,13 @@
-import { createLibp2p } from 'https://esm.sh/libp2p';
-import { webSockets } from 'https://esm.sh/@libp2p/websockets';
-import { noise } from 'https://esm.sh/@chainsafe/libp2p-noise';
-import { yamux } from 'https://esm.sh/@chainsafe/libp2p-yamux';
-import { circuitRelayTransport } from 'https://esm.sh/@libp2p/circuit-relay-v2';
-import { identify } from 'https://esm.sh/@libp2p/identify';
-import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr';
-import { peerIdFromString } from 'https://esm.sh/@libp2p/peer-id';
-import { webRTC } from 'https://esm.sh/@libp2p/webrtc';
-import { webRTCDirect } from 'https://esm.sh/@libp2p/webrtc-direct';
+import { createLibp2p } from 'https://esm.sh/libp2p@1.5';
+import { webSockets } from 'https://esm.sh/@libp2p/websockets@8';
+import { noise } from 'https://esm.sh/@chainsafe/libp2p-noise@15';
+import { yamux } from 'https://esm.sh/@chainsafe/libp2p-yamux@6';
+import { circuitRelayTransport } from 'https://esm.sh/@libp2p/circuit-relay-v2@2';
+import { identify } from 'https://esm.sh/@libp2p/identify@2';
+import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr@12';
+import { peerIdFromString } from 'https://esm.sh/@libp2p/peer-id@4';
+import { webRTC } from 'https://esm.sh/@libp2p/webrtc@4';
+import { webRTCDirect } from 'https://esm.sh/@libp2p/webrtc-direct@4';
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
