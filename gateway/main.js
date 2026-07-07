@@ -2,7 +2,8 @@ import { createLibp2p } from 'https://esm.sh/libp2p';
 import { webSockets } from 'https://esm.sh/@libp2p/websockets';
 import { noise } from 'https://esm.sh/@chainsafe/libp2p-noise';
 import { yamux } from 'https://esm.sh/@chainsafe/libp2p-yamux';
-import { circuitRelayClient } from 'https://esm.sh/@libp2p/circuit-relay-v2';
+import { circuitRelayTransport } from 'https://esm.sh/@libp2p/circuit-relay-v2';
+import { identify } from 'https://esm.sh/@libp2p/identify';
 import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr';
 
 // Register Service Worker
@@ -41,11 +42,14 @@ form.addEventListener('submit', async (e) => {
   try {
     // 1. Initialize P2P Node
     p2pNode = await createLibp2p({
-      transports: [webSockets()],
+      transports: [
+        webSockets(),
+        circuitRelayTransport()
+      ],
       connectionEncryption: [noise()],
       streamMuxers: [yamux()],
       services: {
-        relay: circuitRelayClient()
+        identify: identify()
       }
     });
     await p2pNode.start();
