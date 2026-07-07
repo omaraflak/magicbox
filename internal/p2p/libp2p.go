@@ -18,7 +18,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
 	corecrypto "github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/multiformats/go-multiaddr"
@@ -77,7 +76,6 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		libp2p.EnableAutoRelayWithStaticRelays(staticRelays),
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPrivate(),
-		libp2p.Transport(libp2pwebrtc.New),
 		libp2p.DefaultTransports,
 	}
 
@@ -100,7 +98,6 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 			libp2p.EnableAutoRelayWithStaticRelays(staticRelays),
 			libp2p.EnableHolePunching(),
 			libp2p.ForceReachabilityPrivate(),
-			libp2p.Transport(libp2pwebrtc.New),
 			libp2p.DefaultTransports,
 			libp2p.ListenAddrStrings(
 				"/ip4/0.0.0.0/tcp/0",
