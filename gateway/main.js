@@ -1,13 +1,13 @@
-import { createLibp2p } from 'https://esm.sh/libp2p@1.5';
-import { webSockets } from 'https://esm.sh/@libp2p/websockets@8';
-import { noise } from 'https://esm.sh/@chainsafe/libp2p-noise@15';
-import { yamux } from 'https://esm.sh/@chainsafe/libp2p-yamux@6';
-import { circuitRelayTransport } from 'https://esm.sh/@libp2p/circuit-relay-v2@2';
-import { identify } from 'https://esm.sh/@libp2p/identify@2';
-import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr@12';
-import { peerIdFromString } from 'https://esm.sh/@libp2p/peer-id@4';
-import { webRTC } from 'https://esm.sh/@libp2p/webrtc@4';
-import { webRTCDirect } from 'https://esm.sh/@libp2p/webrtc-direct@4';
+import { createLibp2p } from 'libp2p';
+import { webSockets } from '@libp2p/websockets';
+import { noise } from '@chainsafe/libp2p-noise';
+import { yamux } from '@chainsafe/libp2p-yamux';
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
+import { identify } from '@libp2p/identify';
+import { multiaddr } from '@multiformats/multiaddr';
+import { peerIdFromString } from '@libp2p/peer-id';
+import { webRTC, webRTCDirect } from '@libp2p/webrtc';
+import { dcutr } from '@libp2p/dcutr';
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
@@ -114,7 +114,8 @@ form.addEventListener('submit', async (e) => {
       connectionEncrypters: [noise()],
       streamMuxers: [yamux()],
       services: {
-        identify: identify()
+        identify: identify(),
+        dcutr: dcutr()
       },
       connectionGater: {
         denyDialMultiaddr: () => false
@@ -135,13 +136,26 @@ form.addEventListener('submit', async (e) => {
     });
 
     // 2. Connect to Relay
-    const relayAddr = multiaddr(relayMultiaddr);
+    console.log('Parsing relay multiaddress:', relayMultiaddr);
+    let relayAddr;
+    try {
+      relayAddr = multiaddr(relayMultiaddr);
+    } catch (e) {
+      throw new Error(`Invalid P2P Relay Address format: "${relayMultiaddr}". Details: ${e.message}`);
+    }
+
     await p2pNode.dial(relayAddr);
     console.log('Connected to relay');
 
     // 3. Pair/Establish Tunnel Connection
     showStatus('Pairing with Home Magicbox...', 'connecting');
-    const target = multiaddr(`${relayMultiaddr}/p2p-circuit/p2p/${homePeerId}`);
+    console.log('Parsing target peer multiaddress for:', homePeerId);
+    let target;
+    try {
+      target = multiaddr(`${relayMultiaddr}/p2p-circuit/p2p/${homePeerId}`);
+    } catch (e) {
+      throw new Error(`Invalid Target Peer Address format. Details: ${e.message}`);
+    }
     
     const stream = await p2pNode.dialProtocol(target, '/magicbox/tunnel/1.0.0', {
       runOnTransientConnection: true,

@@ -92,8 +92,8 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 
 			for _, addr := range addrs {
 				addrStr := addr.String()
-				// Look for our local WebRTC address and duplicate it with the public IP
-				if strings.Contains(addrStr, "/webrtc-direct") {
+				// Look for our local WebRTC addresses (/webrtc or /webrtc-direct) and duplicate them with the public IP
+				if strings.Contains(addrStr, "/webrtc") {
 					parts := strings.Split(addrStr, "/")
 					if len(parts) > 2 && parts[1] == "ip4" {
 						// Only replace private/local IPs

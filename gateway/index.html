@@ -190,6 +190,22 @@
 
   <iframe id="tunnel-frame" src="about:blank"></iframe>
 
+  <script type="importmap">
+      {
+        "imports": {
+          "libp2p": "https://cdn.jsdelivr.net/npm/libp2p@latest/+esm",
+          "@libp2p/websockets": "https://cdn.jsdelivr.net/npm/@libp2p/websockets@latest/+esm",
+          "@chainsafe/libp2p-noise": "https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@latest/+esm",
+          "@chainsafe/libp2p-yamux": "https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@latest/+esm",
+          "@libp2p/circuit-relay-v2": "https://cdn.jsdelivr.net/npm/@libp2p/circuit-relay-v2@latest/+esm",
+          "@libp2p/identify": "https://cdn.jsdelivr.net/npm/@libp2p/identify@latest/+esm",
+          "@multiformats/multiaddr": "https://cdn.jsdelivr.net/npm/@multiformats/multiaddr@latest/+esm",
+          "@libp2p/peer-id": "https://cdn.jsdelivr.net/npm/@libp2p/peer-id@latest/+esm",
+          "@libp2p/webrtc": "https://cdn.jsdelivr.net/npm/@libp2p/webrtc@latest/+esm",
+          "@libp2p/dcutr": "https://cdn.jsdelivr.net/npm/@libp2p/dcutr@latest/+esm"
+        }
+      }
+      </script>
   <script src="main.js" type="module"></script>
 </body>
 </html>
