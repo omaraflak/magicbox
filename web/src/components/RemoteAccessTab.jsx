@@ -4,6 +4,7 @@ export default function RemoteAccessTab() {
     const [pairingData, setPairingData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [copiedField, setCopiedField] = useState(''); // '', 'relay', 'peer', 'otp'
 
     const handleGeneratePairingCode = async () => {
         setLoading(true);
@@ -27,6 +28,12 @@ export default function RemoteAccessTab() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCopy = (text, field) => {
+        navigator.clipboard.writeText(text);
+        setCopiedField(field);
+        setTimeout(() => setCopiedField(''), 2000);
     };
 
     return (
@@ -73,13 +80,10 @@ export default function RemoteAccessTab() {
                                 />
                                 <button 
                                     className="btn btn-secondary"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(pairingData.relay_multiaddr);
-                                        alert('Relay Multiaddress copied!');
-                                    }}
-                                    style={{ padding: '10px 16px' }}
+                                    onClick={() => handleCopy(pairingData.relay_multiaddr, 'relay')}
+                                    style={{ padding: '10px 16px', minWidth: '90px' }}
                                 >
-                                    Copy
+                                    {copiedField === 'relay' ? '✓ Copied' : 'Copy'}
                                 </button>
                             </div>
                         </div>
@@ -97,13 +101,10 @@ export default function RemoteAccessTab() {
                                 />
                                 <button 
                                     className="btn btn-secondary"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(pairingData.peer_id);
-                                        alert('Peer ID copied!');
-                                    }}
-                                    style={{ padding: '10px 16px' }}
+                                    onClick={() => handleCopy(pairingData.peer_id, 'peer')}
+                                    style={{ padding: '10px 16px', minWidth: '90px' }}
                                 >
-                                    Copy
+                                    {copiedField === 'peer' ? '✓ Copied' : 'Copy'}
                                 </button>
                             </div>
                         </div>
@@ -116,6 +117,13 @@ export default function RemoteAccessTab() {
                                 <div style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '4px', color: 'var(--accent-color)', padding: '10px 20px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)', fontFamily: 'monospace' }}>
                                     {pairingData.pairing_code}
                                 </div>
+                                <button 
+                                    className="btn btn-secondary"
+                                    onClick={() => handleCopy(pairingData.pairing_code, 'otp')}
+                                    style={{ padding: '10px 16px', minWidth: '110px' }}
+                                >
+                                    {copiedField === 'otp' ? '✓ Copied' : 'Copy Code'}
+                                </button>
                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                     ⏱️ Valid for 5 minutes
                                 </span>

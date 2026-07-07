@@ -1,9 +1,9 @@
-import { createLibp2p } from 'https://esm.sh/libp2p@1.0.0';
-import { webSockets } from 'https://esm.sh/@libp2p/websockets@1.0.0';
-import { noise } from 'https://esm.sh/@chainsafe/libp2p-noise@14.0.0';
-import { yamux } from 'https://esm.sh/@chainsafe/libp2p-yamux@6.0.0';
-import { circuitRelayClient } from 'https://esm.sh/@libp2p/circuit-relay-v2@1.0.0';
-import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr@12.1.0';
+import { createLibp2p } from 'https://esm.sh/libp2p';
+import { webSockets } from 'https://esm.sh/@libp2p/websockets';
+import { noise } from 'https://esm.sh/@chainsafe/libp2p-noise';
+import { yamux } from 'https://esm.sh/@chainsafe/libp2p-yamux';
+import { circuitRelayClient } from 'https://esm.sh/@libp2p/circuit-relay-v2';
+import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr';
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
