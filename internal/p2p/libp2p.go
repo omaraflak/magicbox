@@ -25,6 +25,7 @@ import (
 
 
 const ProtocolID = protocol.ID("/magicbox/messaging/1.0.0")
+const DefaultRelayMultiaddr = "/ip4/35.197.199.183/tcp/4001/ws/p2p/12D3KooWCpWVnUkkBKwu4gGUBtww7URbswPgVc86yTGkpqnAnH4f"
 
 type Libp2pService struct {
 	privKey        crypto.PrivKey
@@ -53,7 +54,7 @@ func NewLibp2pService(privKey crypto.PrivKey, encPriv *ecdh.PrivateKey, listenAd
 // Start boots the libp2p host.
 func (s *Libp2pService) Start(ctx context.Context) error {
 	bootstrapPeers := []string{
-		"/ip4/35.197.199.183/tcp/4001/ws/p2p/12D3KooWCpWVnUkkBKwu4gGUBtww7URbswPgVc86yTGkpqnAnH4f",
+		DefaultRelayMultiaddr,
 	}
 
 	var staticRelays []peer.AddrInfo
@@ -360,5 +361,10 @@ func (s *Libp2pService) SetStreamHandler(protoID string, handler func(network.St
 	if s.host != nil {
 		s.host.SetStreamHandler(protocol.ID(protoID), handler)
 	}
+}
+
+// GetRelayMultiaddr returns the default bootstrap relay multiaddress used by the host.
+func (s *Libp2pService) GetRelayMultiaddr() string {
+	return DefaultRelayMultiaddr
 }
 

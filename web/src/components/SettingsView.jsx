@@ -7,6 +7,7 @@ import AdminRegistriesTab from './AdminRegistriesTab';
 import AdminLogsTab from './AdminLogsTab';
 import AdminUpgradeTab from './AdminUpgradeTab';
 import AdminKeysTab from './AdminKeysTab';
+import RemoteAccessTab from './RemoteAccessTab';
 
 export default function SettingsView({ 
     user, 
@@ -77,6 +78,12 @@ export default function SettingsView({
                         <span className="notification-bubble">{pendingCount}</span>
                     )}
                 </button>
+                <button 
+                    className={`sidebar-item ${activeSection === 'remote' ? 'active' : ''}`}
+                    onClick={() => onSectionChange('remote')}
+                >
+                    🌐 Remote Access
+                </button>
 
                 {user?.is_admin && (
                     <button 
@@ -119,6 +126,10 @@ export default function SettingsView({
                         error={error}
                         loading={loading}
                     />
+                )}
+
+                {activeSection === 'remote' && (
+                    <RemoteAccessTab />
                 )}
 
                 {activeSection === 'admin' && (

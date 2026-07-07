@@ -76,6 +76,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Contact P2P invitation link
 	mux.Handle("GET /api/v1/me/invitation", auth(http.HandlerFunc(s.handleGetInvitation)))
+	mux.Handle("POST /api/v1/pairing/generate", auth(http.HandlerFunc(s.handleGeneratePairingCode)))
 
 	// Admin-only routes — require both AuthMiddleware and AdminMiddleware.
 	admin := AdminMiddleware()
@@ -95,7 +96,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/admin/keys/reset-identity", auth(admin(http.HandlerFunc(s.handleAdminResetIdentityKeys))))
 	mux.Handle("POST /api/v1/admin/unlock", auth(admin(http.HandlerFunc(s.handleAdminUnlock))))
 	mux.Handle("GET /api/v1/admin/status", auth(admin(http.HandlerFunc(s.handleAdminStatus))))
-	mux.Handle("POST /api/v1/admin/pairing/generate", auth(admin(http.HandlerFunc(s.handleAdminGeneratePairingCode))))
 
 
 	// Dynamically proxy app traffic directly to container IP after authenticating and verifying ownership
