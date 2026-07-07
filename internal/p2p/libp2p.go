@@ -21,6 +21,8 @@ import (
 	corecrypto "github.com/magicbox/core/internal/crypto"
 	"github.com/magicbox/core/internal/logging"
 	"github.com/multiformats/go-multiaddr"
+	"net/http"
+	"os"
 )
 
 
@@ -70,6 +72,9 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		staticRelays = append(staticRelays, *pi)
 	}
 
+	// Get public IP for correct external WebRTC advertising
+	publicIP := getPublicIP(s.logger)
+
 	opts := []libp2p.Option{
 		libp2p.Identity(s.privKey),
 		libp2p.EnableRelay(),
@@ -77,6 +82,34 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		libp2p.EnableHolePunching(),
 		libp2p.ForceReachabilityPrivate(),
 		libp2p.DefaultTransports,
+	}
+
+	if publicIP != "" {
+		s.logger.Info("Configuring address factory to announce public WebRTC IP", logging.F("ip", publicIP))
+		opts = append(opts, libp2p.AddrsFactory(func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+			announced := make([]multiaddr.Multiaddr, len(addrs))
+			copy(announced, addrs)
+
+			for _, addr := range addrs {
+				addrStr := addr.String()
+				// Look for our local WebRTC address and duplicate it with the public IP
+				if strings.Contains(addrStr, "/webrtc-direct") {
+					parts := strings.Split(addrStr, "/")
+					if len(parts) > 2 && parts[1] == "ip4" {
+						// Only replace private/local IPs
+						ip := parts[2]
+						if strings.HasPrefix(ip, "172.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "192.168.") || ip == "127.0.0.1" {
+							parts[2] = publicIP
+							publicAddrStr := strings.Join(parts, "/")
+							if publicAddr, err := multiaddr.NewMultiaddr(publicAddrStr); err == nil {
+								announced = append(announced, publicAddr)
+							}
+						}
+					}
+				}
+			}
+			return announced
+		}))
 	}
 
 	if len(s.listenAddrs) > 0 {
@@ -370,5 +403,32 @@ func (s *Libp2pService) SetStreamHandler(protoID string, handler func(network.St
 // GetRelayMultiaddr returns the default bootstrap relay multiaddress used by the host.
 func (s *Libp2pService) GetRelayMultiaddr() string {
 	return DefaultRelayMultiaddr
+}
+
+func getPublicIP(logger *logging.Logger) string {
+	// 1. Check environment variable first
+	if envIP := os.Getenv("MAGICBOX_PUBLIC_IP"); envIP != "" {
+		return strings.TrimSpace(envIP)
+	}
+
+	// 2. Query public ip service with timeout
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("https://api.ipify.org")
+	if err != nil {
+		logger.Warn("Failed to fetch public IP from ipify, direct WebRTC connections may not work if behind NAT", 
+			logging.F("error", err.Error()))
+		return ""
+	}
+	defer resp.Body.Close()
+
+	ipBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Warn("Failed to read public IP response", logging.F("error", err.Error()))
+		return ""
+	}
+
+	ip := strings.TrimSpace(string(ipBytes))
+	logger.Info("Detected public IP address", logging.F("ip", ip))
+	return ip
 }
 

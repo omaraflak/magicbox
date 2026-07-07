@@ -124,7 +124,8 @@ form.addEventListener('submit', async (e) => {
     // Log connection events to see when WebRTC direct connection is established
     p2pNode.addEventListener('connection:open', (event) => {
       const conn = event.detail;
-      console.log(`Connection opened: ${conn.remoteAddr.toString()} [${conn.transient ? 'relay' : 'DIRECT'}]`);
+      const isRelayed = conn.remoteAddr.toString().includes('/p2p-circuit');
+      console.log(`Connection opened: ${conn.remoteAddr.toString()} [${isRelayed ? 'RELAY' : 'DIRECT'}]`);
     });
     p2pNode.addEventListener('connection:close', (event) => {
       const conn = event.detail;
