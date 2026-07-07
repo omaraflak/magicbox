@@ -67,13 +67,11 @@ export default function RemoteAccessTab() {
                         </p>
 
                         <div style={{ marginBottom: '24px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                                    Connection Code
-                                </label>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                    ⏱️ Valid for 5 minutes
-                                </span>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '2px' }}>
+                                Connection Code
+                            </label>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                                ⏱️ Valid for 5 minutes
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <input 
@@ -99,13 +97,6 @@ export default function RemoteAccessTab() {
                                 </button>
                             </div>
                         </div>
-
-                        <button 
-                            className="btn btn-secondary" 
-                            onClick={() => setPairingData(null)}
-                        >
-                            Done
-                        </button>
                     </div>
                 )}
             </div>
