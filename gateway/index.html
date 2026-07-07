@@ -157,19 +157,29 @@
 
       <form id="setup-form">
         <div class="form-group">
-          <label for="relay-url">P2P Relay WebSocket URL</label>
-          <input type="text" id="relay-url" placeholder="e.g. wss://relay.yourdomain.com" required>
+          <label for="connection-code">Connection Code</label>
+          <input type="text" id="connection-code" placeholder="Paste connection code here" required>
         </div>
 
-        <div class="form-group">
-          <label for="peer-id">Home Magicbox Peer ID</label>
-          <input type="text" id="peer-id" placeholder="e.g. 12D3KooW..." required>
-        </div>
+        <details style="margin-bottom: 20px; font-size: 13px; color: var(--text-mute);">
+          <summary style="cursor: pointer; margin-bottom: 10px;">Advanced / Manual Config</summary>
+          <div style="padding: 10px; border-left: 2px solid var(--border); margin-bottom: 10px;">
+            <div class="form-group">
+              <label for="relay-url">P2P Relay WebSocket URL</label>
+              <input type="text" id="relay-url" placeholder="e.g. wss://relay.yourdomain.com">
+            </div>
 
-        <div class="form-group">
-          <label for="pairing-code">Pairing Code (OTP)</label>
-          <input type="text" id="pairing-code" placeholder="Enter 6-digit code" required>
-        </div>
+            <div class="form-group">
+              <label for="peer-id">Home Magicbox Peer ID</label>
+              <input type="text" id="peer-id" placeholder="e.g. 12D3KooW...">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="pairing-code">Pairing Code (OTP)</label>
+              <input type="text" id="pairing-code" placeholder="Enter 6-digit code">
+            </div>
+          </div>
+        </details>
 
         <button type="submit" class="btn">Establish P2P Tunnel</button>
       </form>

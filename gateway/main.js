@@ -21,8 +21,49 @@ const setupView = document.getElementById('setup-view');
 const tunnelFrame = document.getElementById('tunnel-frame');
 
 // Load saved values
+const savedCode = localStorage.getItem('p2p_connection_code') || '';
+document.getElementById('connection-code').value = savedCode;
 document.getElementById('relay-url').value = localStorage.getItem('p2p_relay_multiaddr') || '';
 document.getElementById('peer-id').value = localStorage.getItem('p2p_home_peer_id') || '';
+
+// Decode Connection Code helper
+function decodeConnectionCode(codeStr) {
+  try {
+    const rawJson = atob(codeStr.trim());
+    const parsed = JSON.parse(rawJson);
+    if (parsed.r && parsed.p && parsed.c) {
+      return {
+        relay: parsed.r,
+        peer: parsed.p,
+        otp: parsed.c
+      };
+    }
+  } catch (e) {
+    // Not a valid base64 json pairing code
+  }
+  return null;
+}
+
+// Auto-fill manual fields on pasting/typing connection code
+document.getElementById('connection-code').addEventListener('input', (e) => {
+  const code = e.target.value.trim();
+  const decoded = decodeConnectionCode(code);
+  if (decoded) {
+    document.getElementById('relay-url').value = decoded.relay;
+    document.getElementById('peer-id').value = decoded.peer;
+    document.getElementById('pairing-code').value = decoded.otp;
+  }
+});
+
+// Parse initial code if present
+if (savedCode) {
+  const decoded = decodeConnectionCode(savedCode);
+  if (decoded) {
+    document.getElementById('relay-url').value = decoded.relay;
+    document.getElementById('peer-id').value = decoded.peer;
+    document.getElementById('pairing-code').value = decoded.otp;
+  }
+}
 
 let p2pNode = null;
 let homePeerId = '';
@@ -36,10 +77,25 @@ const cookieJar = new Map();
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   
-  relayMultiaddr = document.getElementById('relay-url').value.trim();
-  homePeerId = document.getElementById('peer-id').value.trim();
-  const pairingCode = document.getElementById('pairing-code').value.trim();
+  const connectionCodeInput = document.getElementById('connection-code').value.trim();
+  const decoded = decodeConnectionCode(connectionCodeInput);
 
+  if (decoded) {
+    relayMultiaddr = decoded.relay;
+    homePeerId = decoded.peer;
+  } else {
+    relayMultiaddr = document.getElementById('relay-url').value.trim();
+    homePeerId = document.getElementById('peer-id').value.trim();
+  }
+
+  const pairingCode = decoded ? decoded.otp : document.getElementById('pairing-code').value.trim();
+
+  if (!relayMultiaddr || !homePeerId) {
+    showStatus('Missing configuration parameters. Please enter a Connection Code or fill manual fields.', 'error');
+    return;
+  }
+
+  localStorage.setItem('p2p_connection_code', connectionCodeInput);
   localStorage.setItem('p2p_relay_multiaddr', relayMultiaddr);
   localStorage.setItem('p2p_home_peer_id', homePeerId);
 

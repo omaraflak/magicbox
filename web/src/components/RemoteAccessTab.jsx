@@ -45,12 +45,7 @@ export default function RemoteAccessTab() {
                 </p>
             </div>
 
-            <div className="card" style={{ padding: '24px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '12px' }}>P2P Pairing Setup</h3>
-                <p style={{ fontSize: '0.9rem', lineHeight: '1.5', color: 'var(--text-muted)', marginBottom: '20px' }}>
-                    Generate a temporary pairing code (One-Time Passcode) to link your mobile browser to this Magicbox. This pairing code will be valid for 5 minutes.
-                </p>
-
+            <div style={{ marginTop: '24px' }}>
                 {error && (
                     <div style={{ padding: '12px 16px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger-color)', color: 'var(--danger-color)', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '16px' }}>
                         ⚠️ {error}
@@ -67,66 +62,38 @@ export default function RemoteAccessTab() {
                     </button>
                 ) : (
                     <div>
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                                P2P Relay Multiaddress
-                            </label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <input 
-                                    type="text" 
-                                    readOnly 
-                                    value={pairingData.relay_multiaddr}
-                                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}
-                                />
-                                <button 
-                                    className="btn btn-secondary"
-                                    onClick={() => handleCopy(pairingData.relay_multiaddr, 'relay')}
-                                    style={{ padding: '10px 16px', minWidth: '90px' }}
-                                >
-                                    {copiedField === 'relay' ? '✓ Copied' : 'Copy'}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                                Home Peer ID (Server ID)
-                            </label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <input 
-                                    type="text" 
-                                    readOnly 
-                                    value={pairingData.peer_id}
-                                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}
-                                />
-                                <button 
-                                    className="btn btn-secondary"
-                                    onClick={() => handleCopy(pairingData.peer_id, 'peer')}
-                                    style={{ padding: '10px 16px', minWidth: '90px' }}
-                                >
-                                    {copiedField === 'peer' ? '✓ Copied' : 'Copy'}
-                                </button>
-                            </div>
-                        </div>
+                        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                            Copy the Connection Code below and paste it into your P2P Gateway to establish the secure tunnel.
+                        </p>
 
                         <div style={{ marginBottom: '24px' }}>
                             <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                                Pairing Code (OTP)
+                                Connection Code
                             </label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '4px', color: 'var(--accent-color)', padding: '10px 20px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)', fontFamily: 'monospace' }}>
-                                    {pairingData.pairing_code}
-                                </div>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                <textarea 
+                                    readOnly 
+                                    value={btoa(JSON.stringify({
+                                        r: pairingData.relay_multiaddr,
+                                        p: pairingData.peer_id,
+                                        c: pairingData.pairing_code
+                                    }))}
+                                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem', minHeight: '80px', resize: 'none', wordBreak: 'break-all' }}
+                                />
                                 <button 
                                     className="btn btn-secondary"
-                                    onClick={() => handleCopy(pairingData.pairing_code, 'otp')}
-                                    style={{ padding: '10px 16px', minWidth: '110px' }}
+                                    onClick={() => handleCopy(btoa(JSON.stringify({
+                                        r: pairingData.relay_multiaddr,
+                                        p: pairingData.peer_id,
+                                        c: pairingData.pairing_code
+                                    })), 'code')}
+                                    style={{ padding: '10px 16px', minWidth: '90px' }}
                                 >
-                                    {copiedField === 'otp' ? '✓ Copied' : 'Copy Code'}
+                                    {copiedField === 'code' ? '✓ Copied' : 'Copy'}
                                 </button>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                    ⏱️ Valid for 5 minutes
-                                </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                <span>⏱️ Valid for 5 minutes</span>
                             </div>
                         </div>
 
@@ -134,7 +101,7 @@ export default function RemoteAccessTab() {
                             className="btn btn-secondary" 
                             onClick={() => setPairingData(null)}
                         >
-                            Reset / Done
+                            Done
                         </button>
                     </div>
                 )}
