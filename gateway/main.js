@@ -46,7 +46,7 @@ form.addEventListener('submit', async (e) => {
         webSockets(),
         circuitRelayTransport()
       ],
-      connectionEncryption: [noise()],
+      connectionEncrypters: [noise()],
       streamMuxers: [yamux()],
       services: {
         identify: identify()
