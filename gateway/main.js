@@ -7,6 +7,7 @@ import { identify } from 'https://esm.sh/@libp2p/identify';
 import { multiaddr } from 'https://esm.sh/@multiformats/multiaddr';
 import { peerIdFromString } from 'https://esm.sh/@libp2p/peer-id';
 import { webRTC } from 'https://esm.sh/@libp2p/webrtc';
+import { webRTCDirect } from 'https://esm.sh/@libp2p/webrtc-direct';
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
@@ -107,6 +108,7 @@ form.addEventListener('submit', async (e) => {
       transports: [
         webSockets(),
         webRTC(),
+        webRTCDirect(),
         circuitRelayTransport()
       ],
       connectionEncrypters: [noise()],

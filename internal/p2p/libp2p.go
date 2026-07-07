@@ -118,7 +118,8 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 		opts = append(opts, libp2p.ListenAddrStrings(
 			"/ip4/0.0.0.0/tcp/4001",
 			"/ip4/0.0.0.0/udp/4001/quic-v1",
-			"/ip4/0.0.0.0/udp/4002/webrtc-direct",
+			"/ip4/0.0.0.0/udp/4002/webrtc",        // NAT-traversing standard WebRTC
+			"/ip4/0.0.0.0/udp/4002/webrtc-direct", // Port-forwarded direct WebRTC
 		))
 	}
 
@@ -135,6 +136,7 @@ func (s *Libp2pService) Start(ctx context.Context) error {
 			libp2p.ListenAddrStrings(
 				"/ip4/0.0.0.0/tcp/0",
 				"/ip4/0.0.0.0/udp/0/quic-v1",
+				"/ip4/0.0.0.0/udp/0/webrtc",
 				"/ip4/0.0.0.0/udp/0/webrtc-direct",
 			),
 		}
