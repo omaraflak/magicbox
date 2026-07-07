@@ -120,6 +120,7 @@ func run() error {
 
 	// Register system protocol handlers (key rotation, etc.).
 	protocol.RegisterSystemHandlers(p2pService, database, logger)
+	p2p.StartTunnelHandler(p2pService, database, fmt.Sprintf("http://127.0.0.1:%s", cfg.Port), logger)
 
 	// Start background queue processor for reliable message delivery.
 	stopQueue := protocol.StartQueueProcessor(database, p2pService, logger, 30*time.Second)

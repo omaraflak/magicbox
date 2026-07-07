@@ -355,3 +355,10 @@ func PreferRelayAddr(addrs []string) string {
 	return addrs[0]
 }
 
+// SetStreamHandler registers a custom stream handler on the underlying libp2p host.
+func (s *Libp2pService) SetStreamHandler(protoID string, handler func(network.Stream)) {
+	if s.host != nil {
+		s.host.SetStreamHandler(protocol.ID(protoID), handler)
+	}
+}
+

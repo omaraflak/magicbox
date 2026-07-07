@@ -97,6 +97,11 @@ func (d *DB) Migrate() error {
 			master_pub_key TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS p2p_pairing_tokens (
+			token TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range statements {
