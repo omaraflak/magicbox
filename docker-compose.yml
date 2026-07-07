@@ -10,6 +10,7 @@ services:
       - "9090:80"
       - "4001:4001"
       - "4001:4001/udp"
+      - "4002:4002/udp"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${MAGICBOX_HOST_ROOT:-/opt/magicbox}:/opt/magicbox

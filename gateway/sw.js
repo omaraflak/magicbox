@@ -9,17 +9,28 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Gateway's own files - these should NOT be tunneled
+const GATEWAY_FILES = new Set(['/', '/index.html', '/main.js', '/sw.js']);
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // We only intercept requests that go to the "/tunnel/" path prefix
-  if (url.pathname.startsWith('/tunnel/')) {
-    event.respondWith(handleTunnelRequest(event.request));
-  }
+  // Only intercept same-origin requests
+  if (url.origin !== self.location.origin) return;
+
+  // Don't intercept the gateway's own files
+  if (GATEWAY_FILES.has(url.pathname)) return;
+
+  // Strip /tunnel prefix if present, otherwise use path as-is
+  const tunnelPath = url.pathname.startsWith('/tunnel/')
+    ? url.pathname.replace(/^\/tunnel/, '') + url.search
+    : url.pathname + url.search;
+
+  event.respondWith(handleTunnelRequest(event.request, tunnelPath));
 });
 
-async function handleTunnelRequest(request) {
-  const clients = await self.clients.matchAll();
+async function handleTunnelRequest(request, tunnelPath) {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   if (clients.length === 0) {
     return new Response('P2P Gateway is offline. Please keep the gateway tab open.', {
       status: 503,
@@ -29,9 +40,7 @@ async function handleTunnelRequest(request) {
   }
 
   const requestId = ++requestIdCounter;
-  const url = new URL(request.url);
-  // Strip "/tunnel" prefix to get the path that should go to the local home server
-  const relativePath = url.pathname.replace(/^\/tunnel/, '') + url.search;
+  const relativePath = tunnelPath;
 
   // Read request body if present
   let body = null;
