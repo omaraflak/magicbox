@@ -53,13 +53,13 @@ func main() {
 	relayLimits := relay.Resources{
 		MaxReservations:        256,              // Max concurrent client reservations
 		MaxCircuits:            64,               // Max concurrent active proxy streams
-		BufferSize:             2048,             // Connection buffer size
+		BufferSize:             8192,             // 8KB connection buffer (balanced memory vs overhead)
 		ReservationTTL:         30 * time.Minute, // Max duration for a reservation
-		MaxReservationsPerPeer: 4,                // Limit reservations per peer ID
-		MaxReservationsPerIP:   8,                // Limit reservations per IP address
+		MaxReservationsPerPeer: 16,                // Allow restarts during pairing, but limit single peer ID abuse
+		MaxReservationsPerIP:   32,               // Limit reservations per IP address
 		Limit: &relay.RelayLimit{
-			Duration: 5 * time.Minute,         // Max duration for an active transfer
-			Data:     100 * 1024 * 1024,       // Limit transfers to 100MB per session
+			Duration: 5 * time.Minute,          // Max duration for an active transfer (forces WebRTC upgrade)
+			Data:     10 * 1024 * 1024,         // Max data relayed is 5MB (plenty for handshake, blocks heavy proxy abuse)
 			// Data limits are in bytes
 		},
 	}
