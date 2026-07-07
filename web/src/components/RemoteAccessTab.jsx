@@ -67,18 +67,24 @@ export default function RemoteAccessTab() {
                         </p>
 
                         <div style={{ marginBottom: '24px' }}>
-                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                                Connection Code
-                            </label>
-                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                                <textarea 
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                                    Connection Code
+                                </label>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    ⏱️ Valid for 5 minutes
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <input 
+                                    type="text"
                                     readOnly 
                                     value={btoa(JSON.stringify({
                                         r: pairingData.relay_multiaddr,
                                         p: pairingData.peer_id,
                                         c: pairingData.pairing_code
                                     }))}
-                                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem', minHeight: '80px', resize: 'none', wordBreak: 'break-all' }}
+                                    style={{ flex: 1, padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
                                 />
                                 <button 
                                     className="btn btn-secondary"
@@ -91,9 +97,6 @@ export default function RemoteAccessTab() {
                                 >
                                     {copiedField === 'code' ? '✓ Copied' : 'Copy'}
                                 </button>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                <span>⏱️ Valid for 5 minutes</span>
                             </div>
                         </div>
 
