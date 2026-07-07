@@ -66,10 +66,7 @@ export default function RemoteAccessTab() {
                             Copy the Connection Code below and paste it into your P2P Gateway to establish the secure tunnel.
                         </p>
 
-                        <div style={{ marginBottom: '24px' }}>
-                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                                Connection Code
-                            </label>
+                            <div style={{ marginBottom: '24px' }}>
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                                 ⏱️ Valid for 5 minutes
                             </div>
