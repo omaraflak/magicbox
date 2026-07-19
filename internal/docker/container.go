@@ -408,3 +408,21 @@ func (c *Client) CleanupOldCore(ctx context.Context, logger *logging.Logger) err
 	}
 	return nil
 }
+
+// RemoteImageDigest inspects the remote image registry to get the manifest digest of the tag.
+func (c *Client) RemoteImageDigest(ctx context.Context, img string) (string, error) {
+	distributionInspect, err := c.cli.DistributionInspect(ctx, img, "")
+	if err != nil {
+		return "", fmt.Errorf("docker: failed to inspect distribution for image %s: %w", img, err)
+	}
+	return string(distributionInspect.Descriptor.Digest), nil
+}
+
+// LocalImageDigests returns the repository digests of a local image.
+func (c *Client) LocalImageDigests(ctx context.Context, img string) ([]string, error) {
+	inspect, _, err := c.cli.ImageInspectWithRaw(ctx, img)
+	if err != nil {
+		return nil, err
+	}
+	return inspect.RepoDigests, nil
+}

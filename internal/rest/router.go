@@ -1,9 +1,11 @@
 package rest
 
 import (
+	"context"
 	"net/http"
 	"os"
 
+	"github.com/docker/docker/api/types"
 	"github.com/magicbox/core/internal/config"
 	"github.com/magicbox/core/internal/core"
 	"github.com/magicbox/core/internal/db"
@@ -12,11 +14,24 @@ import (
 	"github.com/magicbox/core/internal/p2p"
 )
 
+// DockerClient defines the interface for interacting with Docker daemon in REST handlers.
+type DockerClient interface {
+	InspectContainer(ctx context.Context, containerID string) (*docker.ContainerStatus, error)
+	InspectRawContainer(ctx context.Context, containerID string) (types.ContainerJSON, error)
+	LocalImageDigests(ctx context.Context, img string) ([]string, error)
+	RemoteImageDigest(ctx context.Context, img string) (string, error)
+	PullImage(ctx context.Context, img string, force bool) (string, error)
+	RenameContainer(ctx context.Context, containerID, newName string) error
+	CreateCoreContainer(ctx context.Context, newImage string, old *types.ContainerJSON) (string, error)
+	StartUpdaterContainer(ctx context.Context, oldName, newName string) error
+	RemoveContainer(ctx context.Context, containerID string) error
+}
+
 // Server holds all dependencies needed by the REST API handlers.
 type Server struct {
 	config       *config.Config
 	db           *db.DB
-	docker       *docker.Client
+	docker       DockerClient
 	logger       *logging.Logger
 	orchestrator *core.Orchestrator
 	p2pService   p2p.Service
@@ -24,7 +39,7 @@ type Server struct {
 }
 
 // NewServer creates a new REST API server with the given dependencies.
-func NewServer(config *config.Config, db *db.DB, dockerClient *docker.Client, logger *logging.Logger, orchestrator *core.Orchestrator, p2pService p2p.Service) *Server {
+func NewServer(config *config.Config, db *db.DB, dockerClient DockerClient, logger *logging.Logger, orchestrator *core.Orchestrator, p2pService p2p.Service) *Server {
 	return &Server{
 		config:       config,
 		db:           db,
@@ -60,11 +75,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/apps/{id}/stop", auth(http.HandlerFunc(s.handleStopApp)))
 	mux.Handle("POST /api/v1/apps/{id}/update", auth(http.HandlerFunc(s.handleUpdateApp)))
 	mux.Handle("POST /api/v1/apps/{id}/rebuild", auth(http.HandlerFunc(s.handleRebuildApp)))
+	mux.Handle("GET /api/v1/updates/check", auth(http.HandlerFunc(s.handleCheckUpdates)))
 	mux.Handle("POST /api/v1/apps/{id}/rotate-token", auth(http.HandlerFunc(s.handleRotateToken)))
 	mux.Handle("GET /api/v1/apps/permissions/requests", auth(http.HandlerFunc(s.handleListPendingPermissions)))
 	mux.Handle("POST /api/v1/apps/permissions/requests/{id}/approve", auth(http.HandlerFunc(s.handleApprovePermissionRequest)))
 	mux.Handle("POST /api/v1/apps/permissions/requests/{id}/reject", auth(http.HandlerFunc(s.handleRejectPermissionRequest)))
-
 
 	// Contact routes.
 	mux.Handle("GET /api/v1/contacts", auth(http.HandlerFunc(s.handleListContacts)))

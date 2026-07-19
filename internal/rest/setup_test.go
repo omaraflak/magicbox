@@ -28,6 +28,9 @@ func (m *MockP2PService) RegisterHandler(appID string, handler p2p.Handler) {}
 func (m *MockP2PService) SendTo(ctx context.Context, peerMultiaddr string, encPubKeyHex string, msg *p2p.Message) error {
 	return nil
 }
+func (m *MockP2PService) GetRelayMultiaddr() string {
+	return "/ip4/127.0.0.1/tcp/4001/p2p/QmbQGs4z4UYae7oBDmhyBbyEg6bh9LGQLqDBeVY3GY8x5H"
+}
 
 // setupTestServer initializes a fresh test server instance.
 func setupTestServer(t *testing.T) (http.Handler, *db.DB, *config.Config) {

@@ -44,6 +44,8 @@ export default function App() {
     const [contacts, setContacts] = useState([]);
     const [contactRequests, setContactRequests] = useState([]);
     const [invitationInfo, setInvitationInfo] = useState(null);
+    const [updates, setUpdates] = useState({ core: null, apps: [] });
+    const [checkingUpdates, setCheckingUpdates] = useState(false);
 
     // Loadings
     const [actionLoading, setActionLoading] = useState(false);
@@ -229,6 +231,16 @@ export default function App() {
         }
     };
 
+    const checkUpdates = async () => {
+        if (!user) return;
+        setCheckingUpdates(true);
+        const { status, data } = await callAPI('GET', '/updates/check');
+        setCheckingUpdates(false);
+        if (status === 200 && data) {
+            setUpdates(data);
+        }
+    };
+
     const loadContactRequests = async () => {
         const { status, data } = await callAPI('GET', '/contacts/requests');
         if (status === 200) setContactRequests(data || []);
@@ -247,6 +259,13 @@ export default function App() {
         const interval = setInterval(loadApps, 5000);
         return () => clearInterval(interval);
     }, [user, csrfToken, activeAppSlug]);
+
+    useEffect(() => {
+        if (!user) return;
+        checkUpdates();
+        const interval = setInterval(checkUpdates, 300000);
+        return () => clearInterval(interval);
+    }, [user, csrfToken]);
 
     // 3. Fetch Admin Data (Runs when switching to admin tabs)
     const loadUsers = async () => {
@@ -774,6 +793,8 @@ export default function App() {
                         <DashboardView 
                             apps={apps}
                             user={user}
+                            updates={updates}
+                            onUpgradeCore={handleUpgradeCore}
                             onStartApp={handleStartApp}
                             onStopApp={handleStopApp}
                             onUninstallApp={handleUninstallApp}
